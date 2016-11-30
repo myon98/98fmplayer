@@ -1,6 +1,10 @@
 #ifndef MYON_FMDRIVER_FMP_H_INCLUDED
 #define MYON_FMDRIVER_FMP_H_INCLUDED
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "fmdriver.h"
 #include <stddef.h>
 
@@ -349,7 +353,8 @@ struct fmp_part {
       uint16_t deltat;
     } adpcm;
   } u;
-  
+
+  uint8_t tonelen;
   struct {
     uint32_t loopstart32;
     uint32_t loopend32;
@@ -516,14 +521,24 @@ struct driver_fmp {
   } pdzf;
 };
 
-// warning: will overwrite data
-bool fmp_init(struct fmdriver_work *work, struct driver_fmp *fmp,
-              uint8_t *data, uint16_t datalen);
+// first: call fmp_load with zero_initialized struct driver_fmp and data
+// returns true if valid data
+// warning: will overwrite data during playback
+bool fmp_load(struct driver_fmp *fmp, uint8_t *data, uint16_t datalen);
+// then call fmp_init
+// this will set the fmp pointer to fmdriver_work::driver
+// this function will access opna
+void fmp_init(struct fmdriver_work *work, struct driver_fmp *fmp);
+// load adpcm data
 // this function will access opna
 bool fmp_adpcm_load(struct fmdriver_work *work,
                     uint8_t *data, size_t datalen);
 
 // 1da8
 // 6190: fmp external characters
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // MYON_FMDRIVER_FMP_H_INCLUDED

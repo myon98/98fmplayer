@@ -5,6 +5,30 @@
 #include <stdbool.h>
 #include "ppz8.h"
 
+enum {
+  FMDRIVER_TRACK_NUM = 10,
+  // 1 line = 80 characters, may contain half-width doublebyte characters
+  FMDRIVER_TITLE_BUFLEN = 80*2+1,
+};
+
+enum fmdriver_track_type {
+  FMDRIVER_TRACK_FM,
+  FMDRIVER_TRACK_SSG,
+  FMDRIVER_TRACK_ADPCM,
+  FMDRIVER_TRACK_PPZ8
+};
+
+struct fmdriver_track_status {
+  bool playing;
+  enum fmdriver_track_type type;
+  uint8_t num;
+  uint8_t ticks;
+  uint8_t ticks_left;
+  uint8_t key;
+  // key after pitchbend, LFO, etc. applied
+  uint8_t actual_key;
+};
+
 struct fmdriver_work {
   // set by driver, called by opna
   void (*driver_opna_interrupt)(struct fmdriver_work *work);
@@ -22,8 +46,11 @@ struct fmdriver_work {
   const struct ppz8_functbl *ppz8_functbl;
   struct ppz8 *ppz8;
 
-  const char *title;
+  // CP932 encoded
+  //const char *title;
+  char comment[3][FMDRIVER_TITLE_BUFLEN];
   // driver status
+  struct fmdriver_track_status track_status[FMDRIVER_TRACK_NUM];
   // fm3ex part map
 };
 

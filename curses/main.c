@@ -265,7 +265,7 @@ static bool readrom(struct opna *opna) {
   const char *home = getenv("HOME");
   char *dpath = 0;
   if (home) {
-    const char *datadir = "/.local/share/libopna/";
+    const char *datadir = "/.local/share/fmplayer/";
     dpath = malloc(strlen(home)+strlen(datadir)+strlen(path) + 1);
     if (dpath) {
       strcpy(dpath, home);
@@ -443,10 +443,11 @@ int main(int argc, char **argv) {
   work.opna_writereg = opna_writereg_libopna;
   work.opna_status = opna_status_libopna;
   work.opna = &timer;
-  if (!fmp_init(&work, &fmp, g_data, filelen)) {
+  if (!fmp_load(&fmp, g_data, filelen)) {
     fprintf(stderr, "not fmp\n");
     return 1;
   }
+  fmp_init(&work, &fmp);
   bool pvi_loaded = loadpvi(&work, &fmp, argv[1]);
   bool ppz_loaded = loadppzpvi(&work, &fmp, argv[1]);
 
@@ -465,18 +466,41 @@ int main(int argc, char **argv) {
   }
   SDL_PauseAudioDevice(ad, 0);
 
-  
   setlocale(LC_CTYPE, "");
+
+  initscr();
+  cbreak();
+  noecho();
+  clear();
+  refresh();
+
+  timeout(20);
+
+  static const char pdzf_mode_str[3][9] = {
+    "OFF", "STANDARD", "ENHANCED"
+  };
+  mvprintw(0, 0, "PART  PTR  TONE LEN VOL NOTE  DET FREQ PQRAWE");
+  mvprintw(14, 61, "PPZ8");
+  mvprintw(16, 0, "FM                           RHYTHM             SSG  ADPCM");
+  mvprintw(17, 0, "TL ENV                        TL    PTR  LV     LV");
+  mvprintw(21, 48, "NZ");
+  mvprintw(24, 0, "PPZ: %c%8s PVI: %c%8s PDZF: %s",
+           ppz_loaded ? ' ' : '!',
+           fmp.ppz_name,
+           pvi_loaded ? ' ' : '!',
+           fmp.pvi_name,
+           pdzf_mode_str[fmp.pdzf.mode]
+          );
+
   enum {
-    //TBUFLEN = 80*3*2,
-    TBUFLEN = 0x10000
+    TBUFLEN = 80*2*2
   };
   char titlebuf[TBUFLEN+1] = {0};
-  if (work.title) {
+  for (int l = 0; l < 3; l++) {
     iconv_t cd = iconv_open("//IGNORE", "CP932");
     if (cd != (iconv_t)-1) {
       char titlebufcrlf[TBUFLEN+1] = {0};
-      const char *in = work.title;
+      const char *in = work.comment[l];
       size_t inleft = strlen(in)+1;
       char *out = titlebufcrlf;
       size_t outleft = TBUFLEN;
@@ -495,28 +519,9 @@ int main(int argc, char **argv) {
         if (!titlebufcrlf[i]) break;
       }
     }
+    mvprintw(25+l, 0, "%s", titlebuf);
   }
   
-  initscr();
-  cbreak();
-  noecho();
-  clear();
-  refresh();
-
-  timeout(20);
-
-  mvprintw(0, 0, "PART  PTR  TONE LEN VOL NOTE  DET FREQ PQRAWE");
-  mvprintw(14, 61, "PPZ8");
-  mvprintw(16, 0, "FM                           RHYTHM             SSG  ADPCM");
-  mvprintw(17, 0, "TL ENV                        TL    PTR  LV     LV");
-  mvprintw(21, 48, "NZ");
-  mvprintw(24, 0, "PPZ: %c%8s PVI: %c%8s",
-           ppz_loaded ? ' ' : '!',
-           fmp.ppz_name,
-           pvi_loaded ? ' ' : '!',
-           fmp.pvi_name);
-  mvprintw(25, 0, "%s", titlebuf);
-
   int cont = 1;
   int pause = 0;
   while (cont) {

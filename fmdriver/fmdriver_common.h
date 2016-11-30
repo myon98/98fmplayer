@@ -13,7 +13,10 @@ static inline int16_t u16s16(uint16_t v) {
   return (v & 0x8000) ? ((int32_t)v)-0x10000 : v;
 }
 
+#if 0
 #include <stdio.h>
 #define FMDRIVER_DEBUG(...) fprintf(stderr, __VA_ARGS__)
-
+#else
+#define FMDRIVER_DEBUG(...)
+#endif
 #endif // MYON_FMDRIVER_COMMON_H_INCLUDED
