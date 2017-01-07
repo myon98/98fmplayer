@@ -14,5 +14,5 @@ fmpc_SOURCES=main.c \
              $(FMDRIVER_SOURCES)
 
 fmpc_CFLAGS=-Wall -Wextra -pedantic \
-            -I.. $(SDL_CFLAGS) $(NCURSES_CFLAGS)
-fmpc_LDADD=$(SDL_LIBS) $(NCURSES_LIBS)
+            -I.. $(PORTAUDIO_CFLAGS) $(NCURSES_CFLAGS)
+fmpc_LDADD=$(PORTAUDIO_LIBS) $(NCURSES_LIBS)

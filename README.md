@@ -20,7 +20,7 @@ PC-98用のFM音源ドライバエミュレーション(予定)
 
 ## (まだ使えるような状況じゃないけど) 使い方
 ### ncurses 版のデバッグ用 UI
-ncurses, SDL2 を使用します。
+ncurses, portaudio を使用します。
 ```
 $ cd curses
 $ autoreconf -i

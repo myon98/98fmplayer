@@ -1,11 +1,12 @@
 #include <curses.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdint.h>
 #include "libopna/opna.h"
 #include "libopna/opnatimer.h"
 #include "fmdriver/fmdriver.h"
 #include "fmdriver/fmdriver_fmp.h"
-#include <SDL.h>
+#include <portaudio.h>
 #include <stdlib.h>
 #include <locale.h>
 #include <iconv.h>
@@ -17,13 +18,17 @@ enum {
   SRATE = 55467,
 };
 
-static void sdl_callback(void *userdata, Uint8 *stream, int len) {
-  SDL_memset(stream, 0, len);
+static int pastream_cb(const void *inptr, void *outptr, unsigned long frames,
+                       const PaStreamCallbackTimeInfo *timeinfo,
+                       PaStreamCallbackFlags statusFlags,
+                       void *userdata) {
   struct opna_timer *timer = (struct opna_timer *)userdata;
-  int16_t *buf = (int16_t *)stream;
-  unsigned samples = len/2/2;
-  opna_timer_mix(timer, buf, samples);
+  int16_t *buf = (int16_t *)outptr;
+  memset(outptr, 0, sizeof(int16_t)*frames*2);
+  opna_timer_mix(timer, buf, frames);
+  return paContinue;
 }
+
 
 static void opna_writereg_libopna(struct fmdriver_work *work, unsigned addr, unsigned data) {
   struct opna_timer *timer = (struct opna_timer *)work->opna;
@@ -394,8 +399,8 @@ err:
 }
 
 int main(int argc, char **argv) {
-  if (SDL_Init(SDL_INIT_AUDIO) != 0) {
-    fprintf(stderr, "cannot initialize SDL\n");
+  if (Pa_Initialize() != paNoError) {
+    fprintf(stderr, "cannot initialize pulseaudio\n");
     return 1;
   }
   if (argc != 2) {
@@ -451,21 +456,15 @@ int main(int argc, char **argv) {
   bool pvi_loaded = loadpvi(&work, &fmp, argv[1]);
   bool ppz_loaded = loadppzpvi(&work, &fmp, argv[1]);
 
-  SDL_AudioSpec as = {0};
-  as.freq = SRATE;
-  as.format = AUDIO_S16SYS;
-  as.channels = 2;
-  as.callback = sdl_callback;
-  as.userdata = &timer;
-  as.samples = 2048;
-
-  SDL_AudioDeviceID ad = SDL_OpenAudioDevice(0, 0, &as, 0, 0);
-  if (!ad) {
+  PaError pe;
+  PaStream *ps;
+  pe = Pa_OpenDefaultStream(&ps, 0, 2, paInt16, SRATE, 0,
+                            pastream_cb, &timer);
+  if (pe != paNoError) {
     fprintf(stderr, "cannot open audio device\n");
     return 1;
   }
-  SDL_PauseAudioDevice(ad, 0);
-
+  Pa_StartStream(ps);
   setlocale(LC_CTYPE, "");
 
   initscr();
@@ -523,7 +522,7 @@ int main(int argc, char **argv) {
   }
   
   int cont = 1;
-  int pause = 0;
+  bool pause = 0;
   while (cont) {
     switch (getch()) {
     case 'q':
@@ -531,7 +530,11 @@ int main(int argc, char **argv) {
       break;
     case 'p':
       pause = !pause;
-      SDL_PauseAudioDevice(ad, pause);
+      if (pause) {
+        Pa_StopStream(ps);
+      } else {
+        Pa_StartStream(ps);
+      }
       break;
     case ERR:
       update(&ppz8, &opna, &fmp);
@@ -540,7 +543,7 @@ int main(int argc, char **argv) {
   }
 
   endwin();
-  SDL_Quit();
+  Pa_Terminate();
   return 0;
 }
 
