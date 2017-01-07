@@ -13,6 +13,7 @@
 #include "fmdsp/fmdsp.h"
 
 #define DATADIR "/.local/share/fmplayer/"
+//#define FMDSP_2X
 
 enum {
   SRATE = 55467,
@@ -406,7 +407,9 @@ static gboolean draw_cb(GtkWidget *w,
   fmdsp_vrampalette(&g.fmdsp, g.vram, g.vram32, g.vram32_stride);
   cairo_surface_t *s = cairo_image_surface_create_for_data(
     g.vram32, CAIRO_FORMAT_RGB24, PC98_W, PC98_H, g.vram32_stride);
+#ifdef FMDSP_2X
   cairo_scale(cr, 2.0, 2.0);
+#endif
   cairo_set_source_surface(cr, s, 0.0, 0.0);
   cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
   cairo_paint(cr);
@@ -434,17 +437,32 @@ int main(int argc, char **argv) {
   //gtk_window_set_resizable(GTK_WINDOW(w), FALSE);
   gtk_window_set_title(GTK_WINDOW(w), "FMPlayer");
   g_signal_connect(w, "destroy", G_CALLBACK(on_destroy), 0);
-  GtkWidget *box = gtk_vbox_new(FALSE, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_container_add(GTK_CONTAINER(w), box);
 
   GtkWidget *menubar = create_menubar();
   gtk_box_pack_start(GTK_BOX(box), menubar, FALSE, TRUE, 0);
 
-  GtkWidget *hbox = gtk_hbox_new(FALSE, 0);
+  GtkWidget *hbox;
+  {
+    GtkOrientation o = GTK_ORIENTATION_VERTICAL;
+#ifdef FMDSP_2X
+    o = GTK_ORIENTATION_HORIZONTAL;
+#endif
+    hbox = gtk_box_new(o, 0);
+  }
   gtk_box_pack_start(GTK_BOX(box), hbox, FALSE, TRUE, 0);
   
   GtkWidget *drawarea = gtk_drawing_area_new();
-  gtk_widget_set_size_request(drawarea, PC98_W*2, PC98_H*2);
+  {
+    gint ww = PC98_W;
+    gint wh = PC98_H;
+#ifdef FMDSP_2X
+    ww *= 2;
+    wh *= 2;
+#endif
+    gtk_widget_set_size_request(drawarea, ww, wh);
+  }
   g_signal_connect(drawarea, "draw", G_CALLBACK(draw_cb), 0);
   gtk_box_pack_start(GTK_BOX(hbox), drawarea, FALSE, TRUE, 0);
 
