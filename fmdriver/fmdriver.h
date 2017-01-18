@@ -15,12 +15,19 @@ enum fmdriver_track_type {
   FMDRIVER_TRACK_FM,
   FMDRIVER_TRACK_SSG,
   FMDRIVER_TRACK_ADPCM,
-  FMDRIVER_TRACK_PPZ8
+};
+
+enum fmdriver_track_info {
+  FMDRIVER_TRACK_INFO_NORMAL,
+  FMDRIVER_TRACK_INFO_SSG_NOISE_ONLY,
+  FMDRIVER_TRACK_INFO_SSG_NOISE_MIX,
+  FMDRIVER_TRACK_INFO_PPZ8
 };
 
 struct fmdriver_track_status {
   bool playing;
   enum fmdriver_track_type type;
+  enum fmdriver_track_info info;
   uint8_t num;
   uint8_t ticks;
   uint8_t ticks_left;

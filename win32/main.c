@@ -10,6 +10,7 @@
 #include "libopna/opnatimer.h"
 #include "fmdsp/fmdsp.h"
 #include "soundout.h"
+#include "winfont.h"
 
 enum {
   ID_OPENFILE = 0x10,
@@ -20,8 +21,6 @@ enum {
   SRATE = 55467,
   SECTLEN = 4096,
   PPZ8MIX = 0xa000,
-  FONT_ROM_SIZE = 0x84000,
-  FONT_ROM_FILESIZE = 0x46800,
 };
 
 #define ENABLE_WM_DROPFILES
@@ -38,7 +37,9 @@ static struct {
   struct driver_fmp *fmp;
   struct fmdsp fmdsp;
   uint8_t vram[PC98_W*PC98_H];
-  uint8_t font[FONT_ROM_SIZE];
+  struct fmdsp_font font;
+  uint8_t fontrom[FONT_ROM_FILESIZE];
+  bool font_loaded;
   void *drum_rom;
   uint8_t opna_adpcm_ram[OPNA_ADPCM_RAM_SIZE];
   void *ppz8_buf;
@@ -102,6 +103,43 @@ static HANDLE pvisearch(const wchar_t *filename, const char *pviname_a) {
   lstrcat(pvipath, pviname);
   return CreateFile(pvipath, GENERIC_READ,
                             0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+}
+
+static bool loadfontrom(void) {
+  const wchar_t *path = L"font.rom";
+  wchar_t exepath[MAX_PATH];
+  if (GetModuleFileName(0, exepath, MAX_PATH)) {
+    PathRemoveFileSpec(exepath);
+    if ((lstrlen(exepath) + lstrlen(path) + 1) < MAX_PATH) {
+      lstrcat(exepath, L"\\");
+      lstrcat(exepath, path);
+      path = exepath;
+    }
+  }
+  HANDLE file = CreateFile(path, GENERIC_READ,
+                            0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  if (file == INVALID_HANDLE_VALUE) goto err;
+  DWORD filesize = GetFileSize(file, 0);
+  if (filesize != FONT_ROM_FILESIZE) goto err_file;
+  DWORD readbytes;
+  if (!ReadFile(file, g.fontrom, FONT_ROM_FILESIZE, &readbytes, 0)
+      || readbytes != FONT_ROM_FILESIZE) goto err_file;
+  CloseHandle(file);
+  fmdsp_font_from_font_rom(&g.font, g.fontrom);
+  g.font_loaded = true;
+  return true;
+err_file:
+  CloseHandle(file);
+err:
+  return false;
+}
+
+static void loadfont(void) {
+  if (loadfontrom()) return;
+
+  if (fmdsp_font_win(&g.font)) {
+    g.font_loaded = true;
+  }
 }
 
 static void loadrom(void) {
@@ -252,7 +290,7 @@ static void openfile(HWND hwnd, const wchar_t *path) {
     g.sound = sound_init(hwnd, SRATE, SECTLEN,
                          sound_cb, &g.opna_timer);
   }
-  fmdsp_vram_init(&g.fmdsp, &g.work, g.font, g.vram);
+  fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   if (!g.sound) goto err_fmp;
   g.sound->pause(g.sound, 0);
   CloseHandle(file);
@@ -358,8 +396,9 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   HFONT font = CreateFontIndirect(&ncm.lfMessageFont);
   SetWindowFont(button, font, TRUE);
   loadrom();
-  fmdsp_init(&g.fmdsp);
-  fmdsp_vram_init(&g.fmdsp, &g.work, g.font, g.vram);
+  loadfont();
+  fmdsp_init(&g.fmdsp, g.font_loaded ? &g.font : 0);
+  fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   SetTimer(hwnd, TIMER_FMDSP, 50, 0);
 #ifdef ENABLE_WM_DROPFILES
   DragAcceptFiles(hwnd, TRUE);

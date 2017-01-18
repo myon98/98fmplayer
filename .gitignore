@@ -12,3 +12,5 @@ missing
 Makefile
 config.log
 config.status
+config.guess
+config.sub

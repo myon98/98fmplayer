@@ -18,8 +18,6 @@
 enum {
   SRATE = 55467,
   PPZ8MIX = 0xa000,
-  FONT_ROM_SIZE = 0x84000,
-  FONT_ROM_FILESIZE = 0x46800,
   AUDIOBUFLEN = 0,
 };
 
@@ -39,7 +37,8 @@ static struct {
   void *fmpdata;
   void *ppzbuf;
   uint8_t vram[PC98_W*PC98_H];
-  uint8_t font[FONT_ROM_SIZE];
+  struct fmdsp_font font98;
+  uint8_t font98data[FONT_ROM_FILESIZE];
   void *vram32;
   int vram32_stride;
 } g;
@@ -247,6 +246,7 @@ static void load_fontrom(void) {
   const char *path = "font.rom";
   const char *home = getenv("HOME");
   char *dpath = 0;
+  fmdsp_font_from_font_rom(&g.font98, g.font98data);
   if (home) {
     const char *datadir = DATADIR;
     dpath = malloc(strlen(home)+strlen(datadir)+strlen(path) + 1);
@@ -264,15 +264,11 @@ static void load_fontrom(void) {
   long size = ftell(font);
   if (size != FONT_ROM_FILESIZE) goto err_file;
   if (fseek(font, 0, SEEK_SET) != 0) goto err_file;
-  uint8_t *fontbuf = malloc(FONT_ROM_FILESIZE);
-  if (!fontbuf) goto err_file;
-  if (fread(fontbuf, 1, FONT_ROM_FILESIZE, font) != FONT_ROM_FILESIZE) goto err_fontbuf;
-  fmdsp_font_from_fontrom(g.font, fontbuf);
-  free(fontbuf);
+  if (fread(g.font98data, 1, FONT_ROM_FILESIZE, font) != FONT_ROM_FILESIZE) {
+    goto err_file;
+  }
   fclose(font);
   return;
-err_fontbuf:
-  free(fontbuf);
 err_file:
   fclose(font);
 err:
@@ -361,7 +357,7 @@ static bool openfile(const char *path) {
   opna_timer_set_int_callback(&g.opna_timer, opna_int_cb, &g.work);
   opna_timer_set_mix_callback(&g.opna_timer, opna_mix_cb, &g.ppz8);
   fmp_init(&g.work, g.fmp);
-  fmdsp_vram_init(&g.fmdsp, &g.work, g.font, g.vram);
+  fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   loadpvi(&g.work, g.fmp, path);
   loadppzpvi(&g.work, g.fmp, path);
   fclose(fmfile);
@@ -472,8 +468,8 @@ int main(int argc, char **argv) {
 
   
   g.pa_initialized = (Pa_Initialize() == paNoError);
-  fmdsp_init(&g.fmdsp);
-  fmdsp_vram_init(&g.fmdsp, &g.work, g.font, g.vram);
+  fmdsp_init(&g.fmdsp, &g.font98);
+  fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   g.vram32_stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, PC98_W);
   g.vram32 = malloc((g.vram32_stride*PC98_H)*4);
   

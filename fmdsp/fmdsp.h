@@ -2,6 +2,7 @@
 #define MYON_FMDSP_H_INCLUDED
 
 #include <stdint.h>
+#include "font.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,13 +20,14 @@ enum {
 struct fmdsp {
   uint8_t palette[FMDSP_PALETTE_COLORS*3];
   uint8_t target_palette[FMDSP_PALETTE_COLORS*3];
+  const struct fmdsp_font *font98;
+
 };
 
 struct fmdriver_work;
-void fmdsp_init(struct fmdsp *fmdsp);
+void fmdsp_init(struct fmdsp *fmdsp, const struct fmdsp_font *font);
 void fmdsp_vram_init(struct fmdsp *fmdsp,
                      struct fmdriver_work *work,
-                     const uint8_t *font,
                      uint8_t *vram);
 void fmdsp_update(struct fmdsp *fmdsp, const struct fmdriver_work *work, uint8_t *vram);
 void fmdsp_vrampalette(struct fmdsp *fmdsp, const uint8_t *vram, uint8_t *vram32, int stride);

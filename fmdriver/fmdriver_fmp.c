@@ -2719,8 +2719,9 @@ static uint8_t fmp_note2key(uint8_t note) {
   return key;
 }
 
-static void fmp_work_status_update(struct fmdriver_work *work,
-                                   struct driver_fmp *fmp) {
+static void fmp_work_status_init(struct fmdriver_work *work,
+                                 const struct driver_fmp *fmp) {
+
   static const uint8_t fmp_track_map[FMDRIVER_TRACK_NUM] = {
     FMP_PART_FM_1,
     FMP_PART_FM_2,
@@ -2736,26 +2737,58 @@ static void fmp_work_status_update(struct fmdriver_work *work,
 
   for (int t = 0; t < FMDRIVER_TRACK_NUM; t++) {
     struct fmdriver_track_status *track = &work->track_status[t];
-    struct fmp_part *part = &fmp->parts[fmp_track_map[t]];
+    const struct fmp_part *part = &fmp->parts[fmp_track_map[t]];
     track->playing = !part->status.off;
     track->num = (part->pdzf.mode ? part->pdzf.ppz8_channel : part->opna_keyon_out)+1;
+    track->info = FMDRIVER_TRACK_INFO_NORMAL;
     if (part->type.adpcm) {
       track->type = FMDRIVER_TRACK_ADPCM;
+    } else if (part->type.ssg) {
+      track->type = FMDRIVER_TRACK_SSG;
+    } else {
+      track->type = FMDRIVER_TRACK_FM;
+    }
+    if (part->type.fm && part->opna_keyon_out > 3) {
+      track->num--;
+    }
+  }
+}
+
+static void fmp_work_status_update(struct fmdriver_work *work,
+                                   const struct driver_fmp *fmp) {
+  static const uint8_t fmp_track_map[FMDRIVER_TRACK_NUM] = {
+    FMP_PART_FM_1,
+    FMP_PART_FM_2,
+    FMP_PART_FM_3,
+    FMP_PART_FM_4,
+    FMP_PART_FM_5,
+    FMP_PART_FM_6,
+    FMP_PART_SSG_1,
+    FMP_PART_SSG_2,
+    FMP_PART_SSG_3,
+    FMP_PART_ADPCM,
+  };
+
+  for (int t = 0; t < FMDRIVER_TRACK_NUM; t++) {
+    struct fmdriver_track_status *track = &work->track_status[t];
+    const struct fmp_part *part = &fmp->parts[fmp_track_map[t]];
+    track->playing = !part->status.off;
+    track->num = (part->pdzf.mode ? part->pdzf.ppz8_channel : part->opna_keyon_out)+1;
+    track->info = FMDRIVER_TRACK_INFO_NORMAL;
+    if (part->type.adpcm) {
       track->actual_key = 0xff;
     } else if (part->type.ssg) {
       if (part->u.ssg.env_f.ppz || part->pdzf.mode) {
-        track->type = FMDRIVER_TRACK_PPZ8;
+        track->info = FMDRIVER_TRACK_INFO_PPZ8;
         track->actual_key = 0xff;
       } else {
-        track->type = FMDRIVER_TRACK_SSG;
         track->actual_key = part->status.rest ? 0xff : fmp_ssg_freq2key(part->prev_freq);
       }
     } else {
       if (part->pdzf.mode) {
-        track->type = FMDRIVER_TRACK_PPZ8;
+        track->info = FMDRIVER_TRACK_INFO_PPZ8;
         track->actual_key = 0xff;
       } else {
-        track->type = FMDRIVER_TRACK_FM;
         track->actual_key = part->status.rest ? 0xff : fmp_fm_freq2key(part->prev_freq);
       }
     }
@@ -3407,6 +3440,7 @@ void fmp_init(struct fmdriver_work *work, struct driver_fmp *fmp) {
   fmp_set_tempo(work, fmp);
   work->driver = fmp;
   work->driver_opna_interrupt = fmp_opna_interrupt;
+  fmp_work_status_init(work, fmp);
 }
 
 // 4235

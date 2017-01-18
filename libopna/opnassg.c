@@ -171,18 +171,19 @@ void opna_ssg_generate_raw(struct opna_ssg *ssg, int16_t *buf, int samples) {
         ssg->ch[ch].tone_counter = 0;
         ssg->ch[ch].out = !ssg->ch[ch].out;
       }
-      /*
+#if 0
       if (opna_ssg_tone_out(ssg, ch)) {
         int level = opna_ssg_chan_env(ssg, ch)
           ? opna_ssg_env_level(ssg)
           : (opna_ssg_tone_volume(ssg, ch) << 1) + 1;
         out += voltable[level];
       }
-      */
+#else
       if (!opna_ssg_tone_silent(ssg, ch)) {
         int level = opna_ssg_channel_level(ssg, ch);
         out += opna_ssg_tone_out(ssg, ch) ? voltable[level] : -voltable[level];
       }
+#endif
       
     }
     buf[i] = out / 4;

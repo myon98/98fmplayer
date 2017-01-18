@@ -247,6 +247,7 @@ static void ppz8_channel_stop(struct ppz8 *ppz8, uint8_t ch) {
   if (ch >= 8) return;
   struct ppz8_channel *channel = &ppz8->channel[ch];
   channel->playing = false;
+  channel->ptr = -1;
 }
 
 static void ppz8_channel_volume(struct ppz8 *ppz8, uint8_t ch, uint8_t vol) {

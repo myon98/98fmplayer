@@ -10,6 +10,7 @@ enum {
   TRACK_H = 32,
   TNAME_W = 26,
   TNAME_H = 5,
+  TINFO_X = 48,
   NUM_X = 31,
   NUM_W = 8,
   NUM_H = 11,
