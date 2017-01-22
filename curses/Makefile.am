@@ -1,3 +1,4 @@
+ACLOCAL_AMFLAGS=-Im4
 bin_PROGRAMS=fmpc
 
 LIBOPNA_SOURCES=../libopna/opnaadpcm.c \
@@ -14,5 +15,5 @@ fmpc_SOURCES=main.c \
              $(FMDRIVER_SOURCES)
 
 fmpc_CFLAGS=-Wall -Wextra -pedantic \
-            -I.. $(PORTAUDIO_CFLAGS) $(NCURSES_CFLAGS)
-fmpc_LDADD=$(PORTAUDIO_LIBS) $(NCURSES_LIBS)
+            -I.. $(PORTAUDIO_CFLAGS) $(CURSES_CFLAGS)
+fmpc_LDADD=$(PORTAUDIO_LIBS) $(CURSES_LIBS) $(LIBICONV)
