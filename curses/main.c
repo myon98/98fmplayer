@@ -9,6 +9,7 @@
 #include <portaudio.h>
 #include <stdlib.h>
 #include <locale.h>
+#include <unistd.h>
 #include <langinfo.h>
 #include <iconv.h>
 #include <errno.h>
@@ -441,16 +442,87 @@ err:
   return false;
 }
 
+static void list_devices(void) {
+  PaHostApiIndex al = Pa_GetHostApiCount();
+  if (al < 0) {
+    fprintf(stderr, "Pa_GetHostApiCount error");
+    exit(1);
+  }
+  const PaHostApiInfo **aa = malloc(sizeof(PaHostApiInfo *)*al);
+  if (!aa) {
+    fprintf(stderr, "cannot allocate memory for portaudio host API info\n");
+    exit(1);
+  }
+  for (PaHostApiIndex i = 0; i < al; i++) {
+    aa[i] = Pa_GetHostApiInfo(i);
+    if (!aa[i]) {
+      fprintf(stderr, "cannot get portaudio host API info\n");
+      exit(1);
+    }
+  }
+  PaDeviceIndex dl = Pa_GetDeviceCount();
+  if (dl < 0) {
+    fprintf(stderr, "Pa_GetDeviceCount error\n");
+    exit(1);
+  }
+  PaDeviceIndex dd = Pa_GetDefaultOutputDevice();
+  printf("ind:       hostapi              name\n");
+  for (PaDeviceIndex i = 0; i < dl; i++) {
+    const PaDeviceInfo *di = Pa_GetDeviceInfo(i);
+    if (!di) {
+      fprintf(stderr, "cannot get device information\n");
+      exit(1);
+    }
+    const char *ds = (i == dd) ? "(def)" : "     ";
+    printf("%3d: %s %-20s %s\n", i, ds, aa[di->hostApi]->name, di->name);
+  }
+  exit(0);
+}
+
+static void help(const char *name) {
+  fprintf(stderr, "Usage: %s [options] file\n", name);
+  fprintf(stderr, "currently supported files: FMP(PLAY6)\n");
+  fprintf(stderr, "  options:\n");
+  fprintf(stderr, "  -h        show help\n");
+  fprintf(stderr, "  -l        list portaudio devices\n");
+  fprintf(stderr, "  -d index  specify device number\n");
+  exit(1);
+}
+
 int main(int argc, char **argv) {
   if (Pa_Initialize() != paNoError) {
     fprintf(stderr, "cannot initialize pulseaudio\n");
     return 1;
   }
-  if (argc != 2) {
-    fprintf(stderr, "invalid arguments\n");
+  int optchar;
+  PaDeviceIndex pi = Pa_GetDefaultOutputDevice();
+  while ((optchar = getopt(argc, argv, "hld:")) != -1) {
+    switch (optchar) {
+    case 'l':
+      list_devices();
+      break;
+    case 'd':
+      pi = atoi(optarg);
+      break;
+    default:
+    case 'h':
+      help(argv[0]);
+      break;
+    }
+  }
+  if (pi == paNoDevice) {
+    fprintf(stderr, "no default output device\n");
+    return 1;
+  } else if ((pi < 0) || (pi >= Pa_GetDeviceCount())) {
+    fprintf(stderr, "invalid output device\n");
     return 1;
   }
-  FILE *file = fopen(argv[1], "rb");
+  if (argc != optind + 1) {
+    fprintf(stderr, "invalid arguments\n");
+    help(argv[0]);
+  }
+  const char *filename = argv[optind];
+  FILE *file = fopen(filename, "rb");
   if (!file) {
     fprintf(stderr, "cannot open file\n");
     return 1;
@@ -500,14 +572,9 @@ int main(int argc, char **argv) {
     return 1;
   }
   fmp_init(&work, &fmp);
-  bool pvi_loaded = loadpvi(&work, &fmp, argv[1]);
-  bool ppz_loaded = loadppzpvi(&work, &fmp, argv[1]);
+  bool pvi_loaded = loadpvi(&work, &fmp, filename);
+  bool ppz_loaded = loadppzpvi(&work, &fmp, filename);
 
-  PaDeviceIndex pi = Pa_GetDefaultOutputDevice();
-  if (pi == paNoDevice) {
-    fprintf(stderr, "no default output device\n");
-    return 1;
-  }
   PaStream *ps;
   PaError pe;
   const PaDeviceInfo *pdi = Pa_GetDeviceInfo(pi);
