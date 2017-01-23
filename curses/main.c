@@ -491,7 +491,7 @@ static void help(const char *name) {
 
 int main(int argc, char **argv) {
   if (Pa_Initialize() != paNoError) {
-    fprintf(stderr, "cannot initialize pulseaudio\n");
+    fprintf(stderr, "cannot initialize portaudio\n");
     return 1;
   }
   int optchar;
