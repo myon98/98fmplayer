@@ -108,6 +108,10 @@ struct fmp_ssgenv {
   uint8_t release_rate;
 };
 
+enum {
+  PDZF_ENV_VOL_MIN = -15,
+};
+
 struct fmp_part {
   // 0000
   struct {
@@ -377,9 +381,6 @@ struct fmp_part {
         PDZF_ENV_OFF,
       } status;
       uint8_t cnt;
-      enum {
-        PDZF_ENV_VOL_MIN = -15,
-      };
       int8_t vol;
     } env_state;
     bool keyon;

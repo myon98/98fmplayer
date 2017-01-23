@@ -1107,6 +1107,7 @@ static void fmp_pdzf_loop_freq(struct fmdriver_work *work,
                                struct driver_fmp *fmp,
                                struct fmp_part *part,
                                uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3) {
+  (void)fmp;
   if (!part->pdzf.mode) return;
   if (part->pdzf.mode != 2 || part->lfo[2].depth == 0) {
     uint32_t start = (d0 << 8) | d1;
@@ -1843,6 +1844,7 @@ static void fmp_part_init_lfo_awe(struct fmdriver_work *work,
 static void fmp_part_pdzf_env(struct fmdriver_work *work,
                               struct driver_fmp *fmp,
                               struct fmp_part *part) {
+  (void)fmp;
   switch (part->pdzf.env_state.status) {
   case PDZF_ENV_ATT:
     if (!part->pdzf.env_state.cnt--) {
@@ -1919,6 +1921,8 @@ static void fmp_part_pdzf_env(struct fmdriver_work *work,
         }
       }
     }
+    break;
+  case PDZF_ENV_OFF:
     break;
   }
 }
