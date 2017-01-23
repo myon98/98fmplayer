@@ -14,6 +14,6 @@ fmpc_SOURCES=main.c \
              $(LIBOPNA_SOURCES) \
              $(FMDRIVER_SOURCES)
 
-fmpc_CFLAGS=-Wall -Wextra -pedantic \
-            -I.. $(PORTAUDIO_CFLAGS) $(CURSES_CFLAGS)
-fmpc_LDADD=$(PORTAUDIO_LIBS) $(CURSES_LIBS) $(LIBICONV)
+fmpc_CFLAGS=-Wall -Wextra -pedantic-errors \
+            -I.. $(PORTAUDIO_CFLAGS) $(CURSES_CFLAGS) $(SAMPLERATE_CFLAGS)
+fmpc_LDADD=$(PORTAUDIO_LIBS) $(CURSES_LIBS) $(LIBICONV) $(SAMPLERATE_LIBS)

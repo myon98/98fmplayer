@@ -9,19 +9,61 @@
 #include <portaudio.h>
 #include <stdlib.h>
 #include <locale.h>
+#include <langinfo.h>
 #include <iconv.h>
 #include <errno.h>
+#ifdef HAVE_SAMPLERATE
+#include <samplerate.h>
+#endif
 
 static uint8_t g_data[0x10000];
-
 enum {
   SRATE = 55467,
 };
+
+#ifdef HAVE_SAMPLERATE
+
+struct {
+  double src_ratio;
+} g;
+
+enum {
+  READFRAMES = 256,
+};
+
+static long src_cb(void *cb_data, float **data) {
+  static float buf_f[READFRAMES*2];
+  static int16_t buf_i[READFRAMES*2];
+  struct opna_timer *timer = (struct opna_timer *)cb_data;
+  memset(buf_i, 0, sizeof(buf_i));
+  opna_timer_mix(timer, buf_i, READFRAMES);
+  src_short_to_float_array(buf_i, buf_f, READFRAMES*2);
+  *data = buf_f;
+  return READFRAMES;
+}
+
+static int pastream_cb_src(const void *inptr, void *outptr,
+                           unsigned long frames,
+                           const PaStreamCallbackTimeInfo *timeinfo,
+                           PaStreamCallbackFlags statusFlags,
+                           void *userdata) {
+  (void)inptr;
+  (void)timeinfo;
+  (void)statusFlags;
+  SRC_STATE *src = (SRC_STATE *)userdata;
+  src_callback_read(src, g.src_ratio, frames, (float *)outptr);
+  return paContinue;
+}
+
+#else // HAVE_SAMPLERATE
 
 static int pastream_cb(const void *inptr, void *outptr, unsigned long frames,
                        const PaStreamCallbackTimeInfo *timeinfo,
                        PaStreamCallbackFlags statusFlags,
                        void *userdata) {
+  (void)inptr;
+  (void)timeinfo;
+  (void)statusFlags;
   struct opna_timer *timer = (struct opna_timer *)userdata;
   int16_t *buf = (int16_t *)outptr;
   memset(outptr, 0, sizeof(int16_t)*frames*2);
@@ -29,6 +71,7 @@ static int pastream_cb(const void *inptr, void *outptr, unsigned long frames,
   return paContinue;
 }
 
+#endif // HAVE_SAMPLERATE
 
 static void opna_writereg_libopna(struct fmdriver_work *work, unsigned addr, unsigned data) {
   struct opna_timer *timer = (struct opna_timer *)work->opna;
@@ -416,14 +459,18 @@ int main(int argc, char **argv) {
     fprintf(stderr, "cannot seek to end\n");
     return 1;
   }
-  long filelen = ftell(file);
-  if (fseek(file, 0, SEEK_SET) != 0) {
-    fprintf(stderr, "cannot seek to beginning\n");
-    return 1;
-  }
-  if ((filelen < 0) || (filelen > 0xffff)) {
-    fprintf(stderr, "invalid file length: %ld\n", filelen);
-    return 1;
+  size_t filelen;
+  {
+    long filelen_t = ftell(file);
+    if (fseek(file, 0, SEEK_SET) != 0) {
+      fprintf(stderr, "cannot seek to beginning\n");
+      return 1;
+    }
+    if ((filelen_t < 0) || (filelen_t > 0xffff)) {
+      fprintf(stderr, "invalid file length: %ld\n", filelen_t);
+      return 1;
+    }
+    filelen = filelen_t;
   }
   if (fread(g_data, 1, filelen, file) != filelen) {
     fprintf(stderr, "cannot read file\n");
@@ -456,14 +503,60 @@ int main(int argc, char **argv) {
   bool pvi_loaded = loadpvi(&work, &fmp, argv[1]);
   bool ppz_loaded = loadppzpvi(&work, &fmp, argv[1]);
 
-  PaError pe;
-  PaStream *ps;
-  pe = Pa_OpenDefaultStream(&ps, 0, 2, paInt16, SRATE, 0,
-                            pastream_cb, &timer);
-  if (pe != paNoError) {
-    fprintf(stderr, "cannot open audio device\n");
+  PaDeviceIndex pi = Pa_GetDefaultOutputDevice();
+  if (pi == paNoDevice) {
+    fprintf(stderr, "no default output device\n");
     return 1;
   }
+  PaStream *ps;
+  PaError pe;
+  const PaDeviceInfo *pdi = Pa_GetDeviceInfo(pi);
+  if (!pdi) {
+    fprintf(stderr, "cannot get device default samplerate\n");
+    return 1;
+  }
+#ifdef HAVE_SAMPLERATE
+  {
+    double outrate = pdi->defaultSampleRate;
+    double ratio = outrate / SRATE;
+    int e;
+    SRC_STATE *src = src_callback_new(src_cb, SRC_SINC_BEST_QUALITY, 2,
+                                      &e, &timer);
+    if (!src) {
+      fprintf(stderr, "cannot open samplerate converter\n");
+      return 1;
+    }
+    g.src_ratio = ratio;
+    PaStreamParameters psp;
+    psp.device = pi;
+    psp.channelCount = 2;
+    psp.sampleFormat = paFloat32;
+    psp.suggestedLatency = pdi->defaultLowOutputLatency;
+    psp.hostApiSpecificStreamInfo = 0;
+    pe = Pa_OpenStream(&ps, 0, &psp, outrate, 0, 0, &pastream_cb_src, src);
+    if (pe != paNoError) {
+      fprintf(stderr, "cannot open audio device\n");
+      return 1;
+    }
+  }
+#else // HAVE_SAMPLERATE
+
+  {
+    PaStreamParameters psp;
+    psp.device = pi;
+    psp.channelCount = 2;
+    psp.sampleFormat = paInt16;
+    psp.suggestedLatency = pdi->defaultLowOutputLatency;
+    psp.hostApiSpecificStreamInfo = 0;
+    pe = Pa_OpenStream(&ps, 0, &psp, SRATE, 0, 0, &pastream_cb, &timer);
+    if (pe != paNoError) {
+      fprintf(stderr, "cannot open audio device\n");
+      return 1;
+    }
+  }
+
+#endif // HAVE_SAMPLERATE
+
   Pa_StartStream(ps);
   setlocale(LC_CTYPE, "");
 
@@ -496,10 +589,10 @@ int main(int argc, char **argv) {
   };
   char titlebuf[TBUFLEN+1] = {0};
   for (int l = 0; l < 3; l++) {
-    iconv_t cd = iconv_open("//IGNORE", "CP932");
+    iconv_t cd = iconv_open(nl_langinfo(CODESET), "CP932");
     if (cd != (iconv_t)-1) {
       char titlebufcrlf[TBUFLEN+1] = {0};
-      const char *in = work.comment[l];
+      ICONV_CONST char *in = (char *)work.comment[l];
       size_t inleft = strlen(in)+1;
       char *out = titlebufcrlf;
       size_t outleft = TBUFLEN;
