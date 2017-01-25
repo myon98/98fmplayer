@@ -3124,7 +3124,7 @@ static void fmp_title(struct fmdriver_work *work,
     STATE_ESC,
     STATE_CSI,
     STATE_SYNC,
-  } esc_state;
+  } esc_state = STATE_NORMAL;
   for (int si = 0; ; si++) {
     if ((offset + i) >= datalen) {
       work->comment[l][0] = 0;

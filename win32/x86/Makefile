@@ -35,11 +35,17 @@ LIBS=-nostdlib -s -Wl,-e_entry@4 \
      -lgdi32 -lshlwapi -lwinmm -lshell32
 
 $(TARGET):	$(OBJS)
-	$(CC) -o $@ $(OBJS) $(LIBS)
-	$(STRIP) $@
+	@echo "  CCLD     $@"
+	@$(CC) -o $@ $(OBJS) $(LIBS)
+	@$(STRIP) $@
+
+%.o:	%.c
+	@echo "  CC       $@"
+	@$(CC) $(CFLAGS) -c $< -o $@
 
 %.o:	%.rc $(ICON)
-	$(WINDRES) -o $@ -i $<
+	@echo "  WINDRES  $@"
+	@$(WINDRES) -o $@ -i $<
 
 $(ICON):	$(ICONFILES)
 	convert $(ICONFILES) -colors 256 $@

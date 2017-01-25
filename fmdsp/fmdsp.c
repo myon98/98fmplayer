@@ -129,7 +129,7 @@ void fmdsp_vram_init(struct fmdsp *fmdsp,
   }
   for (int t = 0; t < 10; t++) {
     struct fmdriver_track_status *track = &work->track_status[t];
-    uint8_t *track_type;
+    const uint8_t *track_type;
     switch (track->type) {
     case FMDRIVER_TRACK_FM:
       track_type = s_t_fm;
@@ -184,7 +184,7 @@ void fmdsp_vram_init(struct fmdsp *fmdsp,
 void fmdsp_update(struct fmdsp *fmdsp,
                   const struct fmdriver_work *work, uint8_t *vram) {
   for (int t = 0; t < 10; t++) {
-    struct fmdriver_track_status *track = &work->track_status[t];
+    const struct fmdriver_track_status *track = &work->track_status[t];
     switch (track->info) {
     case FMDRIVER_TRACK_INFO_PPZ8:
       vramblit(vram, TINFO_X, TRACK_H*t+7, s_t_ppz8, TNAME_W, TNAME_H);

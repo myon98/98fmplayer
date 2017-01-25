@@ -90,16 +90,16 @@ static HANDLE pvisearch(const wchar_t *filename, const char *pviname_a) {
     WPVINAMELEN = 8*2+1+3+1,
   };
   wchar_t pviname[WPVINAMELEN];
-  wchar_t pvipath[PATH_MAX];
+  wchar_t pvipath[MAX_PATH];
   if (MultiByteToWideChar(932, MB_ERR_INVALID_CHARS,
                           pviname_a, -1, pviname, WPVINAMELEN) == 0) {
     return INVALID_HANDLE_VALUE;
   }
   lstrcat(pviname, L".PVI");
-  if (lstrlen(filename) >= PATH_MAX) return INVALID_HANDLE_VALUE;
+  if (lstrlen(filename) >= MAX_PATH) return INVALID_HANDLE_VALUE;
   lstrcpy(pvipath, filename);
   PathRemoveFileSpec(pvipath);
-  if (lstrlen(pvipath) + lstrlen(pviname) + 1 >= PATH_MAX) {
+  if (lstrlen(pvipath) + lstrlen(pviname) + 1 >= MAX_PATH) {
     return INVALID_HANDLE_VALUE;
   }
   lstrcat(pvipath, L"\\");
@@ -552,7 +552,9 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
   );
   ShowWindow(hwnd, cmdshow);
 
-  openfile(hwnd, argfile);
+  if (argfile) {
+    openfile(hwnd, argfile);
+  }
 
   MSG msg = {0};
   while (GetMessage(&msg, 0, 0, 0)) {
