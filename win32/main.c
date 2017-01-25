@@ -17,6 +17,9 @@ enum {
   TIMER_FMDSP = 1,
 };
 
+#define FMPLAYER_CLASSNAME L"myon_fmplayer_ym2608_win32"
+#define FMPLAYER_CDSTAG 0xFD809800UL
+
 enum {
   SRATE = 55467,
   SECTLEN = 4096,
@@ -460,6 +463,13 @@ static void on_paint(HWND hwnd) {
   EndPaint(hwnd, &ps);
 }
 
+static LRESULT on_copydata(HWND hwnd, HWND hwndfrom, COPYDATASTRUCT *cds) {
+  (void)hwndfrom;
+  if (cds->dwData != FMPLAYER_CDSTAG) return FALSE;
+  openfile(hwnd, cds->lpData);
+  return TRUE;
+}
+
 static LRESULT CALLBACK wndproc(
   HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 ) {
@@ -469,6 +479,8 @@ static LRESULT CALLBACK wndproc(
   HANDLE_MSG(hwnd, WM_COMMAND, on_command);
   HANDLE_MSG(hwnd, WM_PAINT, on_paint);
   HANDLE_MSG(hwnd, WM_TIMER, on_timer);
+  case WM_COPYDATA:
+    return on_copydata(hwnd, (HWND)wParam, (COPYDATASTRUCT *)lParam);
 #ifdef ENABLE_WM_DROPFILES
   HANDLE_MSG(hwnd, WM_DROPFILES, on_dropfiles);
 #endif // ENABLE_WM_DROPFILES
@@ -484,14 +496,41 @@ static ATOM register_class(HINSTANCE hinst) {
   wc.hIcon = LoadIcon(g.hinst, MAKEINTRESOURCE(1));
   wc.hCursor = LoadCursor(NULL, IDC_ARROW);
   wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
-  wc.lpszClassName = L"TWinc";
+  wc.lpszClassName = FMPLAYER_CLASSNAME;
   return RegisterClass(&wc);
 }
 
 int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
-                      wchar_t *cmdline, int cmdshow) {
+                      wchar_t *cmdline_, int cmdshow) {
   (void)hpinst;
-  (void)cmdline;
+  (void)cmdline_;
+
+  const wchar_t *argfile = 0;
+  {
+    wchar_t *cmdline = GetCommandLine();
+    if (cmdline) {
+      int argc;
+      wchar_t **argv = CommandLineToArgvW(cmdline, &argc);
+      if (argc >= 2) {
+        argfile = argv[1];
+      }
+    }
+  }
+
+  {
+    HWND otherwnd = FindWindow(FMPLAYER_CLASSNAME, 0);
+    if (otherwnd) {
+      if (!argfile) ExitProcess(0);
+      COPYDATASTRUCT cds;
+      cds.dwData = FMPLAYER_CDSTAG;
+      cds.cbData = (lstrlen(argfile)+1)*2;
+      cds.lpData = (void *)argfile;
+      FORWARD_WM_COPYDATA(otherwnd, 0, &cds, SendMessage);
+      SetForegroundWindow(otherwnd);
+      ExitProcess(0);
+    }
+  }
+
   g.hinst = hinst;
   g.heap = GetProcessHeap();
   ATOM wcatom = register_class(g.hinst);
@@ -512,6 +551,8 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
     0, 0, g.hinst, 0
   );
   ShowWindow(hwnd, cmdshow);
+
+  openfile(hwnd, argfile);
 
   MSG msg = {0};
   while (GetMessage(&msg, 0, 0, 0)) {
