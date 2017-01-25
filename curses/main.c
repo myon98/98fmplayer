@@ -323,7 +323,7 @@ static bool readrom(struct opna *opna) {
       path = dpath;
     }
   }
-  FILE *rhythm = fopen(path, "r");
+  FILE *rhythm = fopen(path, "rb");
   free(dpath);
   if (!rhythm) goto err;
   if (fseek(rhythm, 0, SEEK_END) != 0) goto err_file;
@@ -353,9 +353,9 @@ static FILE *pvisearch(const char *filename, const char *pvibase) {
       *c += ('a' - 'A');
     }
   }
-  FILE *pvifile = fopen(pviname, "r");
+  FILE *pvifile = fopen(pviname, "rb");
   if (pvifile) return pvifile;
-  pvifile = fopen(pviname_l, "r");
+  pvifile = fopen(pviname_l, "rb");
   if (pvifile) return pvifile;
   char *slash = strrchr(filename, '/');
   if (!slash) return 0;
@@ -364,14 +364,14 @@ static FILE *pvisearch(const char *filename, const char *pvibase) {
   memcpy(pvipath, filename, slash-filename+1);
   pvipath[slash-filename+1] = 0;
   strcat(pvipath, pviname);
-  pvifile = fopen(pvipath, "r");
+  pvifile = fopen(pvipath, "rb");
   if (pvifile) {
     free(pvipath);
     return pvifile;
   }
   pvipath[slash-filename+1] = 0;
   strcat(pvipath, pviname_l);
-  pvifile = fopen(pvipath, "r");
+  pvifile = fopen(pvipath, "rb");
   if (pvifile) {
     free(pvipath);
     return pvifile;
