@@ -129,6 +129,7 @@ struct dsound_state *dsound_init(HWND hwnd, unsigned srate, unsigned sectlen,
 
   dsound->e_posnotf = CreateEventW(NULL, FALSE, FALSE, L"SNDNOTF");
   dsound->t_update = CreateThread(NULL, 0, bufupdatethread, dsound, 0, NULL);
+  SetThreadPriority(dsound->t_update, THREAD_PRIORITY_HIGHEST);
   dsound->sectlen = sectlen;
   dsound->playing = 0;
   dsound->terminate = 0;
