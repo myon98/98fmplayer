@@ -6,10 +6,9 @@
 
 typedef void (*sound_callback)(void *userdata, int16_t *buf, unsigned frames);
 struct sound_state {
-  void *driver_state;
   void (*pause)(struct sound_state *state, int pause);
-  void (*delete)(struct sound_state *state);
-  void *userptr;
+  void (*free)(struct sound_state *state);
+  const wchar_t *apiname;
 };
 
 struct sound_state *sound_init(HWND hwnd, unsigned srate, unsigned sectlen,

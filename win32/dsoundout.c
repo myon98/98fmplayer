@@ -3,6 +3,7 @@
 #include <dsound.h>
 
 struct dsound_state {
+  struct sound_state soundout;
   IDirectSound8 *ds;
   DWORD sectlen;
   IDirectSoundBuffer *dsbuf;
@@ -69,7 +70,32 @@ static DWORD WINAPI bufupdatethread(LPVOID p) {
   }
 }
 
-struct dsound_state *dsound_init(HWND hwnd, unsigned srate, unsigned sectlen,
+static void dsound_pause(struct sound_state *state, int pause) {
+  struct dsound_state *dsound = (struct dsound_state *)state;
+  if (pause) {
+    dsound->playing = 0;
+    WaitForSingleObject(dsound->mtx_cbproc, INFINITE);
+    ReleaseMutex(dsound->mtx_cbproc);
+  } else {
+    dsound->playing = 1;
+    dsound->dsbuf->lpVtbl->Play(dsound->dsbuf, 0, 0, DSBPLAY_LOOPING);
+  }
+}
+
+static void dsound_free(struct sound_state *state) {
+  struct dsound_state *dsound = (struct dsound_state *)state;
+  dsound_pause(state, 1);
+  dsound->terminate = 1;
+  SetEvent(dsound->e_posnotf);
+  WaitForSingleObject(dsound->t_update, INFINITE);
+  CloseHandle(dsound->mtx_cbproc);
+  dsound->dsbuf->lpVtbl->Release(dsound->dsbuf);
+  dsound->ds->lpVtbl->Release(dsound->ds);
+  HeapFree(GetProcessHeap(), 0, dsound);
+}
+
+
+struct sound_state *dsound_init(HWND hwnd, unsigned srate, unsigned sectlen,
                                  sound_callback cbfunc, void *userptr) {
   HANDLE heap = GetProcessHeap();
   struct dsound_state *dsound = HeapAlloc(heap, HEAP_ZERO_MEMORY,
@@ -87,7 +113,6 @@ struct dsound_state *dsound_init(HWND hwnd, unsigned srate, unsigned sectlen,
     &IID_IDirectSound8,
     (void **)&dsound->ds);
   if (hr != S_OK) {
-    MessageBoxW(hwnd, L"cannot create instance of DirectSound8", L"Error", MB_ICONSTOP);
     goto err_dsound;
   }
   hr = dsound->ds->lpVtbl->Initialize(dsound->ds, 0);
@@ -127,15 +152,24 @@ struct dsound_state *dsound_init(HWND hwnd, unsigned srate, unsigned sectlen,
     goto err_dsbuf;
   }
 
-  dsound->e_posnotf = CreateEventW(NULL, FALSE, FALSE, L"SNDNOTF");
+  dsound->mtx_cbproc = CreateMutexW(0, FALSE, 0);
+  if (!dsound->mtx_cbproc) {
+    goto err_dsnotf;
+  }
+  dsound->e_posnotf = CreateEventW(NULL, FALSE, FALSE, 0);
+  if (!dsound->e_posnotf) {
+    goto err_mtx;
+  }
   dsound->t_update = CreateThread(NULL, 0, bufupdatethread, dsound, 0, NULL);
+  if (!dsound->t_update) {
+    goto err_event;
+  }
   SetThreadPriority(dsound->t_update, THREAD_PRIORITY_HIGHEST);
   dsound->sectlen = sectlen;
   dsound->playing = 0;
   dsound->terminate = 0;
   dsound->cbfunc = cbfunc;
   dsound->userptr = userptr;
-  dsound->mtx_cbproc = CreateMutexW(0, FALSE, 0);
   
   
   DSBPOSITIONNOTIFY posnotf[4] = {
@@ -146,7 +180,17 @@ struct dsound_state *dsound_init(HWND hwnd, unsigned srate, unsigned sectlen,
   };
   dsnotf->lpVtbl->SetNotificationPositions(dsnotf, 4, posnotf);
   dsnotf->lpVtbl->Release(dsnotf);
-  return dsound;
+  dsound->soundout.pause = dsound_pause;
+  dsound->soundout.free = dsound_free;
+  dsound->soundout.apiname = L"DirectSound";
+  return (struct sound_state *)dsound;
+
+err_event:
+  CloseHandle(dsound->e_posnotf);
+err_mtx:
+  CloseHandle(dsound->mtx_cbproc);
+err_dsnotf:
+  dsnotf->lpVtbl->Release(dsnotf);
 err_dsbuf:
   dsound->dsbuf->lpVtbl->Release(dsound->dsbuf);
 err_ds:
@@ -155,27 +199,4 @@ err_dsound:
   HeapFree(heap, 0, dsound);
 err:
   return 0;
-}
-
-void dsound_pause(struct dsound_state *dsound, int pause) {
-  if (pause) {
-    dsound->playing = 0;
-    WaitForSingleObject(dsound->mtx_cbproc, INFINITE);
-    ReleaseMutex(dsound->mtx_cbproc);
-  } else {
-    dsound->playing = 1;
-    dsound->dsbuf->lpVtbl->Play(dsound->dsbuf, 0, 0, DSBPLAY_LOOPING);
-  }
-}
-
-void dsound_delete(struct dsound_state *dsound) {
-  if (!dsound) return;
-  dsound_pause(dsound, 1);
-  dsound->terminate = 1;
-  SetEvent(dsound->e_posnotf);
-  WaitForSingleObject(dsound->t_update, INFINITE);
-  CloseHandle(dsound->mtx_cbproc);
-  dsound->dsbuf->lpVtbl->Release(dsound->dsbuf);
-  dsound->ds->lpVtbl->Release(dsound->ds);
-  HeapFree(GetProcessHeap(), 0, dsound);
 }

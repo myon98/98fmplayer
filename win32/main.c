@@ -14,13 +14,14 @@
 
 enum {
   ID_OPENFILE = 0x10,
-  TIMER_FMDSP = 1,
+  ID_PAUSE,
 };
 
 #define FMPLAYER_CLASSNAME L"myon_fmplayer_ym2608_win32"
 #define FMPLAYER_CDSTAG 0xFD809800UL
 
 enum {
+  TIMER_FMDSP = 1,
   SRATE = 55467,
   SECTLEN = 4096,
   PPZ8MIX = 0xa000,
@@ -46,6 +47,8 @@ static struct {
   void *drum_rom;
   uint8_t opna_adpcm_ram[OPNA_ADPCM_RAM_SIZE];
   void *ppz8_buf;
+  bool paused;
+  HWND driverinfo;
 } g;
 
 
@@ -292,10 +295,12 @@ static void openfile(HWND hwnd, const wchar_t *path) {
   if (!g.sound) {
     g.sound = sound_init(hwnd, SRATE, SECTLEN,
                          sound_cb, &g.opna_timer);
+    SetWindowText(g.driverinfo, g.sound->apiname);
   }
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   if (!g.sound) goto err_fmp;
   g.sound->pause(g.sound, 0);
+  g.paused = false;
   CloseHandle(file);
   return;
 err_fmp:
@@ -393,11 +398,31 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
     40, 25,
     hwnd, (HMENU)ID_OPENFILE, g.hinst, 0
   );
+  HWND pbutton = CreateWindowEx(
+    0,
+    L"BUTTON",
+    L"&Pause",
+    WS_TABSTOP | WS_VISIBLE | WS_CHILD,
+    55, 10,
+    50, 25,
+    hwnd, (HMENU)ID_PAUSE, g.hinst, 0
+  );
+  g.driverinfo = CreateWindowEx(
+    0,
+    L"STATIC",
+    L"",
+    WS_VISIBLE | WS_CHILD,
+    110, 15,
+    100, 25,
+    hwnd, 0, g.hinst, 0
+  );
   NONCLIENTMETRICS ncm;
   ncm.cbSize = sizeof(ncm);
   SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
   HFONT font = CreateFontIndirect(&ncm.lfMessageFont);
   SetWindowFont(button, font, TRUE);
+  SetWindowFont(pbutton, font, TRUE);
+  SetWindowFont(g.driverinfo, font, TRUE);
   loadrom();
   loadfont();
   fmdsp_init(&g.fmdsp, g.font_loaded ? &g.font : 0);
@@ -416,12 +441,17 @@ static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
   case ID_OPENFILE:
     openfiledialog(hwnd);
     break;
+  case ID_PAUSE:
+    if (g.sound) {
+      g.paused = !g.paused;
+      g.sound->pause(g.sound, g.paused);
+    }
   }
 }
 
 static void on_destroy(HWND hwnd) {
   (void)hwnd;
-  if (g.sound) g.sound->delete(g.sound);
+  if (g.sound) g.sound->free(g.sound);
   if (g.fmp) HeapFree(g.heap, 0, g.fmp);
   if (g.drum_rom) HeapFree(g.heap, 0, g.drum_rom);
   if (g.ppz8_buf) HeapFree(g.heap, 0, g.ppz8_buf);
