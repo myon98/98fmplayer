@@ -425,6 +425,20 @@ static void destroynothing(gpointer p) {
   (void)p;
 }
 
+static gboolean key_press_cb(GtkWidget *w,
+                             GdkEvent *e,
+                             gpointer ptr) {
+  (void)w;
+  (void)ptr;
+  if (GDK_KEY_F1 <= e->key.keyval && e->key.keyval <= GDK_KEY_F10) {
+    if (e->key.state & GDK_CONTROL_MASK) {
+      fmdsp_palette_set(&g.fmdsp, e->key.keyval - GDK_KEY_F1);
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
 int main(int argc, char **argv) {
   load_fontrom();
   gtk_init(&argc, &argv);
@@ -472,7 +486,9 @@ int main(int argc, char **argv) {
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   g.vram32_stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, PC98_W);
   g.vram32 = malloc((g.vram32_stride*PC98_H)*4);
-  
+
+  g_signal_connect(w, "key-press-event", G_CALLBACK(key_press_cb), 0);
+  gtk_widget_add_events(w, GDK_KEY_PRESS_MASK);
   gtk_widget_show_all(w);
   gtk_widget_add_tick_callback(w, tick_cb, drawarea, destroynothing);
   gtk_main();

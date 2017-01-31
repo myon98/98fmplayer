@@ -500,6 +500,34 @@ static LRESULT on_copydata(HWND hwnd, HWND hwndfrom, COPYDATASTRUCT *cds) {
   return TRUE;
 }
 
+static void on_syskey(HWND hwnd, UINT vk, BOOL down, int repeat, UINT scan) {
+  if (down) {
+    if (vk == VK_F10) {
+      if (GetKeyState(VK_CONTROL) & 0x8000U) {
+        fmdsp_palette_set(&g.fmdsp, 9);
+        return;
+      }
+    }
+    FORWARD_WM_SYSKEYDOWN(hwnd, vk, repeat, scan, DefWindowProc);
+  } else {
+    FORWARD_WM_SYSKEYUP(hwnd, vk, repeat, scan, DefWindowProc);
+  }
+}
+
+static void on_key(HWND hwnd, UINT vk, BOOL down, int repeat, UINT scan) {
+  if (down) {
+    if (VK_F1 <= vk && vk <= VK_F12) {
+      if (GetKeyState(VK_CONTROL) & 0x8000U) {
+        fmdsp_palette_set(&g.fmdsp, vk - VK_F1);
+        return;
+      }
+    }
+    FORWARD_WM_KEYDOWN(hwnd, vk, repeat, scan, DefWindowProc);
+  } else {
+    FORWARD_WM_KEYUP(hwnd, vk, repeat, scan, DefWindowProc);
+  }
+}
+
 static LRESULT CALLBACK wndproc(
   HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 ) {
@@ -514,6 +542,10 @@ static LRESULT CALLBACK wndproc(
 #ifdef ENABLE_WM_DROPFILES
   HANDLE_MSG(hwnd, WM_DROPFILES, on_dropfiles);
 #endif // ENABLE_WM_DROPFILES
+  HANDLE_MSG(hwnd, WM_KEYDOWN, on_key);
+  HANDLE_MSG(hwnd, WM_KEYUP, on_key);
+  HANDLE_MSG(hwnd, WM_SYSKEYDOWN, on_syskey);
+  HANDLE_MSG(hwnd, WM_SYSKEYUP, on_syskey);
   }
   return DefWindowProc(hwnd, msg, wParam, lParam);
 }

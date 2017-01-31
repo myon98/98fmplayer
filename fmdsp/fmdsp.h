@@ -32,6 +32,7 @@ void fmdsp_vram_init(struct fmdsp *fmdsp,
 void fmdsp_update(struct fmdsp *fmdsp, const struct fmdriver_work *work, uint8_t *vram);
 void fmdsp_vrampalette(struct fmdsp *fmdsp, const uint8_t *vram, uint8_t *vram32, int stride);
 void fmdsp_font_from_fontrom(uint8_t *font, const uint8_t *fontrom);
+void fmdsp_palette_set(struct fmdsp *fmdsp, int p);
 #ifdef __cplusplus
 }
 #endif

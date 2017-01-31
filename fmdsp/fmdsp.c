@@ -46,10 +46,9 @@ static void vramblit_key(uint8_t *vram, int x, int y,
 }
 
 void fmdsp_init(struct fmdsp *fmdsp, const struct fmdsp_font *font98) {
-  for (int i = 0; i < FMDSP_PALETTE_COLORS; i++) {
-    fmdsp->palette[i*3+0] = s_palettes[0][i*3+0];
-    fmdsp->palette[i*3+1] = s_palettes[0][i*3+1];
-    fmdsp->palette[i*3+2] = s_palettes[0][i*3+2];
+  for (int i = 0; i < FMDSP_PALETTE_COLORS*3; i++) {
+    fmdsp->palette[i] = 0;//s_palettes[0][i];
+    fmdsp->target_palette[i] = s_palettes[0][i];
   }
   fmdsp->font98 = font98;
 }
@@ -181,6 +180,39 @@ void fmdsp_vram_init(struct fmdsp *fmdsp,
   }
 }
 
+enum {
+  FADEDELTA = 16
+};
+
+void fmdsp_palette_set(struct fmdsp *fmdsp, int p) {
+  if (p < 0) return;
+  if (p >= PALETTE_NUM) return;
+  for (int i = 0; i < FMDSP_PALETTE_COLORS*3; i++) {
+    fmdsp->target_palette[i] = s_palettes[p][i];
+  }
+}
+
+static void fmdsp_palette_fade(struct fmdsp *fmdsp) {
+  for (int i = 0; i < FMDSP_PALETTE_COLORS*3; i++) {
+    uint8_t p = fmdsp->palette[i];
+    uint8_t t = fmdsp->target_palette[i];
+    if (p < t) {
+      if ((p + FADEDELTA) < t) {
+        p += FADEDELTA;
+      } else {
+        p = t;
+      }
+    } else if (p > t) {
+      if (p > (t + FADEDELTA)) {
+        p -= FADEDELTA;
+      } else {
+        p = t;
+      }
+    }
+    fmdsp->palette[i] = p;
+  }
+}
+
 void fmdsp_update(struct fmdsp *fmdsp,
                   const struct fmdriver_work *work, uint8_t *vram) {
   for (int t = 0; t < 10; t++) {
@@ -220,6 +252,7 @@ void fmdsp_update(struct fmdsp *fmdsp,
     vramblit_color(vram, BAR_X+BAR_W*(track->ticks>>2), TRACK_H*t+BAR_Y,
                    s_bar, BAR_W, BAR_H, 7);
   }
+  fmdsp_palette_fade(fmdsp);
 }
 
 void fmdsp_vrampalette(struct fmdsp *fmdsp, const uint8_t *vram, uint8_t *vram32, int stride) {
