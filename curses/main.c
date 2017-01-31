@@ -24,23 +24,30 @@ enum {
 
 #ifdef HAVE_SAMPLERATE
 
-struct {
-  double src_ratio;
-} g;
-
 enum {
   READFRAMES = 256,
 };
 
-static long src_cb(void *cb_data, float **data) {
-  static float buf_f[READFRAMES*2];
-  static int16_t buf_i[READFRAMES*2];
-  struct opna_timer *timer = (struct opna_timer *)cb_data;
-  memset(buf_i, 0, sizeof(buf_i));
-  opna_timer_mix(timer, buf_i, READFRAMES);
-  src_short_to_float_array(buf_i, buf_f, READFRAMES*2);
-  *data = buf_f;
-  return READFRAMES;
+struct {
+  double src_ratio;
+  struct opna_timer *timer;
+  SRC_STATE *src;
+  float buf_f[READFRAMES*2];
+  int16_t buf_i[READFRAMES*2];
+  int buf_used_frames;
+} g;
+
+static void update_buf(void) {
+  for (int i = g.buf_used_frames*2; i < READFRAMES*2; i++) {
+    g.buf_f[i-(g.buf_used_frames*2)] = g.buf_f[i];
+  }
+  for (int i = 0; i < g.buf_used_frames*2; i++) {
+    g.buf_i[i] = 0;
+  }
+  opna_timer_mix(g.timer, g.buf_i, g.buf_used_frames);
+  src_short_to_float_array(g.buf_i, g.buf_f+(READFRAMES-g.buf_used_frames)*2,
+                           g.buf_used_frames*2);
+  g.buf_used_frames = 0;
 }
 
 static int pastream_cb_src(const void *inptr, void *outptr,
@@ -51,8 +58,22 @@ static int pastream_cb_src(const void *inptr, void *outptr,
   (void)inptr;
   (void)timeinfo;
   (void)statusFlags;
-  SRC_STATE *src = (SRC_STATE *)userdata;
-  src_callback_read(src, g.src_ratio, frames, (float *)outptr);
+  (void)userdata;
+  float *out_f = outptr;
+  SRC_DATA srcdata;
+  srcdata.data_in = g.buf_f;
+  srcdata.data_out = out_f;
+  srcdata.input_frames = READFRAMES;
+  srcdata.output_frames = frames;
+  srcdata.end_of_input = 0;
+  srcdata.src_ratio = g.src_ratio;
+  while (srcdata.output_frames) {
+    src_process(g.src, &srcdata);
+    srcdata.output_frames -= srcdata.output_frames_gen;
+    srcdata.data_out += srcdata.output_frames_gen*2;
+    g.buf_used_frames = srcdata.input_frames_used;
+    update_buf();
+  }
   return paContinue;
 }
 
@@ -587,20 +608,20 @@ int main(int argc, char **argv) {
     double outrate = pdi->defaultSampleRate;
     double ratio = outrate / SRATE;
     int e;
-    SRC_STATE *src = src_callback_new(src_cb, SRC_SINC_BEST_QUALITY, 2,
-                                      &e, &timer);
-    if (!src) {
+    g.src_ratio = ratio;
+    g.timer = &timer;
+    g.src = src_new(SRC_SINC_BEST_QUALITY, 2, &e);
+    if (!g.src) {
       fprintf(stderr, "cannot open samplerate converter\n");
       return 1;
     }
-    g.src_ratio = ratio;
     PaStreamParameters psp;
     psp.device = pi;
     psp.channelCount = 2;
     psp.sampleFormat = paFloat32;
     psp.suggestedLatency = pdi->defaultLowOutputLatency;
     psp.hostApiSpecificStreamInfo = 0;
-    pe = Pa_OpenStream(&ps, 0, &psp, outrate, 0, 0, &pastream_cb_src, src);
+    pe = Pa_OpenStream(&ps, 0, &psp, outrate, 0, 0, &pastream_cb_src, 0);
     if (pe != paNoError) {
       fprintf(stderr, "cannot open audio device\n");
       return 1;
