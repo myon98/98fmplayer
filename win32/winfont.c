@@ -11,7 +11,7 @@ struct font_win32 {
   uint8_t buf[16];
 };
 
-
+/*
 #include "jisunih.h"
 
 uint16_t jis2unih(uint8_t jis) {
@@ -26,7 +26,15 @@ uint16_t jis2unih(uint8_t jis) {
     return jis;
   }
 }
-
+*/
+uint16_t jis2unih(uint8_t jis) {
+  uint16_t wbuf[2];
+  int outchar = MultiByteToWideChar(932, MB_ERR_INVALID_CHARS,
+                                    (char *)&jis, 1, (wchar_t *)wbuf, 2);
+  if (!outchar) return 0;
+  return wbuf[0];
+}
+/*
 #include "jisuni.h"
 
 uint16_t jis2uni(uint16_t jis) {
@@ -39,6 +47,16 @@ uint16_t jis2uni(uint16_t jis) {
     tab += 2;
   }
   return 0;
+}
+*/
+uint16_t jis2uni(uint16_t jis) {
+  uint16_t sjis = jis2sjis(jis);
+  uint8_t abuf[2] = {sjis>>8, sjis};
+  uint16_t wbuf[2];
+  int outchar = MultiByteToWideChar(932, MB_ERR_INVALID_CHARS,
+                                    (char *)abuf, 2, (wchar_t *)wbuf, 2);
+  if (!outchar) return 0;
+  return wbuf[0];
 }
 
 static const void *winfont_get(const struct fmdsp_font *font,

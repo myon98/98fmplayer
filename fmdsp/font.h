@@ -33,6 +33,21 @@ static inline uint16_t sjis2jis(uint8_t sjis_1st, uint8_t sjis_2nd) {
   return jis;
 }
 
+static inline uint16_t jis2sjis(uint16_t jis) {
+  jis += 0x217e;
+  jis ^= 0x4000;
+  bool c = jis&0x100;
+  jis = (jis & 0xff) | (((jis>>1)|0x8000)&0xff00);
+  if (!c) {
+    uint16_t jisl = jis & 0xff;
+    jisl -= 0xde;
+    if (jisl >> 8) jisl--;
+    jisl -= 0x80;
+    jis = (jis&0xff00) | (jisl&0xff);
+  }
+  return jis;
+}
+
 enum fmdsp_font_type {
   FMDSP_FONT_ANK,
   FMDSP_FONT_JIS_LEFT,
