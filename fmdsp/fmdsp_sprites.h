@@ -41,16 +41,21 @@ enum {
   PALETTE_NUM = 10
 };
 
-#define LCDWR 181
-#define LCDWG 192
-#define LCDWB 12
-#define LCDBR 70
-#define LCDBG 124
-#define LCDBB 108
+#define LCDWR 172
+#define LCDWG 239
+#define LCDWB 7
+#define LCDBR 12
+#define LCDBG 91
+#define LCDBB 0
 #define LCD(C) \
   (LCDWR*(C)+LCDBR*(255-C))/256, \
   (LCDWG*(C)+LCDBG*(255-C))/256, \
   (LCDWB*(C)+LCDBB*(255-C))/256
+
+#define LCDB(C) \
+  (LCDBR*(C)+LCDWR*(255-C))/256, \
+  (LCDBG*(C)+LCDWG*(255-C))/256, \
+  (LCDBB*(C)+LCDWB*(255-C))/256
 
 static const uint8_t s_palettes[PALETTE_NUM][FMDSP_PALETTE_COLORS*3] = {
   {
@@ -142,15 +147,15 @@ static const uint8_t s_palettes[PALETTE_NUM][FMDSP_PALETTE_COLORS*3] = {
     0, 170, 255,
   },
   {
-    LCD(255),
-    LCD(72),
-    LCD(0),
-    LCD(182),
-    LCD(0),
-    LCD(145),
-    LCD(218),
-    LCD(109),
-    LCD(218),
+    LCDB(255),
+    LCDB(72),
+    LCDB(0),
+    LCDB(182),
+    LCDB(0),
+    LCDB(145),
+    LCDB(218),
+    LCDB(109),
+    LCDB(218),
   },
   {
     LCD(255),
