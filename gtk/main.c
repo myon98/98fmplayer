@@ -106,7 +106,7 @@ static uint8_t opna_status_libopna(struct fmdriver_work *work, bool a1) {
   return status;
 }
 
-static FILE *pvisearch(const char *filename, const char *pvibase) {
+static GFileInputStream *pvisearch(GFile *dir, const char *pvibase) {
   // TODO: not SJIS aware
   char pviname[8+3+2] = {0};
   char pviname_l[8+3+2] = {0};
@@ -118,95 +118,82 @@ static FILE *pvisearch(const char *filename, const char *pvibase) {
       *c += ('a' - 'A');
     }
   }
-  FILE *pvifile = fopen(pviname, "r");
-  if (pvifile) return pvifile;
-  pvifile = fopen(pviname_l, "r");
-  if (pvifile) return pvifile;
-  char *slash = strrchr(filename, '/');
-  if (!slash) return 0;
-  char *pvipath = malloc((slash-filename)+1+sizeof(pviname));
-  if (!pvipath) return 0;
-  memcpy(pvipath, filename, slash-filename+1);
-  pvipath[slash-filename+1] = 0;
-  strcat(pvipath, pviname);
-  pvifile = fopen(pvipath, "r");
-  if (pvifile) {
-    free(pvipath);
-    return pvifile;
-  }
-  pvipath[slash-filename+1] = 0;
-  strcat(pvipath, pviname_l);
-  pvifile = fopen(pvipath, "r");
-  if (pvifile) {
-    free(pvipath);
-    return pvifile;
-  }
-  free(pvipath);
+  GFile *pvifile = g_file_get_child(dir, pviname);
+  GFileInputStream *pvistream = g_file_read(pvifile, 0, 0);
+  g_object_unref(G_OBJECT(pvifile));
+  if (pvistream) return pvistream;
+  pvifile = g_file_get_child(dir, pviname_l);
+  pvistream = g_file_read(pvifile, 0, 0);
+  g_object_unref(G_OBJECT(pvifile));
+  if (pvistream) return pvistream;
   return 0;
 }
 
 static bool loadpvi(struct fmdriver_work *work,
                     struct driver_fmp *fmp,
-                    const char *filename) {
+                    GFile *dir) {
   // no need to load, always success
   if(strlen(fmp->pvi_name) == 0) return true;
-  FILE *pvifile = pvisearch(filename, fmp->pvi_name);
-  if (!pvifile) goto err;
-  if (fseek(pvifile, 0, SEEK_END) != 0) goto err_file;
-  size_t fsize;
-  {
-    long size = ftell(pvifile);
-    if (size < 0) goto err_file;
-    fsize = size;
-  }
-  if (fseek(pvifile, 0, SEEK_SET) != 0) goto err_file;
-  void *data = malloc(fsize);
-  if (!data) goto err_file;
-  if (fread(data, 1, fsize, pvifile) != fsize) goto err_memory;
-  if (!fmp_adpcm_load(work, data, fsize)) goto err_memory;
+  GFileInputStream *pvistream = pvisearch(dir, fmp->pvi_name);
+  if (!pvistream) goto err;
+  void *data = malloc(OPNA_ADPCM_RAM_SIZE);
+  if (!data) goto err_stream;
+  gsize read;
+  if (!g_input_stream_read_all(
+    G_INPUT_STREAM(pvistream), data, OPNA_ADPCM_RAM_SIZE, &read, 0, 0
+  )) goto err_data;
+  if (!fmp_adpcm_load(work, data, OPNA_ADPCM_RAM_SIZE)) goto err_data;
   free(data);
-  fclose(pvifile);
+  g_object_unref(pvistream);
   return true;
-err_memory:
+err_data:
   free(data);
-err_file:
-  fclose(pvifile);
+err_stream:
+  g_object_unref(G_OBJECT(pvistream));
 err:
   return false;
 }
 
 static bool loadppzpvi(struct fmdriver_work *work,
                     struct driver_fmp *fmp,
-                    const char *filename) {
+                    GFile *dir) {
   // no need to load, always success
   if(strlen(fmp->ppz_name) == 0) return true;
-  FILE *pvifile = pvisearch(filename, fmp->ppz_name);
-  if (!pvifile) goto err;
-  if (fseek(pvifile, 0, SEEK_END) != 0) goto err_file;
-  size_t fsize;
+  GFileInputStream *pvistream = pvisearch(dir, fmp->ppz_name);
+  if (!pvistream) goto err;
+  GFileInfo *pviinfo = g_file_input_stream_query_info(
+    pvistream, G_FILE_ATTRIBUTE_STANDARD_SIZE,
+    0, 0);
+  if (!pviinfo) goto err_stream;
+  gsize fsize;
   {
-    long size = ftell(pvifile);
-    if (size < 0) goto err_file;
-    fsize = size;
+    goffset sfsize = g_file_info_get_size(pviinfo);
+    if (sfsize < 0) goto err_info;
+    fsize = sfsize;
   }
-  if (fseek(pvifile, 0, SEEK_SET) != 0) goto err_file;
   void *data = malloc(fsize);
-  if (!data) goto err_file;
-  if (fread(data, 1, fsize, pvifile) != fsize) goto err_memory;
+  if (!data) goto err_info;
+  gsize readsize;
+  g_input_stream_read_all(G_INPUT_STREAM(pvistream),
+                          data, fsize, &readsize, 0, 0);
+  if (readsize != fsize) goto err_memory;
   int16_t *decbuf = calloc(ppz8_pvi_decodebuf_samples(fsize), sizeof(int16_t));
   if (!decbuf) goto err_memory;
   if (!ppz8_pvi_load(work->ppz8, 0, data, fsize, decbuf)) goto err_decbuf;
   free(g.ppzbuf);
   g.ppzbuf = decbuf;
   free(data);
-  fclose(pvifile);
+  g_object_unref(G_OBJECT(pviinfo));
+  g_object_unref(G_OBJECT(pvistream));
   return true;
 err_decbuf:
   free(decbuf);
 err_memory:
   free(data);
-err_file:
-  fclose(pvifile);
+err_info:
+  g_object_unref(pviinfo);
+err_stream:
+  g_object_unref(pvistream);
 err:
   return false;
 }
@@ -275,46 +262,49 @@ err:
   return;
 }
 
-static bool openfile(const char *path) {
+static bool openfile(const char *uri) {
   if (!g.pa_initialized) {
     msgbox_err("Could not initialize Portaudio");
     goto err;
   }
-  FILE *fmfile = fopen(path, "r");
-  if (!fmfile) {
-    msgbox_err("Cannot open file");
-    goto err;
-  }
-  if (fseek(fmfile, 0, SEEK_END) != 0) {
-    msgbox_err("cannot seek file to end");
+  GFile *fmfile = g_file_new_for_uri(uri);
+  GFileInfo *fminfo = g_file_query_info(
+    fmfile, G_FILE_ATTRIBUTE_STANDARD_SIZE,
+    0, 0, 0
+  );
+  if (!fminfo) {
+    msgbox_err("Cannot get size information for file");
     goto err_file;
   }
-  size_t filelen;
+  gsize filelen;
   {
-    long tfilelen = ftell(fmfile);
-    if ((tfilelen < 0) || (tfilelen > 0xffff)) {
-      msgbox_err("invalid file length");
-      goto err_file;
+    goffset sfilelen = g_file_info_get_size(fminfo);
+    if (sfilelen < 0) {
+      goto err_info;
     }
-    filelen = tfilelen;
+    filelen = sfilelen;
   }
-  if (fseek(fmfile, 0, SEEK_SET) != 0) {
-    msgbox_err("cannot seek file to beginning");
-    goto err_file;
+  GFileInputStream *fmstream = g_file_read(fmfile, 0, 0);
+  if (!fmstream) {
+    msgbox_err("cannot open file for read");
+    goto err_info;
   }
   void *fmbuf = malloc(filelen);
   if (!fmbuf) {
     msgbox_err("cannot allocate memory for file");
-    goto err_file;
+    goto err_stream;
   }
-  if (fread(fmbuf, 1, filelen, fmfile) != filelen) {
+  gsize fileread;
+  g_input_stream_read_all(
+    G_INPUT_STREAM(fmstream), fmbuf, filelen, &fileread, 0, 0);
+  if (fileread != filelen) {
     msgbox_err("cannot read file");
-    goto err_fmbuf;
+    goto err_buf;
   }
   struct driver_fmp *fmp = calloc(1, sizeof(struct driver_fmp));
   if (!fmp) {
     msgbox_err("cannot allocate memory for fmp");
-    goto err_fmbuf;
+    goto err_buf;
   }
   if (!fmp_load(fmp, fmbuf, filelen)) {
     msgbox_err("invalid FMP file");
@@ -358,23 +348,33 @@ static bool openfile(const char *path) {
   opna_timer_set_mix_callback(&g.opna_timer, opna_mix_cb, &g.ppz8);
   fmp_init(&g.work, g.fmp);
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
-  loadpvi(&g.work, g.fmp, path);
-  loadppzpvi(&g.work, g.fmp, path);
-  fclose(fmfile);
+  GFile *dir = g_file_get_parent(fmfile);
+  if (dir) {
+    loadpvi(&g.work, g.fmp, dir);
+    loadppzpvi(&g.work, g.fmp, dir);
+    g_object_unref(G_OBJECT(dir));
+  }
+  g_object_unref(G_OBJECT(fmstream));
+  g_object_unref(G_OBJECT(fminfo));
+  g_object_unref(G_OBJECT(fmfile));
   Pa_StartStream(g.pastream);
   return true;
 err_fmp:
   free(fmp);
-err_fmbuf:
+err_buf:
   free(fmbuf);
+err_stream:
+  g_object_unref(G_OBJECT(fmstream));
+err_info:
+  g_object_unref(G_OBJECT(fminfo));
 err_file:
-  fclose(fmfile);
+  g_object_unref(G_OBJECT(fmfile));
 err:
   return false;
 }
 
 static void on_file_activated(GtkFileChooser *chooser, gpointer ptr) {
-  gchar *filename = gtk_file_chooser_get_filename(chooser);
+  gchar *filename = gtk_file_chooser_get_uri(chooser);
   if (filename) {
     openfile(filename);
     g_free(filename);
@@ -439,6 +439,24 @@ static gboolean key_press_cb(GtkWidget *w,
   return FALSE;
 }
 
+static void drag_data_recv_cb(
+  GtkWidget *w,
+  GdkDragContext *ctx,
+  gint x, gint y,
+  GtkSelectionData *data,
+  guint info, guint time, gpointer ptr) {
+  (void)x;
+  (void)y;
+  (void)info;
+  (void)ptr;
+  gchar **uris = gtk_selection_data_get_uris(data);
+  if (uris && uris[0]) {
+    openfile(uris[0]);
+  }
+  g_strfreev(uris);
+  gtk_drag_finish(ctx, TRUE, FALSE, time);
+}
+
 int main(int argc, char **argv) {
   load_fontrom();
   gtk_init(&argc, &argv);
@@ -488,6 +506,11 @@ int main(int argc, char **argv) {
   g.vram32 = malloc((g.vram32_stride*PC98_H)*4);
 
   g_signal_connect(w, "key-press-event", G_CALLBACK(key_press_cb), 0);
+  gtk_drag_dest_set(
+    w, GTK_DEST_DEFAULT_MOTION|GTK_DEST_DEFAULT_HIGHLIGHT|GTK_DEST_DEFAULT_DROP,
+    0, 0, GDK_ACTION_COPY);
+  gtk_drag_dest_add_uri_targets(w);
+  g_signal_connect(w, "drag-data-received", G_CALLBACK(drag_data_recv_cb), 0);
   gtk_widget_add_events(w, GDK_KEY_PRESS_MASK);
   gtk_widget_show_all(w);
   gtk_widget_add_tick_callback(w, tick_cb, drawarea, destroynothing);
