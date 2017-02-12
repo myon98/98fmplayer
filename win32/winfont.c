@@ -73,7 +73,12 @@ static const void *winfont_get(const struct fmdsp_font *font,
     TextOut(fw->dc, 0, 0, text, 1);
     break;
   case FMDSP_FONT_JIS_LEFT:
-    text[0] = jis2uni(c);
+    if (c>>8 == 0x29) {
+      // doublebyte halfwidth
+      text[0] = jis2unih(c & 0xff);
+    } else {
+      text[0] = jis2uni(c);
+    }
     TextOut(fw->dc, 0, 0, text, 1);
     break;
   case FMDSP_FONT_JIS_RIGHT:
