@@ -34,6 +34,11 @@ struct fmdriver_track_status {
   uint8_t key;
   // key after pitchbend, LFO, etc. applied
   uint8_t actual_key;
+  uint8_t tonenum;
+  uint8_t volume;
+  uint8_t gate;
+  int8_t detune;
+  char status[9];
 };
 
 struct fmdriver_work {
@@ -56,7 +61,8 @@ struct fmdriver_work {
   // CP932 encoded
   //const char *title;
   char comment[3][FMDRIVER_TITLE_BUFLEN];
-  // driver status
+  // driver status (for display)
+  uint8_t ssg_noise_freq;
   struct fmdriver_track_status track_status[FMDRIVER_TRACK_NUM];
   // fm3ex part map
 };

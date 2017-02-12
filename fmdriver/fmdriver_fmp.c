@@ -252,7 +252,7 @@ static uint16_t fmp_adpcm_freq(uint8_t note) {
 }
 
 static uint8_t fmp_pdzf_vol_clamp(uint8_t v, uint8_t ev) {
-  int16_t ret = v + u8s16(ev);
+  int16_t ret = v + u8s8(ev);
   if (ret < 0) ret = 0;
   if (ret > 0xf) ret = 0xf;
   return ret;
@@ -993,10 +993,10 @@ static bool fmp_cmd75_lfo(struct fmdriver_work *work,
       // 22f1
       fmp->timer_ch3 |= 0x40;
       if (val & 0x20) {
-        fmp->ch3_se_freqdiff[0] = u8s16(fmp_part_cmdload(fmp, part));
-        fmp->ch3_se_freqdiff[1] = u8s16(fmp_part_cmdload(fmp, part));
-        fmp->ch3_se_freqdiff[2] = u8s16(fmp_part_cmdload(fmp, part));
-        fmp->ch3_se_freqdiff[3] = u8s16(fmp_part_cmdload(fmp, part));
+        fmp->ch3_se_freqdiff[0] = u8s8(fmp_part_cmdload(fmp, part));
+        fmp->ch3_se_freqdiff[1] = u8s8(fmp_part_cmdload(fmp, part));
+        fmp->ch3_se_freqdiff[2] = u8s8(fmp_part_cmdload(fmp, part));
+        fmp->ch3_se_freqdiff[3] = u8s8(fmp_part_cmdload(fmp, part));
       }
     } else {
       // 22e9
@@ -1094,7 +1094,7 @@ static bool fmp_cmd78_lfo_r(struct fmdriver_work *work,
         part->pdzf.pan = upan - 5;
       }
     } else {
-      int8_t pan = u8s16(lfo->rate);
+      int8_t pan = u8s8(lfo->rate);
       if (pan < -4) pan = -4;
       if (pan > 4) pan = 4;
       part->pdzf.pan = pan;
@@ -1306,7 +1306,7 @@ static bool fmp_cmd7c_lfo_pan_fm(struct fmdriver_work *work,
         struct pdzf_rhythm *pr = &fmp->pdzf.rhythm[pdzf_i-1];
         pr->voice[0] = part->u.fm.wlfo.delay;
         pr->voice[1] = part->u.fm.wlfo.speed;
-        int16_t panpot = u8s16(part->u.fm.wlfo.rate);
+        int16_t panpot = u8s8(part->u.fm.wlfo.rate);
         if (panpot < -4) panpot = -4;
         if (panpot > 4) panpot = 4;
         pr->pan = panpot;
@@ -1419,7 +1419,7 @@ static bool fmp_cmd7e_loop_det(struct fmdriver_work *work,
   } else {
     // detune relative
     // DX
-    int16_t det = u8s16(fmp_part_cmdload(fmp, part));
+    int16_t det = u8s8(fmp_part_cmdload(fmp, part));
     part->detune += det;
   }
   return true;
@@ -1826,6 +1826,10 @@ static void fmp_part_init_lfo_awe(struct fmdriver_work *work,
   // 3073
   part->u.fm.alfo.delay_cnt = part->u.fm.alfo.delay;
   part->u.fm.alfo.depth_cnt = part->u.fm.alfo.depth;
+  // this line not found in fmp but should be there somewhere
+  // without this, when LFO E, delay would be random every keyon
+  part->u.fm.alfo.speed_cnt = part->u.fm.alfo.speed;
+  
   part->u.fm.alfo.rate = part->u.fm.alfo.rate_orig;
   if (part->u.fm.hlfo_freq & 0x80) {
     work->opna_writereg(work, 0x22, 0x00);
@@ -2760,6 +2764,7 @@ static void fmp_work_status_init(struct fmdriver_work *work,
 
 static void fmp_work_status_update(struct fmdriver_work *work,
                                    const struct driver_fmp *fmp) {
+  work->ssg_noise_freq = fmp->ssg_noise_freq;
   static const uint8_t fmp_track_map[FMDRIVER_TRACK_NUM] = {
     FMP_PART_FM_1,
     FMP_PART_FM_2,
@@ -2781,13 +2786,21 @@ static void fmp_work_status_update(struct fmdriver_work *work,
     track->info = FMDRIVER_TRACK_INFO_NORMAL;
     if (part->type.adpcm) {
       track->actual_key = 0xff;
+      track->volume = part->actual_vol;
     } else if (part->type.ssg) {
       if (part->u.ssg.env_f.ppz || part->pdzf.mode) {
         track->info = FMDRIVER_TRACK_INFO_PPZ8;
         track->actual_key = 0xff;
       } else {
         track->actual_key = part->status.rest ? 0xff : fmp_ssg_freq2key(part->prev_freq);
+        bool tone = !((fmp->ssg_mix >> part->opna_keyon_out) & 1);
+        bool noise = !((fmp->ssg_mix >> part->opna_keyon_out) & 8);
+        if (noise) {
+          if (tone) track->info = FMDRIVER_TRACK_INFO_SSG_NOISE_MIX;
+          else track->info = FMDRIVER_TRACK_INFO_SSG_NOISE_ONLY;
+        }
       }
+      track->volume = part->current_vol - 1;
     } else {
       if (part->pdzf.mode) {
         track->info = FMDRIVER_TRACK_INFO_PPZ8;
@@ -2795,6 +2808,7 @@ static void fmp_work_status_update(struct fmdriver_work *work,
       } else {
         track->actual_key = part->status.rest ? 0xff : fmp_fm_freq2key(part->prev_freq);
       }
+      track->volume = 0x7f - part->actual_vol;
     }
     if (part->type.fm && part->opna_keyon_out > 3) {
       track->num--;
@@ -2802,6 +2816,16 @@ static void fmp_work_status_update(struct fmdriver_work *work,
     track->ticks = part->status.off ? 0 : part->tonelen-1;
     track->ticks_left = part->tonelen_cnt;
     track->key = part->status.rest ? 0xff : fmp_note2key(part->prev_note);
+    track->tonenum = part->tone;
+    track->detune = part->detune - ((part->detune & 0x8000) ? 0x10000 : 0);
+    track->status[0] = part->lfo_f.p ? 'P' : '-';
+    track->status[1] = part->lfo_f.q ? 'Q' : '-';
+    track->status[2] = part->lfo_f.r ? 'R' : '-';
+    track->status[3] = part->lfo_f.a ? 'A' : '-';
+    track->status[4] = '-';
+    track->status[5] = part->lfo_f.e ? 'e' : '-';
+    track->status[6] = (part->type.fm && part->u.fm.hlfo_apms) ? 'H' : '-';
+    track->status[7] = part->status.pitchbend ? 'P' : '-';
   }
 }
 
