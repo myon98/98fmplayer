@@ -300,7 +300,6 @@ void fmdsp_update(struct fmdsp *fmdsp,
     vramblit_color(vram, BAR_X+BAR_W*(track->ticks>>2), TRACK_H*t+BAR_Y,
                    s_bar, BAR_W, BAR_H, 7);
   }
-  fmdsp_putline("FMDSP", vram, &font_fmdsp_small, 320, 0, 2, true);
   fmdsp_palette_fade(fmdsp);
 }
 
