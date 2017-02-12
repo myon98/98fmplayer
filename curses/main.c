@@ -653,6 +653,7 @@ int main(int argc, char **argv) {
   noecho();
   clear();
   refresh();
+  curs_set(0);
 
   timeout(20);
 
