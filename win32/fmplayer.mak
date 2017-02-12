@@ -22,7 +22,6 @@ OBJBASE=main \
         soundout \
         dsoundout \
         waveout \
-        srcloader \
         wasapiout \
         winfont \
         guid \
