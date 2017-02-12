@@ -2,6 +2,7 @@
 #include "fmdsp_sprites.h"
 #include "font.h"
 #include "fmdriver/fmdriver.h"
+#include <stdio.h>
 
 static void vramblit(uint8_t *vram, int x, int y,
                      const uint8_t *data, int w, int h) {
@@ -56,12 +57,16 @@ void fmdsp_init(struct fmdsp *fmdsp, const struct fmdsp_font *font98) {
 
 
 static void vram_putchar(uint8_t *vram, const void *data,
-                         int x, int y, int w, int h, uint8_t color) {
+                         int x, int y, int w, int h, uint8_t color,
+                         bool bg
+                        ) {
   const uint8_t *font = data;
   for (int yi = 0; yi < h; yi++) {
     for (int xi = 0; xi < w; xi++) {
       if (font[yi] & (1<<(7-xi))) {
         vram[(y+yi)*PC98_W+(x+xi)] = color;
+      } else {
+        if (bg) vram[(y+yi)*PC98_W+(x+xi)] = 0;
       }
     }
   }
@@ -69,7 +74,7 @@ static void vram_putchar(uint8_t *vram, const void *data,
 
 static void fmdsp_putline(const char *strptr, uint8_t *vram,
                           const struct fmdsp_font *font,
-                          int x, int y, uint8_t color) {
+                          int x, int y, uint8_t color, bool bg) {
   const uint8_t *cp932str = (const uint8_t *)strptr;
   bool sjis_is2nd = false;
   uint8_t sjis_1st;
@@ -88,7 +93,7 @@ static void fmdsp_putline(const char *strptr, uint8_t *vram,
           if ((x+xo+8) > PC98_W) return;
           const void *fp = font->get(font, *cp932str++, FMDSP_FONT_ANK);
           if (fp) {
-            vram_putchar(vram, fp, x+xo, y, fw, fh, color);
+            vram_putchar(vram, fp, x+xo, y, fw, fh, color, bg);
           }
           xo += fw;
         }
@@ -103,13 +108,13 @@ static void fmdsp_putline(const char *strptr, uint8_t *vram,
       if ((x+xo+(half ? 8 : 16)) > PC98_W) return;
       const void *fp = font->get(font, jis, FMDSP_FONT_JIS_LEFT);
       if (fp) {
-        vram_putchar(vram, fp, x+xo, y, fw, fh, color);
+        vram_putchar(vram, fp, x+xo, y, fw, fh, color, bg);
       }
       xo += fw;
       if (!half) {
         fp = font->get(font, jis, FMDSP_FONT_JIS_RIGHT);
         if (fp) {
-          vram_putchar(vram, fp, x+xo, y, fw, fh, color);
+          vram_putchar(vram, fp, x+xo, y, fw, fh, color, bg);
         }
         xo += 8;
       }
@@ -128,23 +133,24 @@ void fmdsp_vram_init(struct fmdsp *fmdsp,
   }
   for (int t = 0; t < 10; t++) {
     struct fmdriver_track_status *track = &work->track_status[t];
-    const uint8_t *track_type;
+    const char *track_type;
     switch (track->type) {
     case FMDRIVER_TRACK_FM:
-      track_type = s_t_fm;
+      track_type = "FM   ";
       break;
     case FMDRIVER_TRACK_SSG:
-      track_type = s_t_ssg;
+      track_type = "SSG  ";
       break;
     case FMDRIVER_TRACK_ADPCM:
-      track_type = s_t_adpcm;
+      track_type = "ADPCM";
       break;
     }
-    vramblit(vram, 1, TRACK_H*t+1, track_type, TNAME_W, TNAME_H);
+    fmdsp_putline(track_type, vram, &font_fmdsp_small, 1, TRACK_H*t, 2, true);
     vramblit(vram, NUM_X+NUM_W*0, TRACK_H*t+1, s_num[(track->num/10)%10], NUM_W, NUM_H);
     vramblit(vram, NUM_X+NUM_W*1, TRACK_H*t+1, s_num[track->num%10], NUM_W, NUM_H);
 
-    vramblit(vram, 1, TRACK_H*t+7, s_track, TNAME_W, TNAME_H);
+    //vramblit(vram, 1, TRACK_H*t+7, s_track, TNAME_W, TNAME_H);
+    fmdsp_putline("TRACK.", vram, &font_fmdsp_small, 1, TRACK_H*t+6, 1, true);
     vramblit(vram, KEY_LEFT_X, TRACK_H*t+KEY_Y, s_key_left, KEY_LEFT_W, KEY_H);
     for (int i = 0; i < KEY_OCTAVES; i++) {
       vramblit(vram, KEY_X+KEY_W*i, TRACK_H*t+KEY_Y,
@@ -175,7 +181,7 @@ void fmdsp_vram_init(struct fmdsp *fmdsp,
   if (fmdsp->font98) {
     for (int i = 0; i < 3; i++) {
       fmdsp_putline(work->comment[i], vram, fmdsp->font98,
-                    0, COMMENT_Y+COMMENT_H*i, 2);
+                    0, COMMENT_Y+COMMENT_H*i, 2, false);
     }
   }
 }
@@ -217,13 +223,55 @@ void fmdsp_update(struct fmdsp *fmdsp,
                   const struct fmdriver_work *work, uint8_t *vram) {
   for (int t = 0; t < 10; t++) {
     const struct fmdriver_track_status *track = &work->track_status[t];
-    switch (track->info) {
-    case FMDRIVER_TRACK_INFO_PPZ8:
-      vramblit(vram, TINFO_X, TRACK_H*t+7, s_t_ppz8, TNAME_W, TNAME_H);
-      break;
-    default:
-      vramfill_color(vram, TINFO_X, TRACK_H*t+7, TNAME_W, TNAME_H, 0);
+    char track_info[5] = "    ";
+    if (track->playing) {
+      switch (track->info) {
+      case FMDRIVER_TRACK_INFO_PPZ8:
+        snprintf(track_info, sizeof(track_info), "PPZ8");
+        break;
+      case FMDRIVER_TRACK_INFO_SSG_NOISE_ONLY:
+        snprintf(track_info, sizeof(track_info), "N%02X ", work->ssg_noise_freq);
+        break;
+      case FMDRIVER_TRACK_INFO_SSG_NOISE_MIX:
+        snprintf(track_info, sizeof(track_info), "M%02X ", work->ssg_noise_freq);
+        break;
+      }
     }
+    fmdsp_putline(track_info, vram, &font_fmdsp_small, TINFO_X, TRACK_H*t+6, 2, true);
+    char notestr[5] = " S  ";
+    if (track->playing) {
+      if ((track->key&0xf) == 0xf) {
+        snprintf(notestr, sizeof(notestr), " R  ");
+      } else {
+        const char *keystr = "  ";
+        static const char *keytable[0x10] = {
+          "C ", "C+", "D ", "D+", "E ", "F ", "F+", "G ", "G+", "A ", "A+", "B "
+        };
+        if (keytable[track->key&0xf]) keystr = keytable[track->key&0xf];
+        snprintf(notestr, sizeof(notestr), "o%d%s", track->key>>4, keystr);
+      }
+    }
+    char numbuf[5];
+    fmdsp_putline("KN:", vram, &font_fmdsp_small, TDETAIL_X, TRACK_H*t+6, 1, true);
+    fmdsp_putline(notestr, vram, &font_fmdsp_small, TDETAIL_KN_V_X, TRACK_H*t+6, 1, true);
+    fmdsp_putline("TN:", vram, &font_fmdsp_small, TDETAIL_TN_X, TRACK_H*t+6, 1, true);
+    snprintf(numbuf, sizeof(numbuf), "%03d", track->tonenum);
+    fmdsp_putline(numbuf, vram, &font_fmdsp_small, TDETAIL_TN_V_X, TRACK_H*t+6, 1, true);
+    fmdsp_putline("VL:", vram, &font_fmdsp_small, TDETAIL_VL_X, TRACK_H*t+6, 1, true);
+    snprintf(numbuf, sizeof(numbuf), "%03d", track->volume);
+    fmdsp_putline(numbuf, vram, &font_fmdsp_small, TDETAIL_VL_V_X, TRACK_H*t+6, 1, true);
+    fmdsp_putline("GT:", vram, &font_fmdsp_small, TDETAIL_GT_X, TRACK_H*t+6, 1, true);
+    //snprintf(numbuf, sizeof(numbuf), "%03d", track->tonenum);
+    //fmdsp_putline(numbuf, vram, &font_fmdsp_small, TDETAIL_GT_V_X, TRACK_H*t+6, 1, true);
+    fmdsp_putline("DT:", vram, &font_fmdsp_small, TDETAIL_DT_X, TRACK_H*t+6, 1, true);
+    if (track->detune) {
+      snprintf(numbuf, sizeof(numbuf), "%+04d", track->detune);
+    } else {
+      snprintf(numbuf, sizeof(numbuf), " 000");
+    }
+    fmdsp_putline(numbuf, vram, &font_fmdsp_small, TDETAIL_DT_V_X, TRACK_H*t+6, 1, true);
+    fmdsp_putline("M:", vram, &font_fmdsp_small, TDETAIL_M_X, TRACK_H*t+6, 1, true);
+    fmdsp_putline(track->status, vram, &font_fmdsp_small, TDETAIL_M_V_X, TRACK_H*t+6, 1, true);
     for (int i = 0; i < KEY_OCTAVES; i++) {
       vramblit(vram, KEY_X+KEY_W*i, TRACK_H*t+KEY_Y,
                 s_key_bg, KEY_W, KEY_H);
@@ -252,6 +300,7 @@ void fmdsp_update(struct fmdsp *fmdsp,
     vramblit_color(vram, BAR_X+BAR_W*(track->ticks>>2), TRACK_H*t+BAR_Y,
                    s_bar, BAR_W, BAR_H, 7);
   }
+  fmdsp_putline("FMDSP", vram, &font_fmdsp_small, 320, 0, 2, true);
   fmdsp_palette_fade(fmdsp);
 }
 
