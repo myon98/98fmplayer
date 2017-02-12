@@ -6,7 +6,7 @@ vpath %.rc ..
 
 include ../fmplayer.mak
 
-OBJS=$(addsuffix .o,$(OBJBASE) uc $(RESBASE))
+OBJS=$(addsuffix .o,$(OBJBASE) $(RESBASE))
 ARCH=x86_64
 PREFIX=$(ARCH)-w64-mingw32-
 CC=$(PREFIX)gcc
@@ -14,9 +14,7 @@ WINDRES=$(PREFIX)windres
 STRIP=$(PREFIX)strip
 CFLAGS=-std=c99 -Os -Wall -Wextra -pedantic -I../.. \
        $(addprefix -D,$(DEFINES))
-LIBS=-nostdlib -s -Wl,-eentry \
-     -Wl,--subsystem,windows \
-     -lgcc -lntdll \
+LIBS=-s -mwindows -municode \
      $(addprefix -l,$(LIBBASE))
 
 $(TARGET):	$(OBJS)

@@ -16,12 +16,16 @@ LIBOPNA_OBJS=opna \
              opnadrum \
              opnaadpcm
 FMDSP_OBJS=fmdsp \
-           font_rom
+           font_rom \
+           font_fmdsp_small
 OBJBASE=main \
         soundout \
         dsoundout \
         waveout \
+        srcloader \
+        wasapiout \
         winfont \
+        guid \
         $(FMDRIVER_OBJS) \
         $(LIBOPNA_OBJS) \
         $(FMDSP_OBJS)
@@ -29,11 +33,11 @@ RESBASE=lnf
 LIBBASE=user32 \
         kernel32 \
         ole32 \
-        dxguid \
         uuid \
         comdlg32 \
         gdi32 \
         shlwapi \
         winmm \
-        shell32
+        shell32 \
+        ksuser
 

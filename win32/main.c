@@ -427,7 +427,7 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   loadfont();
   fmdsp_init(&g.fmdsp, g.font_loaded ? &g.font : 0);
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
-  SetTimer(hwnd, TIMER_FMDSP, 50, 0);
+  SetTimer(hwnd, TIMER_FMDSP, 16, 0);
 #ifdef ENABLE_WM_DROPFILES
   DragAcceptFiles(hwnd, TRUE);
 #endif
