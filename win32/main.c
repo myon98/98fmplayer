@@ -49,6 +49,7 @@ static struct {
   void *ppz8_buf;
   bool paused;
   HWND driverinfo;
+  const wchar_t *lastopenpath;
 } g;
 
 
@@ -302,6 +303,12 @@ static void openfile(HWND hwnd, const wchar_t *path) {
   g.sound->pause(g.sound, 0);
   g.paused = false;
   CloseHandle(file);
+  wchar_t *pathcpy = HeapAlloc(g.heap, 0, (lstrlen(path)+1)*sizeof(wchar_t));
+  if (pathcpy) {
+    lstrcpy(pathcpy, path);
+  }
+  if (g.lastopenpath) HeapFree(g.heap, 0, (void *)g.lastopenpath);
+  g.lastopenpath = pathcpy;
   return;
 err_fmp:
   HeapFree(g.heap, 0, fmp);
@@ -520,6 +527,20 @@ static void on_key(HWND hwnd, UINT vk, BOOL down, int repeat, UINT scan) {
       if (GetKeyState(VK_CONTROL) & 0x8000U) {
         fmdsp_palette_set(&g.fmdsp, vk - VK_F1);
         return;
+      } else {
+        switch (vk) {
+        case VK_F6:
+          if (g.lastopenpath) {
+            openfile(hwnd, g.lastopenpath);
+          }
+          break;
+        case VK_F7:
+          if (g.sound) {
+            g.paused = !g.paused;
+            g.sound->pause(g.sound, g.paused);
+          }
+          break;
+        }
       }
     }
     FORWARD_WM_KEYDOWN(hwnd, vk, repeat, scan, DefWindowProc);
