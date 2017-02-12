@@ -24,6 +24,7 @@ enum {
 static struct {
   GtkWidget *mainwin;
   bool pa_initialized;
+  bool pa_paused;
   PaStream *pastream;
   struct opna opna;
   struct opna_timer opna_timer;
@@ -41,6 +42,7 @@ static struct {
   uint8_t font98data[FONT_ROM_FILESIZE];
   void *vram32;
   int vram32_stride;
+  const char *current_uri;
 } g;
 
 static void quit(void) {
@@ -317,7 +319,7 @@ static bool openfile(const char *uri) {
       msgbox_err("cannot open portaudio stream");
       goto err_fmp;
     }
-  } else {
+  } else if (!g.pa_paused) {
     PaError pe = Pa_StopStream(g.pastream);
     if (pe != paNoError) {
       msgbox_err("Portaudio Error");
@@ -358,6 +360,12 @@ static bool openfile(const char *uri) {
   g_object_unref(G_OBJECT(fminfo));
   g_object_unref(G_OBJECT(fmfile));
   Pa_StartStream(g.pastream);
+  g.pa_paused = false;
+  {
+    const char *turi = strdup(uri);
+    free(g.current_uri);
+    g.current_uri = turi;
+  }
   return true;
 err_fmp:
   free(fmp);
@@ -434,6 +442,23 @@ static gboolean key_press_cb(GtkWidget *w,
     if (e->key.state & GDK_CONTROL_MASK) {
       fmdsp_palette_set(&g.fmdsp, e->key.keyval - GDK_KEY_F1);
       return TRUE;
+    } else {
+      switch (e->key.keyval) {
+      case GDK_KEY_F6:
+        if (g.current_uri) {
+          openfile(g.current_uri);
+        }
+        break;
+      case GDK_KEY_F7:
+        if (g.pa_paused) {
+          Pa_StartStream(g.pastream);
+          g.pa_paused = false;
+        } else {
+          Pa_StopStream(g.pastream);
+          g.pa_paused = true;
+        }
+        break;
+      }
     }
   }
   return FALSE;
