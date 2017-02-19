@@ -1,6 +1,6 @@
 #include "ppz8.h"
 #include "fmdriver_common.h"
-#include <stdio.h>
+//#include <stdio.h>
 
 void ppz8_init(struct ppz8 *ppz8, uint16_t srate, uint16_t mix_volume) {
   for (int i = 0; i < 2; i++) {
@@ -270,7 +270,7 @@ static void ppz8_channel_loopoffset(struct ppz8 *ppz8, uint8_t ch,
   struct ppz8_channel *channel = &ppz8->channel[ch];
   channel->loopstartoff = startoff;
   channel->loopendoff = endoff;
-  fprintf(stderr, "channel: %d, start: %08x, end: %08x\n", ch, startoff, endoff);
+//  fprintf(stderr, "channel: %d, start: %08x, end: %08x\n", ch, startoff, endoff);
 }
 
 static void ppz8_channel_pan(struct ppz8 *ppz8, uint8_t ch, uint8_t pan) {
