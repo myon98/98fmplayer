@@ -407,7 +407,7 @@ static GtkWidget *create_menubar() {
 static gboolean draw_cb(GtkWidget *w,
                  cairo_t *cr,
                  gpointer p) {
-  fmdsp_update(&g.fmdsp, &g.work, g.vram);
+  fmdsp_update(&g.fmdsp, &g.work, &g.opna, g.vram);
   fmdsp_vrampalette(&g.fmdsp, g.vram, g.vram32, g.vram32_stride);
   cairo_surface_t *s = cairo_image_surface_create_for_data(
     g.vram32, CAIRO_FORMAT_RGB24, PC98_W, PC98_H, g.vram32_stride);
@@ -433,6 +433,32 @@ static void destroynothing(gpointer p) {
   (void)p;
 }
 
+static void mask_update(void) {
+  unsigned mask = opna_get_mask(&g.opna);
+  g.work.track_status[FMDRIVER_TRACK_FM_1].masked = mask & LIBOPNA_CHAN_FM_1;
+  g.work.track_status[FMDRIVER_TRACK_FM_2].masked = mask & LIBOPNA_CHAN_FM_2;
+  g.work.track_status[FMDRIVER_TRACK_FM_3].masked = mask & LIBOPNA_CHAN_FM_3;
+  g.work.track_status[FMDRIVER_TRACK_FM_3_EX_1].masked = mask & LIBOPNA_CHAN_FM_3;
+  g.work.track_status[FMDRIVER_TRACK_FM_3_EX_2].masked = mask & LIBOPNA_CHAN_FM_3;
+  g.work.track_status[FMDRIVER_TRACK_FM_3_EX_3].masked = mask & LIBOPNA_CHAN_FM_3;
+  g.work.track_status[FMDRIVER_TRACK_FM_4].masked = mask & LIBOPNA_CHAN_FM_4;
+  g.work.track_status[FMDRIVER_TRACK_FM_5].masked = mask & LIBOPNA_CHAN_FM_5;
+  g.work.track_status[FMDRIVER_TRACK_FM_6].masked = mask & LIBOPNA_CHAN_FM_6;
+  g.work.track_status[FMDRIVER_TRACK_SSG_1].masked = mask & LIBOPNA_CHAN_SSG_1;
+  g.work.track_status[FMDRIVER_TRACK_SSG_2].masked = mask & LIBOPNA_CHAN_SSG_2;
+  g.work.track_status[FMDRIVER_TRACK_SSG_3].masked = mask & LIBOPNA_CHAN_SSG_3;
+  g.work.track_status[FMDRIVER_TRACK_ADPCM].masked = mask & LIBOPNA_CHAN_ADPCM;
+}
+
+static void mask_set(unsigned mask, bool shift) {
+  if (shift) {
+    opna_set_mask(&g.opna, mask);
+  } else {
+    opna_set_mask(&g.opna, opna_get_mask(&g.opna) ^ mask);
+  }
+  mask_update();
+}
+
 static gboolean key_press_cb(GtkWidget *w,
                              GdkEvent *e,
                              gpointer ptr) {
@@ -442,26 +468,75 @@ static gboolean key_press_cb(GtkWidget *w,
     if (e->key.state & GDK_CONTROL_MASK) {
       fmdsp_palette_set(&g.fmdsp, e->key.keyval - GDK_KEY_F1);
       return TRUE;
-    } else {
-      switch (e->key.keyval) {
-      case GDK_KEY_F6:
-        if (g.current_uri) {
-          openfile(g.current_uri);
-        }
-        break;
-      case GDK_KEY_F7:
-        if (g.pa_paused) {
-          Pa_StartStream(g.pastream);
-          g.pa_paused = false;
-        } else {
-          Pa_StopStream(g.pastream);
-          g.pa_paused = true;
-        }
-        break;
-      }
     }
   }
-  return FALSE;
+  bool shift = e->key.state & GDK_SHIFT_MASK;
+  switch (e->key.keyval) {
+  case GDK_KEY_F6:
+    if (g.current_uri) {
+      openfile(g.current_uri);
+    }
+    break;
+  case GDK_KEY_F7:
+    if (g.pa_paused) {
+      Pa_StartStream(g.pastream);
+      g.pa_paused = false;
+    } else {
+      Pa_StopStream(g.pastream);
+      g.pa_paused = true;
+    }
+    break;
+  case GDK_KEY_F11:
+    fmdsp_dispstyle_set(&g.fmdsp, (g.fmdsp.style+1) % FMDSP_DISPSTYLE_CNT);
+    break;
+  case GDK_KEY_1:
+    mask_set(LIBOPNA_CHAN_FM_1, shift);
+    break;
+  case GDK_KEY_2:
+    mask_set(LIBOPNA_CHAN_FM_2, shift);
+    break;
+  case GDK_KEY_3:
+    mask_set(LIBOPNA_CHAN_FM_3, shift);
+    break;
+  case GDK_KEY_4:
+    mask_set(LIBOPNA_CHAN_FM_4, shift);
+    break;
+  case GDK_KEY_5:
+    mask_set(LIBOPNA_CHAN_FM_5, shift);
+    break;
+  case GDK_KEY_6:
+    mask_set(LIBOPNA_CHAN_FM_6, shift);
+    break;
+  case GDK_KEY_7:
+    mask_set(LIBOPNA_CHAN_SSG_1, shift);
+    break;
+  case GDK_KEY_8:
+    mask_set(LIBOPNA_CHAN_SSG_2, shift);
+    break;
+  case GDK_KEY_9:
+    mask_set(LIBOPNA_CHAN_SSG_3, shift);
+    break;
+  case GDK_KEY_0:
+    mask_set(LIBOPNA_CHAN_DRUM_ALL, shift);
+    break;
+  case GDK_KEY_minus:
+    mask_set(LIBOPNA_CHAN_ADPCM, shift);
+    break;
+  // jp106 / pc98
+  case GDK_KEY_asciicircum:
+  // us
+  case GDK_KEY_equal:
+    opna_set_mask(&g.opna, ~opna_get_mask(&g.opna));
+    mask_update();
+    break;
+  case GDK_KEY_backslash:
+    opna_set_mask(&g.opna, 0);
+    mask_update();
+    break;
+  default:
+    return FALSE;
+  }
+  return TRUE;
 }
 
 static void drag_data_recv_cb(

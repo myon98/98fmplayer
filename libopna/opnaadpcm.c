@@ -185,16 +185,18 @@ void opna_adpcm_mix(struct opna_adpcm *adpcm, int16_t *buf, unsigned samples) {
   if (!(adpcm->control1 & C1_START)) return;
   for (unsigned i = 0; i < samples; i++) {
     adpcm_calc(adpcm);
-    int32_t lo = buf[i*2+0];
-    int32_t ro = buf[i*2+1];
-    if (adpcm->control2 & C2_L) lo += (adpcm->out>>1);
-    if (adpcm->control2 & C2_R) ro += (adpcm->out>>1);
-    if (lo < INT16_MIN) lo = INT16_MIN;
-    if (lo > INT16_MAX) lo = INT16_MAX;
-    if (ro < INT16_MIN) ro = INT16_MIN;
-    if (ro > INT16_MAX) ro = INT16_MAX;
-    buf[i*2+0] = lo;
-    buf[i*2+1] = ro;
+    if (!adpcm->masked) {
+      int32_t lo = buf[i*2+0];
+      int32_t ro = buf[i*2+1];
+      if (adpcm->control2 & C2_L) lo += (adpcm->out>>1);
+      if (adpcm->control2 & C2_R) ro += (adpcm->out>>1);
+      if (lo < INT16_MIN) lo = INT16_MIN;
+      if (lo > INT16_MAX) lo = INT16_MAX;
+      if (ro < INT16_MIN) ro = INT16_MIN;
+      if (ro > INT16_MAX) ro = INT16_MAX;
+      buf[i*2+0] = lo;
+      buf[i*2+1] = ro;
+    }
     if (!(adpcm->control1 & C1_START)) return;
   }
 }

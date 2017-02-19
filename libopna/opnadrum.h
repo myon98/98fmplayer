@@ -40,6 +40,7 @@ struct opna_drum {
   int16_t rom_hh[OPNA_ROM_HH_SIZE];
   int16_t rom_tom[OPNA_ROM_TOM_SIZE];
   int16_t rom_rim[OPNA_ROM_RIM_SIZE];
+  unsigned mask;
 };
 
 void opna_drum_reset(struct opna_drum *drum);

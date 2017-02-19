@@ -58,6 +58,7 @@ void opna_fm_reset(struct opna_fm *fm) {
     fm->ch3.fnum[i] = 0;
     fm->ch3.blk[i] = 0;
   }
+  fm->mask = 0;
 }
 #define LIBOPNA_ENABLE_HIRES
 // maximum output: 2042<<2 = 8168
@@ -497,6 +498,7 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples) {
         opna_fm_chan_phase(&fm->channel[c]);
       }
       o >>= 1;
+      if (fm->mask & (1<<c)) continue;
       if (fm->lselect[c]) lo += o;
       if (fm->rselect[c]) ro += o;
     }

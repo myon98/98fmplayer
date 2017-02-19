@@ -1594,7 +1594,7 @@ static void fmp_part_lfo_calc(struct driver_fmp *fmp,
 static void fmp_part_keyon_fm(struct fmdriver_work *work,
                               struct driver_fmp *fmp,
                               struct fmp_part *part) {
-  if (part->lfo_f.portamento) return;
+  if (part->lfo_f.mask) return;
   // 27df
   uint8_t out = part->opna_keyon_out;
   if (part->type.fm_3) {
@@ -1734,7 +1734,7 @@ static void fmp_part_keyon(struct fmdriver_work *work,
       part->lfo_f.lfo = false;
     }
     // 281e
-    if (part->lfo_f.portamento) {
+    if (part->lfo_f.mask) {
       part->u.ssg.env_f.attack = false;
       part->u.ssg.env_f.portamento = true;
       return;
@@ -2163,7 +2163,7 @@ static void fmp_part_ssg_env_reset(struct fmp_part *part) {
 static void fmp_adpcm_addr_set(struct fmdriver_work *work,
                                struct driver_fmp *fmp,
                                struct fmp_part *part) {
-  if (part->lfo_f.portamento) return;
+  if (part->lfo_f.mask) return;
   work->opna_writereg(work, 0x100, 0x00);
   work->opna_writereg(work, 0x100, 0x01);
   //work->opna_writereg(work, 0x110, 0x08);
@@ -2212,7 +2212,7 @@ static void fmp_part_keyon_pre(struct driver_fmp *fmp, struct fmp_part *part) {
   part->status.keyon = true;
   if (part->type.ssg && !part->status.tie_cont && !part->u.ssg.env_f.ppz) {
     part->u.ssg.env_f.portamento = false;
-    if (!part->lfo_f.portamento) {
+    if (!part->lfo_f.mask) {
       fmp_part_ssg_env_reset(part);
     }
   }
@@ -2727,68 +2727,52 @@ static uint8_t fmp_note2key(uint8_t note) {
   return key;
 }
 
+static const uint8_t fmp_track_map[FMDRIVER_TRACK_NUM] = {
+  FMP_PART_FM_1,
+  FMP_PART_FM_2,
+  FMP_PART_FM_3,
+  FMP_PART_FM_EX1,
+  FMP_PART_FM_EX2,
+  FMP_PART_FM_EX3,
+  FMP_PART_FM_4,
+  FMP_PART_FM_5,
+  FMP_PART_FM_6,
+  FMP_PART_SSG_1,
+  FMP_PART_SSG_2,
+  FMP_PART_SSG_3,
+  FMP_PART_ADPCM,
+};
+
 static void fmp_work_status_init(struct fmdriver_work *work,
                                  const struct driver_fmp *fmp) {
-
-  static const uint8_t fmp_track_map[FMDRIVER_TRACK_NUM] = {
-    FMP_PART_FM_1,
-    FMP_PART_FM_2,
-    FMP_PART_FM_3,
-    FMP_PART_FM_4,
-    FMP_PART_FM_5,
-    FMP_PART_FM_6,
-    FMP_PART_SSG_1,
-    FMP_PART_SSG_2,
-    FMP_PART_SSG_3,
-    FMP_PART_ADPCM,
-  };
-
   for (int t = 0; t < FMDRIVER_TRACK_NUM; t++) {
     struct fmdriver_track_status *track = &work->track_status[t];
     const struct fmp_part *part = &fmp->parts[fmp_track_map[t]];
     track->playing = !part->status.off;
-    track->num = (part->pdzf.mode ? part->pdzf.ppz8_channel : part->opna_keyon_out)+1;
     track->info = FMDRIVER_TRACK_INFO_NORMAL;
-    if (part->type.adpcm) {
-      track->type = FMDRIVER_TRACK_ADPCM;
-    } else if (part->type.ssg) {
-      track->type = FMDRIVER_TRACK_SSG;
-    } else {
-      track->type = FMDRIVER_TRACK_FM;
-    }
-    if (part->type.fm && part->opna_keyon_out > 3) {
-      track->num--;
-    }
+  }
+  for (int i = 0; i < 3; i++) {
+    work->track_status[FMDRIVER_TRACK_SSG_1+i].ppz8_ch = 1+i;
+    work->track_status[FMDRIVER_TRACK_FM_3_EX_1+i].ppz8_ch = 4+i;
   }
 }
 
 static void fmp_work_status_update(struct fmdriver_work *work,
                                    const struct driver_fmp *fmp) {
   work->ssg_noise_freq = fmp->ssg_noise_freq;
-  static const uint8_t fmp_track_map[FMDRIVER_TRACK_NUM] = {
-    FMP_PART_FM_1,
-    FMP_PART_FM_2,
-    FMP_PART_FM_3,
-    FMP_PART_FM_4,
-    FMP_PART_FM_5,
-    FMP_PART_FM_6,
-    FMP_PART_SSG_1,
-    FMP_PART_SSG_2,
-    FMP_PART_SSG_3,
-    FMP_PART_ADPCM,
-  };
-
   for (int t = 0; t < FMDRIVER_TRACK_NUM; t++) {
     struct fmdriver_track_status *track = &work->track_status[t];
     const struct fmp_part *part = &fmp->parts[fmp_track_map[t]];
     track->playing = !part->status.off;
-    track->num = (part->pdzf.mode ? part->pdzf.ppz8_channel : part->opna_keyon_out)+1;
     track->info = FMDRIVER_TRACK_INFO_NORMAL;
     if (part->type.adpcm) {
       track->actual_key = 0xff;
       track->volume = part->actual_vol;
     } else if (part->type.ssg) {
-      if (part->u.ssg.env_f.ppz || part->pdzf.mode) {
+      if (part->pdzf.mode) {
+        track->info = FMDRIVER_TRACK_INFO_PDZF;
+        track->actual_key = 0xff;
+      } else if (part->u.ssg.env_f.ppz) {
         track->info = FMDRIVER_TRACK_INFO_PPZ8;
         track->actual_key = 0xff;
       } else {
@@ -2803,15 +2787,18 @@ static void fmp_work_status_update(struct fmdriver_work *work,
       track->volume = part->current_vol - 1;
     } else {
       if (part->pdzf.mode) {
-        track->info = FMDRIVER_TRACK_INFO_PPZ8;
+        track->info = FMDRIVER_TRACK_INFO_PDZF;
         track->actual_key = 0xff;
       } else {
+        if (part->u.fm.slot_mask & 0xf0) {
+          track->info = FMDRIVER_TRACK_INFO_FM3EX;
+          for (int s = 0; s < 4; s++) {
+            track->fmslotmask[s] = part->u.fm.slot_mask & (1<<(4+s));
+          }
+        }
         track->actual_key = part->status.rest ? 0xff : fmp_fm_freq2key(part->prev_freq);
       }
       track->volume = 0x7f - part->actual_vol;
-    }
-    if (part->type.fm && part->opna_keyon_out > 3) {
-      track->num--;
     }
     track->ticks = part->status.off ? 0 : part->tonelen-1;
     track->ticks_left = part->tonelen_cnt;
@@ -3455,6 +3442,22 @@ bool fmp_load(struct driver_fmp *fmp,
   fmp->datalen = datalen;
   return true;
 }
+
+static const uint8_t fmp_fmdriver_track_map[FMDRIVER_TRACK_NUM] = {
+  FMP_PART_FM_1,
+  FMP_PART_FM_2,
+  FMP_PART_FM_3,
+  FMP_PART_FM_EX1,
+  FMP_PART_FM_EX2,
+  FMP_PART_FM_EX3,
+  FMP_PART_FM_4,
+  FMP_PART_FM_5,
+  FMP_PART_FM_6,
+  FMP_PART_SSG_1,
+  FMP_PART_SSG_2,
+  FMP_PART_SSG_3,
+  FMP_PART_ADPCM
+};
 
 void fmp_init(struct fmdriver_work *work, struct driver_fmp *fmp) {
   fmp_title(work, fmp, read16le(fmp->data)+4);

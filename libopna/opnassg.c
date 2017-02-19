@@ -73,6 +73,7 @@ void opna_ssg_reset(struct opna_ssg *ssg) {
   ssg->env_alt = false;
   ssg->env_hld = false;
   ssg->env_holding = false;
+  ssg->mask = 0;
 }
 
 void opna_ssg_resampler_reset(struct opna_ssg_resampler *resampler) {
@@ -171,6 +172,7 @@ void opna_ssg_generate_raw(struct opna_ssg *ssg, int16_t *buf, int samples) {
         ssg->ch[ch].tone_counter = 0;
         ssg->ch[ch].out = !ssg->ch[ch].out;
       }
+      if (ssg->mask & (1<<ch)) continue;
 #if 0
       if (opna_ssg_tone_out(ssg, ch)) {
         int level = opna_ssg_chan_env(ssg, ch)

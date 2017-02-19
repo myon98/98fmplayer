@@ -466,7 +466,7 @@ static void on_destroy(HWND hwnd) {
 }
 
 static void on_paint(HWND hwnd) {
-  fmdsp_update(&g.fmdsp, &g.work, g.vram);
+  fmdsp_update(&g.fmdsp, &g.work, &g.opna, g.vram);
   PAINTSTRUCT ps;
   static BITMAPINFO *bi = 0;
   if (!bi) {

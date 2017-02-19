@@ -25,6 +25,7 @@ void opna_drum_reset(struct opna_drum *drum) {
     drum->drums[d].right = false;
   }
   drum->total_level = 0;
+  drum->mask = 0;
 }
 
 void opna_drum_set_rom(struct opna_drum *drum, void *romptr) {
@@ -90,8 +91,10 @@ void opna_drum_mix(struct opna_drum *drum, int16_t *buf, int samples) {
         unsigned level = (drum->drums[d].level^0x1f) + (drum->total_level^0x3f);
         co *= 15 - (level&7);
         co >>= 1+(level>>3);
-        if (drum->drums[d].left) lo += co;
-        if (drum->drums[d].right) ro += co;
+        if (!(drum->mask & (1u << d))) {
+          if (drum->drums[d].left) lo += co;
+          if (drum->drums[d].right) ro += co;
+        }
         drum->drums[d].index++;
         if (drum->drums[d].index == drum->drums[d].len) {
           drum->drums[d].index = 0;

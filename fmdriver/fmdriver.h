@@ -6,29 +6,46 @@
 #include "ppz8.h"
 
 enum {
-  FMDRIVER_TRACK_NUM = 10,
+  FMDRIVER_TRACK_FM_1,
+  FMDRIVER_TRACK_FM_2,
+  FMDRIVER_TRACK_FM_3,
+  FMDRIVER_TRACK_FM_3_EX_1,
+  FMDRIVER_TRACK_FM_3_EX_2,
+  FMDRIVER_TRACK_FM_3_EX_3,
+  FMDRIVER_TRACK_FM_4,
+  FMDRIVER_TRACK_FM_5,
+  FMDRIVER_TRACK_FM_6,
+  FMDRIVER_TRACK_SSG_1,
+  FMDRIVER_TRACK_SSG_2,
+  FMDRIVER_TRACK_SSG_3,
+  FMDRIVER_TRACK_ADPCM,
+  FMDRIVER_TRACK_NUM
+};
+enum {
   // 1 line = 80 characters, may contain half-width doublebyte characters
   FMDRIVER_TITLE_BUFLEN = 80*2+1,
 };
 
 enum fmdriver_track_type {
-  FMDRIVER_TRACK_FM,
-  FMDRIVER_TRACK_SSG,
-  FMDRIVER_TRACK_ADPCM,
+  FMDRIVER_TRACKTYPE_FM,
+  FMDRIVER_TRACKTYPE_SSG,
+  FMDRIVER_TRACKTYPE_ADPCM,
+  FMDRIVER_TRACKTYPE_CNT,
 };
 
 enum fmdriver_track_info {
   FMDRIVER_TRACK_INFO_NORMAL,
   FMDRIVER_TRACK_INFO_SSG_NOISE_ONLY,
   FMDRIVER_TRACK_INFO_SSG_NOISE_MIX,
-  FMDRIVER_TRACK_INFO_PPZ8
+  FMDRIVER_TRACK_INFO_FM3EX,
+  FMDRIVER_TRACK_INFO_PPZ8,
+  FMDRIVER_TRACK_INFO_PDZF,
 };
 
 struct fmdriver_track_status {
   bool playing;
-  enum fmdriver_track_type type;
+  bool masked;
   enum fmdriver_track_info info;
-  uint8_t num;
   uint8_t ticks;
   uint8_t ticks_left;
   uint8_t key;
@@ -39,6 +56,10 @@ struct fmdriver_track_status {
   uint8_t gate;
   int8_t detune;
   char status[9];
+  bool fmslotmask[4];
+  // for FMP, ppz8 channel+1 or 0
+  // use for track mask or display
+  uint8_t ppz8_ch;
 };
 
 struct fmdriver_work {

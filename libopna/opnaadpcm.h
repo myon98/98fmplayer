@@ -23,6 +23,7 @@ struct opna_adpcm {
   int16_t prev_acc;
   uint16_t adpcmd;
   int16_t out;
+  bool masked;
 };
 
 void opna_adpcm_reset(struct opna_adpcm *adpcm);

@@ -78,6 +78,10 @@ struct opna_fm {
   // pan
   bool lselect[6];
   bool rselect[6];
+
+  // mask
+  // when (1<<channel), the channel is masked
+  unsigned mask;
 };
 
 void opna_fm_reset(struct opna_fm *fm);

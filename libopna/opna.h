@@ -10,18 +10,40 @@
 extern "C" {
 #endif
 
+enum {
+  LIBOPNA_CHAN_FM_1 = 0x0001,
+  LIBOPNA_CHAN_FM_2 = 0x0002,
+  LIBOPNA_CHAN_FM_3 = 0x0004,
+  LIBOPNA_CHAN_FM_4 = 0x0008,
+  LIBOPNA_CHAN_FM_5 = 0x0010,
+  LIBOPNA_CHAN_FM_6 = 0x0020,
+  LIBOPNA_CHAN_SSG_1 = 0x0040,
+  LIBOPNA_CHAN_SSG_2 = 0x0080,
+  LIBOPNA_CHAN_SSG_3 = 0x0100,
+  LIBOPNA_CHAN_DRUM_BD = 0x0200,
+  LIBOPNA_CHAN_DRUM_SD = 0x0400,
+  LIBOPNA_CHAN_DRUM_TOP = 0x0800,
+  LIBOPNA_CHAN_DRUM_HH = 0x1000,
+  LIBOPNA_CHAN_DRUM_TOM = 0x2000,
+  LIBOPNA_CHAN_DRUM_RIM = 0x4000,
+  LIBOPNA_CHAN_DRUM_ALL = 0x7e00,
+  LIBOPNA_CHAN_ADPCM = 0x8000,
+};
+
 struct opna {
   struct opna_fm fm;
   struct opna_ssg ssg;
   struct opna_drum drum;
   struct opna_adpcm adpcm;
   struct opna_ssg_resampler resampler;
-
+  unsigned mask;
 };
 
 void opna_reset(struct opna *opna);
 void opna_writereg(struct opna *opna, unsigned reg, unsigned val);
 void opna_mix(struct opna *opna, int16_t *buf, unsigned samples);
+unsigned opna_get_mask(const struct opna *opna);
+void opna_set_mask(struct opna *opna, unsigned mask);
 
 #ifdef __cplusplus
 }

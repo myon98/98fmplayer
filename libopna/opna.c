@@ -6,6 +6,7 @@ void opna_reset(struct opna *opna) {
   opna_ssg_resampler_reset(&opna->resampler);
   opna_drum_reset(&opna->drum);
   opna_adpcm_reset(&opna->adpcm);
+  opna->mask = 0;
 }
 
 void opna_writereg(struct opna *opna, unsigned reg, unsigned val) {
@@ -21,4 +22,16 @@ void opna_mix(struct opna *opna, int16_t *buf, unsigned samples) {
   opna_ssg_mix_55466(&opna->ssg, &opna->resampler, buf, samples);
   opna_drum_mix(&opna->drum, buf, samples);
   opna_adpcm_mix(&opna->adpcm, buf, samples);
+}
+
+unsigned opna_get_mask(const struct opna *opna) {
+  return opna->mask;
+}
+
+void opna_set_mask(struct opna *opna, unsigned mask) {
+  opna->mask = mask & 0xffffu;
+  opna->fm.mask = mask & ((1<<(6+1))-1);
+  opna->ssg.mask = (mask >> 6) & ((1<<(3+1))-1);
+  opna->adpcm.masked = mask & LIBOPNA_CHAN_ADPCM;
+  opna->drum.mask = (mask >> 9) & ((1<<(6+1))-1);
 }

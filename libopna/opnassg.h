@@ -24,6 +24,7 @@ struct opna_ssg {
   bool env_alt;
   bool env_hld;
   bool env_holding;
+  unsigned mask;
 };
 
 struct opna_ssg_resampler {
