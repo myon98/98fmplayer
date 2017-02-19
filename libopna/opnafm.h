@@ -8,6 +8,7 @@
 extern "C" {
 #endif
 
+#define LIBOPNA_FM_ENV_MAX 1023
 enum {
   ENV_ATTACK,
   ENV_DECAY,
@@ -21,6 +22,8 @@ struct opna_fm_slot {
   uint32_t phase;
   // 10 bits
   uint16_t env;
+  // 12 bits
+  uint16_t env_hires;
   uint16_t env_count;
   uint8_t env_state;
   uint8_t rate_shifter;

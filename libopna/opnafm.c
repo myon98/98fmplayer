@@ -2,6 +2,13 @@
 
 #include "opnatables.h"
 
+#define LIBOPNA_ENABLE_HIRES_SIN
+#define LIBOPNA_ENABLE_HIRES_ENV
+
+enum {
+  ENV_MAX_HIRES = LIBOPNA_FM_ENV_MAX * 4
+};
+
 enum {
   CH3_MODE_NORMAL = 0,
   CH3_MODE_CSM    = 1,
@@ -10,7 +17,8 @@ enum {
 
 static void opna_fm_slot_reset(struct opna_fm_slot *slot) {
   slot->phase = 0;
-  slot->env = 1023;
+  slot->env = LIBOPNA_FM_ENV_MAX;
+  slot->env_hires = ENV_MAX_HIRES;
   slot->env_count = 0;
   slot->env_state = ENV_RELEASE;
   slot->rate_shifter = 0;
@@ -60,9 +68,18 @@ void opna_fm_reset(struct opna_fm *fm) {
   }
   fm->mask = 0;
 }
-#define LIBOPNA_ENABLE_HIRES
 // maximum output: 2042<<2 = 8168
 static int16_t opna_fm_slotout(struct opna_fm_slot *slot, int16_t modulation) {
+#ifdef LIBOPNA_ENABLE_HIRES_SIN
+  unsigned pind_hires = (slot->phase >> 8);
+  pind_hires += modulation << 1;
+  bool minus = pind_hires & (1<<(LOGSINTABLEHIRESBIT+1));
+  bool reverse = pind_hires & (1<<LOGSINTABLEHIRESBIT);
+  if (reverse) pind_hires = ~pind_hires;
+  pind_hires &= (1<<LOGSINTABLEHIRESBIT)-1;
+
+  int logout = logsintable_hires[pind_hires];
+#else
   unsigned pind = (slot->phase >> 10);
   pind += modulation >> 1;
   bool minus = pind & (1<<(LOGSINTABLEBIT+1));
@@ -70,18 +87,14 @@ static int16_t opna_fm_slotout(struct opna_fm_slot *slot, int16_t modulation) {
   if (reverse) pind = ~pind;
   pind &= (1<<LOGSINTABLEBIT)-1;
 
-#ifdef LIBOPNA_ENABLE_HIRES
-  unsigned pind_hires = (slot->phase >> 8);
-  pind_hires += modulation << 1;
-  minus = pind_hires & (1<<(LOGSINTABLEHIRESBIT+1));
-  reverse = pind_hires & (1<<LOGSINTABLEHIRESBIT);
-  if (reverse) pind_hires = ~pind_hires;
-  pind_hires &= (1<<LOGSINTABLEHIRESBIT)-1;
-
-  int logout = logsintable_hires[pind_hires] + (slot->env << 2) + (slot->tl << 5);
+  int logout = logsintable[pind];
+#endif // LIBOPNA_ENABLE_HIRES_SIN
+#ifdef LIBOPNA_ENABLE_HIRES_ENV
+  logout += slot->env_hires;
 #else
-  int logout = logsintable[pind] + (slot->env << 2) + (slot->tl << 5);
-#endif // LIBOPNA_ENABLE_HIRES
+  logout += (slot->env << 2);
+#endif
+  logout += (slot->tl << 5);
 
   int selector = logout & ((1<<EXPTABLEBIT)-1);
   int shifter = logout >> EXPTABLEBIT;
@@ -226,6 +239,9 @@ static void opna_fm_slot_setrate(struct opna_fm_slot *slot, int status) {
   int rate = 2*r + (slot->keycode >> (3 - slot->ks));
 
   if (rate > 63) rate = 63;
+#ifdef LIBOPNA_ENABLE_HIRES_ENV
+  rate += 8;
+#endif
   int rate_shifter = 11 - (rate >> 2);
   if (rate_shifter < 0) {
     slot->rate_selector = (rate & ((1<<2)-1)) + 4;
@@ -245,10 +261,56 @@ static void opna_fm_slot_env(struct opna_fm_slot *slot) {
     int env_inc = rateinctable[slot->rate_selector][rate_index];
     env_inc *= slot->rate_mul;
 
+#ifdef LIBOPNA_ENABLE_HIRES_ENV
     switch (slot->env_state) {
     int newenv;
     int sl;
     case ENV_ATTACK:
+      newenv = slot->env_hires + (((-slot->env_hires-1) * env_inc) >> 6);
+      if (newenv <= 0) {
+        slot->env_hires = 0;
+        slot->env_state = ENV_DECAY;
+        opna_fm_slot_setrate(slot, ENV_DECAY);
+      } else {
+        slot->env_hires = newenv;
+      }
+      break;
+    case ENV_DECAY:
+      slot->env_hires += env_inc;
+      sl = slot->sl;
+      if (sl == 0xf) sl = 0x1f;
+      if (slot->env_hires >= (sl << 7)) {
+        slot->env_state = ENV_SUSTAIN;
+        opna_fm_slot_setrate(slot, ENV_SUSTAIN);
+      }
+      break;
+    case ENV_SUSTAIN:
+      slot->env_hires += env_inc;
+      if (slot->env_hires >= ENV_MAX_HIRES) slot->env_hires = ENV_MAX_HIRES;
+      break;
+    case ENV_RELEASE:
+      slot->env_hires += env_inc;
+      if (slot->env_hires >= ENV_MAX_HIRES) {
+        slot->env_hires = ENV_MAX_HIRES;
+        slot->env_state = ENV_OFF;
+      }
+      break;
+    }
+    slot->env = slot->env_hires >> 2;
+#else // LIBOPNA_ENABLE_HIRES_ENV
+    switch (slot->env_state) {
+    int newenv;
+    int sl;
+    case ENV_ATTACK:
+      newenv = slot->env_hires + (((-slot->env-1) * env_inc) >> 6);
+      if (newenv <= 0) {
+        slot->env = 0;
+        slot->env_hires = 0;
+        slot->env_state = ENV_DECAY;
+        opna_fm_slot_setrate(slot, ENV_DECAY);
+      } else {
+        slot->env_hires = newenv;
+      }
       newenv = slot->env + (((-slot->env-1) * env_inc) >> 4);
       if (newenv <= 0) {
         slot->env = 0;
@@ -269,16 +331,17 @@ static void opna_fm_slot_env(struct opna_fm_slot *slot) {
       break;
     case ENV_SUSTAIN:
       slot->env += env_inc;
-      if (slot->env >= 1023) slot->env = 1023;
+      if (slot->env >= LIBOPNA_FM_ENV_MAX) slot->env = LIBOPNA_FM_ENV_MAX;
       break;
     case ENV_RELEASE:
       slot->env += env_inc;
-      if (slot->env >= 1023) {
-        slot->env = 1023;
+      if (slot->env >= LIBOPNA_FM_ENV_MAX) {
+        slot->env = LIBOPNA_FM_ENV_MAX;
         slot->env_state = ENV_OFF;
       }
       break;
     }
+#endif
   }
 }
 
