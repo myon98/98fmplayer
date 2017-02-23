@@ -513,6 +513,18 @@ static bool fmp_cmd67_q(struct fmdriver_work *work,
   return true;
 }
 
+
+static uint32_t fmp_ppz8_note_freq(uint8_t note) {
+  uint32_t freq = fmp_ppz_freq(note);
+  uint8_t octave = note/0xc;
+  if (octave > 4) {
+    freq <<= (octave - 4);
+  } else {
+    freq >>= (4 - octave);
+  }
+  return freq;
+}
+
 // 201e
 static bool fmp_cmd68_pitchbend(struct fmdriver_work *work,
                                 struct driver_fmp *fmp,
@@ -532,10 +544,19 @@ static bool fmp_cmd68_pitchbend(struct fmdriver_work *work,
   part->pit.delay = fmp_part_cmdload(fmp, part);
   part->pit.speed = fmp_part_cmdload(fmp, part);
   part->pit.speed_cnt = part->pit.speed;
+
+  part->pdzf.pit.target_note = note;
+  part->pdzf.pit.target_freq = fmp_ppz8_note_freq(note);
+  part->pdzf.pit.delay = part->pit.delay;
+  part->pdzf.pit.speed = part->pit.speed;
+  part->pdzf.pit.speed_cnt = part->pit.speed_cnt;
   uint8_t rate = fmp_part_cmdload(fmp, part);
+  part->pdzf.pit.rate = rate;
   if (!part->type.fm) rate = -rate;
   part->pit.rate = rate;
   part->status.pitchbend = true;
+  part->pdzf.pit.on = true;
+  part->pdzf.pit.pitchdiff = 0;
   return true;
 }
 
@@ -944,6 +965,7 @@ static bool fmp_cmd74_loop(struct fmdriver_work *work,
     // 24f0
     if (!part->type.rhythm) {
       part->prev_note = 0x61; // rest
+      part->pdzf.prev_note = 0x61;
       part->status.off = true;
       if (part->type.ssg) {
         part->actual_vol = 0;
@@ -976,6 +998,7 @@ static bool fmp_cmd75_lfo(struct fmdriver_work *work,
     if (val & (1<<4)) part->lfo_f.q = set;
     if (val & (1<<5)) part->lfo_f.p = set;
     if (!set) {
+      part->pdzf.lfodiff = 0;
       if (!part->type.fm) {
         part->actual_freq = fmp_part_ssg_freq(part, part->prev_note);
         part->prev_freq = 0;
@@ -1522,6 +1545,7 @@ static void fmp_part_lfo_calc(struct driver_fmp *fmp,
     if (--lfo->speed_cnt) return;
     lfo->speed_cnt = lfo->speed;
     part->actual_freq += lfo->rate2;
+    if (num == 0) part->pdzf.lfodiff += u16s16(lfo->rate2);
     if (--lfo->depth_cnt) return;
     lfo->depth_cnt = lfo->depth;
     lfo->rate2 = -lfo->rate2;
@@ -1534,9 +1558,11 @@ static void fmp_part_lfo_calc(struct driver_fmp *fmp,
     if (--lfo->speed_cnt) return;
     lfo->speed_cnt = lfo->speed;
     part->actual_freq += lfo->rate;
+    if (num == 0) part->pdzf.lfodiff += u16s16(lfo->rate);
     if (--lfo->depth_cnt) return;
     lfo->depth_cnt = lfo->depth;
     part->actual_freq -= lfo->rate2;
+    if (num == 0) part->pdzf.lfodiff -= u16s16(lfo->rate2);
     return;
   case FMP_LFOWF_SQUARE:
     // 2ce0
@@ -1545,7 +1571,8 @@ static void fmp_part_lfo_calc(struct driver_fmp *fmp,
     lfo->delay_cnt = 1;
     if (--lfo->speed_cnt) return;
     lfo->speed_cnt = lfo->speed;
-    part->actual_freq += (lfo->rate2 >> (lfo->depth_cnt != 0));
+    part->actual_freq += (u16s16(lfo->rate2) >> (lfo->depth_cnt != 0));
+    if (num == 0) part->pdzf.lfodiff += (u16s16(lfo->rate2) >> (lfo->depth_cnt != 0));
     if (lfo->depth_cnt) lfo->depth_cnt = 0;
     lfo->rate2 = -lfo->rate2;
     return;
@@ -1558,6 +1585,7 @@ static void fmp_part_lfo_calc(struct driver_fmp *fmp,
     if (--lfo->speed_cnt) return;
     lfo->speed_cnt = lfo->speed;
     part->actual_freq += lfo->rate;
+    if (num == 0) part->pdzf.lfodiff += u16s16(lfo->rate);
     lfo->depth_cnt--;
     return;
   case FMP_LFOWF_STAIRCASE:
@@ -1568,6 +1596,7 @@ static void fmp_part_lfo_calc(struct driver_fmp *fmp,
     if (--lfo->speed_cnt) return;
     lfo->speed_cnt = lfo->speed;
     part->actual_freq += lfo->rate2;
+    if (num == 0) part->pdzf.lfodiff += u16s16(lfo->rate2);
     if (--lfo->depth_cnt) return;
     lfo->depth_cnt = 2;
     lfo->rate2 = -lfo->rate2;
@@ -1584,6 +1613,8 @@ static void fmp_part_lfo_calc(struct driver_fmp *fmp,
       lfo->depth_cnt = rand;
       part->actual_freq -= lfo->rate2;
       part->actual_freq += a;
+      if (num == 0) part->pdzf.lfodiff -= u16s16(lfo->rate2);
+      if (num == 0) part->pdzf.lfodiff += u16s16(a);
       lfo->rate2 = a;
       return;
     }
@@ -1657,23 +1688,38 @@ static void fmp_part_freq_ppz8(struct fmdriver_work *work,
   }
 }
 
-static uint32_t fmp_ppz8_note_freq(uint8_t note) {
-  uint32_t freq = fmp_ppz_freq(note);
-  uint8_t octave = note/0xc;
-  if (octave > 4) {
-    freq <<= (octave - 4);
+uint32_t fmp_pdzf_extended_freqdiff(struct fmp_part *part, int32_t diff) {
+  uint32_t freq = fmp_ppz8_note_freq(part->pdzf.prev_note);
+  freq += diff << 6;
+  int coeff = (part->pdzf.prev_note/0xc) - 5;
+  if (coeff > 0) {
+    freq += diff << coeff;
   } else {
-    freq >>= (4 - octave);
+    freq += diff >> (-coeff);
   }
   return freq;
+}
+
+uint32_t fmp_pdzf_extended_freq(struct fmp_part *part) {
+  return fmp_pdzf_extended_freqdiff(
+    part,
+    u16s16(part->detune) + part->pdzf.pit.pitchdiff + part->pdzf.lfodiff
+  );
 }
 
 static void fmp_part_keyon_pdzf(struct fmdriver_work *work,
                                 struct fmp_part *part) {
   uint8_t voice = part->pdzf.voice;
   uint8_t pan = part->pdzf.pan + 5;
-  uint32_t freq = fmp_ppz8_note_freq(part->prev_note);
-  freq += (u16s16(part->detune) << 3);
+  part->pdzf.pit.pitchdiff = 0;
+  part->pdzf.lfodiff = 0;
+  uint32_t freq;
+  if (part->pdzf.mode == 2) {
+    freq = fmp_pdzf_extended_freq(part);
+  } else {
+    freq = fmp_ppz8_note_freq(part->prev_note);
+    freq += (u16s16(part->detune) << 3);
+  }
 
   if (!part->pdzf.keyon) {
     if (work->ppz8_functbl) {
@@ -1706,6 +1752,7 @@ static void fmp_part_keyon_pdzf(struct fmdriver_work *work,
       fmp_pdzf_vol_clamp(part->pdzf.vol, part->pdzf.env_state.vol)
     );
   }
+  part->pdzf.lastfreq = freq;
 }
 
 // 27a3
@@ -1993,6 +2040,7 @@ static void fmp_part_fm(struct fmdriver_work *work, struct driver_fmp *fmp,
     fmp_part_init_lfo_awe(work, fmp, part);
     part->actual_freq = fmp_fm_freq(part->prev_note);
     part->status.lfo_sync = false;
+    part->pdzf.lfodiff = 0;
   }
   // 2a6a
   if (part->status.pitchbend || fmp->datainfo.flags.lfo_octave_fix) {
@@ -2117,6 +2165,7 @@ static void fmp_part_ssg(struct fmdriver_work *work, struct driver_fmp *fmp,
     part->u.ssg.octave = fmp_ssg_octave(part->prev_note);
     part->actual_freq = fmp_part_ssg_freq(part, part->prev_note);
     part->status.lfo_sync = false;
+    part->pdzf.lfodiff = 0;
   }
   // 2dc9
   if (part->status.keyon) {
@@ -2243,6 +2292,26 @@ static void fmp_part_pit_end_fm(struct fmp_part *part) {
   part->prev_note = part->pit.target_note;
 }
 
+static void fmp_part_pit_pdzf(
+  struct fmdriver_work *work, 
+  struct fmp_part *part
+) {
+  if (part->pdzf.mode != 2) return;
+  if (--part->pdzf.pit.delay) return;
+  part->pdzf.pit.delay = 1;
+  if (--part->pdzf.pit.speed_cnt) return;
+  part->pdzf.pit.speed_cnt = part->pdzf.pit.speed;
+  int8_t rate = u8s8(part->pdzf.pit.rate);
+  if (!rate) return;
+  part->pdzf.pit.pitchdiff += rate;
+  uint32_t freq = fmp_pdzf_extended_freqdiff(part, part->pdzf.pit.pitchdiff);
+  if (((rate > 0) && (freq > part->pdzf.pit.target_freq)) ||
+      ((rate < 0) && (freq < part->pdzf.pit.target_freq))) {
+    part->pdzf.pit.on = false;
+    part->pdzf.prev_note = part->pdzf.pit.target_note;
+    part->pdzf.pit.pitchdiff = 0;
+  }
+}
 // 1c4b
 static void fmp_part_pit(struct fmp_part *part) {
   if (part->type.adpcm) return;
@@ -2512,12 +2581,16 @@ static void fmp_part_cmd(struct fmdriver_work *work, struct driver_fmp *fmp,
     if (part->status.pitchbend) {
       fmp_part_pit(part);
     }
+    if (part->pdzf.pit.on) {
+      fmp_part_pit_pdzf(work, part);
+    }
     // 1cef
     if (--part->tonelen_cnt) return;
     // 1cf5
     if (!part->status.tie) {
       fmp_part_keyoff(work, fmp, part);
       part->status.pitchbend = false;
+      part->pdzf.pit.on = false;
     } else {
       // 1d04
       part->status.slur = false;
@@ -2559,6 +2632,7 @@ static void fmp_part_cmd(struct fmdriver_work *work, struct driver_fmp *fmp,
       // 1d3e
       part->status.tie = false;
       part->status.pitchbend = false;
+      part->pdzf.pit.on = false;
       part->status.tie_cont = false;
       part->status.rest = true;
       fmp_part_keyoff(work, fmp, part);
@@ -2582,6 +2656,7 @@ static void fmp_part_cmd(struct fmdriver_work *work, struct driver_fmp *fmp,
       }
       // 1d7d
       part->prev_note = cmd;
+      part->pdzf.prev_note = cmd;
       break;
     }
   }
@@ -2816,6 +2891,23 @@ static void fmp_work_status_update(struct fmdriver_work *work,
   }
 }
 
+static void fmp_part_pdzf_freq_update(
+  struct fmdriver_work *work,
+  struct fmp_part *part
+) {
+  uint32_t newfreq = fmp_pdzf_extended_freq(part);
+  if (newfreq != part->pdzf.lastfreq) {
+    part->pdzf.lastfreq = newfreq;
+    if (work->ppz8_functbl) {
+      work->ppz8_functbl->channel_freq(
+        work->ppz8,
+        part->pdzf.ppz8_channel,
+        newfreq
+      );
+    }
+  }
+}
+
 // 17f8-1903
 static void fmp_timerb(struct fmdriver_work *work, struct driver_fmp *fmp) {
   // 1805
@@ -2850,6 +2942,9 @@ static void fmp_timerb(struct fmdriver_work *work, struct driver_fmp *fmp) {
     if (part->status.off) continue;
     fmp_part_cmd(work, fmp, part);
     fmp_part_ssg(work, fmp, part);
+    if (part->pdzf.mode == 2) {
+      fmp_part_pdzf_freq_update(work, part);
+    }
     if (part->pdzf.mode && part->lfo_f.q) {
       fmp_part_pdzf_env(work, fmp, part);
     }
@@ -2861,6 +2956,9 @@ static void fmp_timerb(struct fmdriver_work *work, struct driver_fmp *fmp) {
     fmp_part_cmd(work, fmp, part);
     if (part->status.off) continue;
     fmp_part_fm(work, fmp, part);
+    if (part->pdzf.mode == 2) {
+      fmp_part_pdzf_freq_update(work, part);
+    }
     if (part->pdzf.mode && part->lfo_f.q) {
       fmp_part_pdzf_env(work, fmp, part);
     }

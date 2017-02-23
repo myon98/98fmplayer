@@ -366,6 +366,7 @@ struct fmp_part {
     uint8_t ppz8_channel;
     uint8_t voice;
     uint8_t vol;
+    uint8_t prev_note;
     int8_t pan;
     struct {
       uint8_t al;
@@ -384,6 +385,20 @@ struct fmp_part {
       int8_t vol;
     } env_state;
     bool keyon;
+    // detune = (pitchdiff*64) + (pitchdiff*(2**(octave-5)))
+    // octave = prevnote/0xc;
+    struct {
+      bool on;
+      uint8_t rate;
+      uint8_t delay;
+      uint8_t speed;
+      uint8_t speed_cnt;
+      uint32_t target_freq;
+      uint8_t target_note;
+      int32_t pitchdiff;
+    } pit;
+    int32_t lfodiff;
+    uint32_t lastfreq;
   } pdzf;
 };
 
