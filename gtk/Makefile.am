@@ -15,6 +15,8 @@ FMDSP_SRC=../fmdsp/fmdsp.c \
           ../fmdsp/font_fmdsp_small.c
 
 fmplayer_SOURCES=main.c \
+                 toneview.c \
+                 ../tonedata/tonedata.c \
                  $(LIBOPNA_SRC) \
                  $(FMDRIVER_SRC) \
                  $(FMDSP_SRC)

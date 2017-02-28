@@ -1,5 +1,6 @@
 AC_INIT([fmplayer], [0.1.0])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
+AM_SILENT_RULES([yes])
 AC_PROG_CC_C99
 
 dnl AM_PATH_SDL2([2.0.5])

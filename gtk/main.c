@@ -5,12 +5,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <cairo.h>
+#include <stdatomic.h>
 
 #include "fmdriver/fmdriver_fmp.h"
 #include "fmdriver/ppz8.h"
 #include "libopna/opna.h"
 #include "libopna/opnatimer.h"
 #include "fmdsp/fmdsp.h"
+#include "toneview.h"
 
 #define DATADIR "/.local/share/fmplayer/"
 //#define FMDSP_2X
@@ -64,6 +66,10 @@ static void on_menu_quit(GtkMenuItem *menuitem, gpointer ptr) {
   quit();
 }
 
+static void on_tone_view(GtkMenuItem *menuitem, gpointer ptr) {
+  show_toneview();
+}
+
 static void msgbox_err(const char *msg) {
   GtkWidget *d = gtk_message_dialog_new(GTK_WINDOW(g.mainwin), GTK_DIALOG_MODAL,
                           GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE,
@@ -81,6 +87,13 @@ static int pastream_cb(const void *inptr, void *outptr, unsigned long frames,
   int16_t *buf = (int16_t *)outptr;
   memset(outptr, 0, sizeof(int16_t)*frames*2);
   opna_timer_mix(timer, buf, frames);
+
+  bool xchg = false;
+  if (atomic_compare_exchange_weak_explicit(&toneview_g.flag, &xchg, true,
+      memory_order_acquire, memory_order_relaxed)) {
+    tonedata_from_opna(&toneview_g.tonedata, &g.opna);
+    atomic_store_explicit(&toneview_g.flag, false, memory_order_release);
+  }  
   return paContinue;
 }
 
@@ -401,6 +414,14 @@ static GtkWidget *create_menubar() {
   GtkWidget *quit = gtk_menu_item_new_with_label("Quit");
   g_signal_connect(quit, "activate", G_CALLBACK(on_menu_quit), 0);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit);
+
+  GtkWidget *window = gtk_menu_item_new_with_label("Window");
+  GtkWidget *filemenu = gtk_menu_new();
+  gtk_menu_item_set_submenu(GTK_MENU_ITEM(window), filemenu);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menubar), window);
+  GtkWidget *toneview = gtk_menu_item_new_with_label("Tone view");
+  g_signal_connect(toneview, "activate", G_CALLBACK(on_tone_view), 0);
+  gtk_menu_shell_append(GTK_MENU_SHELL(filemenu), toneview);
   return menubar;
 }
 
@@ -452,7 +473,7 @@ static void mask_update(void) {
 
 static void mask_set(unsigned mask, bool shift) {
   if (shift) {
-    opna_set_mask(&g.opna, mask);
+    opna_set_mask(&g.opna, ~mask);
   } else {
     opna_set_mask(&g.opna, opna_get_mask(&g.opna) ^ mask);
   }
@@ -470,7 +491,7 @@ static gboolean key_press_cb(GtkWidget *w,
       return TRUE;
     }
   }
-  bool shift = e->key.state & GDK_SHIFT_MASK;
+  bool shift = e->key.state & GDK_CONTROL_MASK;
   switch (e->key.keyval) {
   case GDK_KEY_F6:
     if (g.current_uri) {
