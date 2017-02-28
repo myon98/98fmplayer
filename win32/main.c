@@ -540,6 +540,9 @@ static void on_key(HWND hwnd, UINT vk, BOOL down, int repeat, UINT scan) {
             g.sound->pause(g.sound, g.paused);
           }
           break;
+        case VK_F11:
+          fmdsp_dispstyle_set(&g.fmdsp, (g.fmdsp.style+1) % FMDSP_DISPSTYLE_CNT);
+          break;
         }
       }
     }
