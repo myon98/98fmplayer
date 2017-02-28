@@ -85,6 +85,7 @@ void show_toneview(void) {
     g_signal_connect(format, "changed", G_CALLBACK(on_format_changed), 0);
     GtkWidget *normalizecheck = gtk_check_button_new_with_label("Normalize");
     gtk_box_pack_start(GTK_BOX(ctrlbox), normalizecheck, FALSE, TRUE, 0);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(normalizecheck), g.normalize);
     g_signal_connect(normalizecheck, "toggled", G_CALLBACK(on_normalize_toggled), 0);
     for (int c = 0; c < 6; c++) {
       GtkWidget *cbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
