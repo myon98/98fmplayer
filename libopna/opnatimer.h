@@ -20,7 +20,10 @@ struct opna_timer {
   void *interrupt_userptr;
   opna_timer_mix_cb_t mix_cb;
   void *mix_userptr;
+  uint16_t timera;
   uint8_t timerb;
+  bool timera_load;
+  bool timera_enable;
   bool timerb_load;
   bool timerb_enable;
   uint16_t timerb_cnt;

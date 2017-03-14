@@ -103,6 +103,11 @@ void opna_ssg_writereg(struct opna_ssg *ssg, unsigned reg, unsigned val) {
   }
 }
 
+unsigned opna_ssg_readreg(const struct opna_ssg *ssg, unsigned reg) {
+  if (reg > 0xfu) return 0xff;
+  return ssg->regs[reg];
+}
+
 static int opna_ssg_tone_period(const struct opna_ssg *ssg, int chan) {
   return ssg->regs[0+chan*2] | ((ssg->regs[1+chan*2] & 0xf) << 8);
 }
@@ -173,7 +178,9 @@ void opna_ssg_generate_raw(struct opna_ssg *ssg, int16_t *buf, int samples) {
         ssg->ch[ch].out = !ssg->ch[ch].out;
       }
       if (ssg->mask & (1<<ch)) continue;
-#if 0
+#if 1
+      // may output DC offset
+      // YMF288 seems to disable output when 0 <= Tp < 8
       if (opna_ssg_tone_out(ssg, ch)) {
         int level = opna_ssg_chan_env(ssg, ch)
           ? opna_ssg_env_level(ssg)
@@ -183,12 +190,12 @@ void opna_ssg_generate_raw(struct opna_ssg *ssg, int16_t *buf, int samples) {
 #else
       if (!opna_ssg_tone_silent(ssg, ch)) {
         int level = opna_ssg_channel_level(ssg, ch);
-        out += opna_ssg_tone_out(ssg, ch) ? voltable[level] : -voltable[level];
+        out += (opna_ssg_tone_out(ssg, ch) ? voltable[level] : -voltable[level]) / 2;
       }
 #endif
       
     }
-    buf[i] = out / 4;
+    buf[i] = out / 2;
   }
 }
 

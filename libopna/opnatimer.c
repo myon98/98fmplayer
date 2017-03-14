@@ -2,6 +2,7 @@
 #include "opna.h"
 
 enum {
+  TIMERA_BITS = 10,
   TIMERB_SHIFT = 4,
   TIMERB_BITS = 8 + TIMERB_SHIFT,
 };
@@ -37,27 +38,48 @@ void opna_timer_writereg(struct opna_timer *timer, unsigned reg, unsigned val) {
   val &= 0xff;
   opna_writereg(timer->opna, reg, val);
   switch (reg) {
+  case 0x24:
+    timer->timera &= ~0xff;
+    timer->timera |= val;
+    break;
+  case 0x25:
+    timer->timera &= 0xff;
+    timer->timera |= ((val & 3) << 8);
+    break;
   case 0x26:
     timer->timerb = val;
     timer->timerb_cnt = timer->timerb << TIMERB_SHIFT;
     break;
   case 0x27:
+    timer->timera_load = val & (1<<0);
+    timer->timera_enable = val & (1<<2);
     timer->timerb_load = val & (1<<1);
     timer->timerb_enable = val & (1<<3);
+    
+    if (val & (1<<4)) {
+      timer->status &= ~(1<<0);
+    }
     if (val & (1<<5)) {
       //timer->timerb_cnt = timer->timerb << TIMERB_SHIFT;
       timer->status &= ~(1<<1);
     }
   }
 }
-
+#include <stdio.h>
+#include <stdlib.h>
 void opna_timer_mix(struct opna_timer *timer, int16_t *buf, unsigned samples) {
   do {
     unsigned generate_samples = samples;
-    if (timer->timerb_enable) {
+    if (timer->timerb_enable && timer->timerb_load) {
       unsigned timerb_samples = (1<<TIMERB_BITS) - timer->timerb_cnt;
       if (timerb_samples < generate_samples) {
         generate_samples = timerb_samples;
+      }
+    }
+    if (timer->timera_enable && timer->timera_load) {
+      unsigned timera_samples = (1<<TIMERA_BITS) - timer->timera;
+      if (timera_samples < generate_samples) {
+        generate_samples = timera_samples;
       }
     }
     opna_mix(timer->opna, buf, generate_samples);
@@ -66,6 +88,16 @@ void opna_timer_mix(struct opna_timer *timer, int16_t *buf, unsigned samples) {
     }
     buf += generate_samples*2;
     samples -= generate_samples;
+    if (timer->timera_load) {
+      timer->timera = (timer->timera + generate_samples) & ((1<<TIMERA_BITS)-1);
+      if (!timer->timera && timer->timera_enable) {
+        if (!(timer->status & (1<<0))) {
+          timer->status |= (1<<0);
+          timer->interrupt_cb(timer->interrupt_userptr);
+        }
+      }
+      timer->timera &= (1<<TIMERA_BITS)-1;
+    }
     if (timer->timerb_load) {
       timer->timerb_cnt = (timer->timerb_cnt + generate_samples) & ((1<<TIMERB_BITS)-1);
       if (!timer->timerb_cnt && timer->timerb_enable) {

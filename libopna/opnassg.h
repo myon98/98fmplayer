@@ -50,7 +50,7 @@ void opna_ssg_mix_55466(
   struct opna_ssg *ssg, struct opna_ssg_resampler *resampler,
   int16_t *buf, int samples);
 void opna_ssg_writereg(struct opna_ssg *ssg, unsigned reg, unsigned val);
-
+unsigned opna_ssg_readreg(const struct opna_ssg *ssg, unsigned reg);
 // channel level (0 - 31)
 int opna_ssg_channel_level(const struct opna_ssg *ssg, int ch);
 

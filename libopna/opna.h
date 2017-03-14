@@ -41,6 +41,7 @@ struct opna {
 
 void opna_reset(struct opna *opna);
 void opna_writereg(struct opna *opna, unsigned reg, unsigned val);
+unsigned opna_readreg(const struct opna *opna, unsigned reg);
 void opna_mix(struct opna *opna, int16_t *buf, unsigned samples);
 unsigned opna_get_mask(const struct opna *opna);
 void opna_set_mask(struct opna *opna, unsigned mask);

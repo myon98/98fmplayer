@@ -17,6 +17,11 @@ void opna_writereg(struct opna *opna, unsigned reg, unsigned val) {
   opna_adpcm_writereg(&opna->adpcm, reg, val);
 }
 
+unsigned opna_readreg(const struct opna *opna, unsigned reg) {
+  if (reg > 0xfu) return 0xff;
+  return opna_ssg_readreg(&opna->ssg, reg);
+}
+
 void opna_mix(struct opna *opna, int16_t *buf, unsigned samples) {
   opna_fm_mix(&opna->fm, buf, samples);
   opna_ssg_mix_55466(&opna->ssg, &opna->resampler, buf, samples);
