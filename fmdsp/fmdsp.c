@@ -452,7 +452,7 @@ static void fmdsp_track_without_key(
 ) {
   const char *track_info1 = "    ";
   char track_info2[5] = "    ";
-  if (track->playing) {
+  if (track->playing || track->info == FMDRIVER_TRACK_INFO_SSGEFF) {
     switch (track->info) {
     case FMDRIVER_TRACK_INFO_PPZ8:
       snprintf(track_info2, sizeof(track_info2), "PPZ8");
@@ -460,11 +460,14 @@ static void fmdsp_track_without_key(
     case FMDRIVER_TRACK_INFO_PDZF:
       snprintf(track_info2, sizeof(track_info2), "PDZF");
       break;
-    case FMDRIVER_TRACK_INFO_SSG_NOISE_ONLY:
-      snprintf(track_info2, sizeof(track_info2), "N%02X ", work->ssg_noise_freq);
-      break;
-    case FMDRIVER_TRACK_INFO_SSG_NOISE_MIX:
-      snprintf(track_info2, sizeof(track_info2), "M%02X ", work->ssg_noise_freq);
+    case FMDRIVER_TRACK_INFO_SSGEFF:
+      track_info1 = "EFF ";
+    case FMDRIVER_TRACK_INFO_SSG:
+      if (track->ssg_noise) {
+        snprintf(track_info2, sizeof(track_info2), "%c%02X ",
+                 track->ssg_tone ? 'M' : 'N',
+                 work->ssg_noise_freq);
+      }
       break;
     case FMDRIVER_TRACK_INFO_FM3EX:
       track_info1 = "EX  ";
@@ -564,7 +567,7 @@ static void fmdsp_update_10(struct fmdsp *fmdsp,
     for (int i = 0; i < KEY_OCTAVES; i++) {
       vramblit(vram, KEY_X+KEY_W*i, TRACK_H*it+KEY_Y,
                 s_key_bg, KEY_W, KEY_H);
-      if (track->playing) {
+      if (track->playing || track->info == FMDRIVER_TRACK_INFO_SSGEFF) {
         if (track->actual_key >> 4 == i) {
           vramblit_key(vram, KEY_X+KEY_W*i, TRACK_H*it+KEY_Y,
                       s_key_mask, KEY_W, KEY_H,
@@ -618,7 +621,7 @@ static void fmdsp_update_13(struct fmdsp *fmdsp,
     for (int i = 0; i < KEY_OCTAVES; i++) {
       vramblit(vram, KEY_X+KEY_W*i, TRACK_H_S*it+KEY_Y,
                 s_key_bg + KEY_S_OFFSET, KEY_W, KEY_H_S);
-      if (track->playing) {
+      if (track->playing || track->info == FMDRIVER_TRACK_INFO_SSGEFF) {
         if (track->actual_key >> 4 == i) {
           vramblit_key(vram, KEY_X+KEY_W*i, TRACK_H_S*it+KEY_Y,
                       s_key_mask + KEY_S_OFFSET, KEY_W, KEY_H_S,

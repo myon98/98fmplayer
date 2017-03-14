@@ -6,6 +6,7 @@
 #include <commctrl.h>
 
 #include "fmdriver/fmdriver_fmp.h"
+#include "fmdriver/fmdriver_pmd.h"
 #include "libopna/opna.h"
 #include "libopna/opnatimer.h"
 #include "fmdsp/fmdsp.h"
@@ -30,6 +31,11 @@ enum {
 #define ENABLE_WM_DROPFILES
 // #define ENABLE_IDROPTARGET
 
+union drivers {
+  struct driver_pmd pmd;
+  struct driver_fmp fmp;
+};
+
 static struct {
   HINSTANCE hinst;
   HANDLE heap;
@@ -38,7 +44,8 @@ static struct {
   struct opna_timer opna_timer;
   struct ppz8 ppz8;
   struct fmdriver_work work;
-  struct driver_fmp *fmp;
+  union drivers *driver;
+  uint8_t *data;
   struct fmdsp fmdsp;
   uint8_t vram[PC98_W*PC98_H];
   struct fmdsp_font font;
@@ -66,6 +73,11 @@ static void opna_mix_cb(void *userptr, int16_t *buf, unsigned samples) {
 static void opna_writereg_libopna(struct fmdriver_work *work, unsigned addr, unsigned data) {
   struct opna_timer *timer = (struct opna_timer *)work->opna;
   opna_timer_writereg(timer, addr, data);
+}
+
+static unsigned opna_readreg_libopna(struct fmdriver_work *work, unsigned addr) {
+  struct opna_timer *timer = (struct opna_timer *)work->opna;
+  return opna_readreg(&g.opna, addr);
 }
 
 static uint8_t opna_status_libopna(struct fmdriver_work *work, bool a1) {
@@ -238,6 +250,10 @@ err:
 }
 
 static void openfile(HWND hwnd, const wchar_t *path) {
+  enum {
+    DRIVER_PMD,
+    DRIVER_FMP
+  } driver_type;
   HANDLE file = CreateFile(path, GENERIC_READ,
                             0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
   if (file == INVALID_HANDLE_VALUE) {
@@ -253,30 +269,39 @@ static void openfile(HWND hwnd, const wchar_t *path) {
     MessageBox(hwnd, L"Invalid File (Filesize too large)", L"Error", MB_ICONSTOP);
     goto err_file;
   }
-  void *fmpdata = HeapAlloc(g.heap, 0, li.QuadPart);
-  if (!fmpdata) {
+  void *data = HeapAlloc(g.heap, 0, li.QuadPart);
+  if (!data) {
     MessageBox(hwnd, L"Cannot allocate memory for file", L"Error", MB_ICONSTOP);
     goto err_file;
   }
   DWORD readbytes;
-  if (!ReadFile(file, fmpdata, li.QuadPart, &readbytes, 0) || readbytes != li.QuadPart) {
+  if (!ReadFile(file, data, li.QuadPart, &readbytes, 0) || readbytes != li.QuadPart) {
     MessageBox(hwnd, L"Cannot read file", L"Error", MB_ICONSTOP);
-    goto err_fmpdata;
+    goto err_data;
   }
-  struct driver_fmp *fmp = HeapAlloc(g.heap, HEAP_ZERO_MEMORY, sizeof(struct driver_fmp));
-  if (!fmp) {
+  union drivers *driver = HeapAlloc(g.heap, HEAP_ZERO_MEMORY, sizeof(*driver));
+  if (!driver) {
     MessageBox(hwnd, L"Cannot allocate memory for fmp", L"Error", MB_ICONSTOP);
-    goto err_fmpdata;
+    goto err_data;
   }
-  if (!fmp_load(fmp, fmpdata, li.QuadPart)) {
-    MessageBox(hwnd, L"Invalid File (not FMP data)", L"Error", MB_ICONSTOP);
-    goto err_fmp;
+  if (fmp_load(&driver->fmp, data, li.QuadPart)) {
+    driver_type = DRIVER_FMP;
+  } else {
+    ZeroMemory(driver, sizeof(*driver));
+    if (pmd_load(&driver->pmd, data, li.QuadPart)) {
+      driver_type = DRIVER_PMD;
+    } else {
+      MessageBox(hwnd, L"Invalid File (not FMP or PMD)", L"Error", MB_ICONSTOP);
+      goto err_driver;
+    }
   }
   if (g.sound) {
     g.sound->pause(g.sound, 1);
   }
-  if (g.fmp) HeapFree(g.heap, 0, g.fmp);
-  g.fmp = fmp;
+  if (g.driver) HeapFree(g.heap, 0, g.driver);
+  g.driver = driver;
+  if (g.data) HeapFree(g.heap, 0, g.data);
+  g.data = data;
   opna_reset(&g.opna);
   if (g.drum_rom) opna_drum_set_rom(&g.opna.drum, g.drum_rom);
   opna_adpcm_set_ram_256k(&g.opna.adpcm, g.opna_adpcm_ram);
@@ -284,22 +309,27 @@ static void openfile(HWND hwnd, const wchar_t *path) {
   ppz8_init(&g.ppz8, SRATE, PPZ8MIX);
   ZeroMemory(&g.work, sizeof(g.work));
   g.work.opna_writereg = opna_writereg_libopna;
+  g.work.opna_readreg = opna_readreg_libopna;
   g.work.opna_status = opna_status_libopna;
   g.work.opna = &g.opna_timer;
   g.work.ppz8 = &g.ppz8;
   g.work.ppz8_functbl = &ppz8_functbl;
   opna_timer_set_int_callback(&g.opna_timer, opna_int_cb, &g.work);
   opna_timer_set_mix_callback(&g.opna_timer, opna_mix_cb, &g.ppz8);
-  fmp_init(&g.work, g.fmp);
-  loadpvi(&g.work, g.fmp, path);
-  loadppzpvi(&g.work, g.fmp, path);
+  if (driver_type == DRIVER_PMD) {
+    pmd_init(&g.work, &g.driver->pmd);
+  } else {
+    fmp_init(&g.work, &g.driver->fmp);
+    loadpvi(&g.work, &g.driver->fmp, path);
+    loadppzpvi(&g.work, &g.driver->fmp, path);
+  }
   if (!g.sound) {
     g.sound = sound_init(hwnd, SRATE, SECTLEN,
                          sound_cb, &g.opna_timer);
     SetWindowText(g.driverinfo, g.sound->apiname);
   }
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
-  if (!g.sound) goto err_fmp;
+  if (!g.sound) goto err_driver;
   g.sound->pause(g.sound, 0);
   g.paused = false;
   CloseHandle(file);
@@ -310,10 +340,10 @@ static void openfile(HWND hwnd, const wchar_t *path) {
   if (g.lastopenpath) HeapFree(g.heap, 0, (void *)g.lastopenpath);
   g.lastopenpath = pathcpy;
   return;
-err_fmp:
-  HeapFree(g.heap, 0, fmp);
-err_fmpdata:
-  HeapFree(g.heap, 0, fmpdata);
+err_driver:
+  HeapFree(g.heap, 0, driver);
+err_data:
+  HeapFree(g.heap, 0, data);
 err_file:
   CloseHandle(file);
 }
@@ -324,8 +354,14 @@ static void openfiledialog(HWND hwnd) {
   ofn.lStructSize = sizeof(ofn);
   ofn.hwndOwner = hwnd;
   ofn.hInstance = g.hinst;
-  ofn.lpstrFilter = L"FMP files (*.opi;*.ovi;*.ozi;*.m26;*.m86)\0"
-                     "*.opi;*.ovi;*.ozi;*.m26;*.m86\0"
+  ofn.lpstrFilter = L"All supported files (*.m;*.m2;*.mz;*.opi;*.ovi;*.ozi;*.m26;*.m86)\0"
+                     "*.m;*.m2;*.mz;*.opi;*.ovi;*.ozi;*.m26;*.m86\0"
+                     "PMD files (*.m;*.m2;*.mz)\0"
+                     "*.m;*.m2;*.mz\0"
+                     "FMP files (*.opi;*.ovi;*.ozi)\0"
+                     "*.opi;*.ovi;*.ozi\0"
+                     "PLAY6 files (*.m26;*.m86)\0"
+                     "*.m26;*.m86\0"
                      "All Files (*.*)\0"
                      "*.*\0\0";
   ofn.lpstrFile = path;
@@ -459,7 +495,8 @@ static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
 static void on_destroy(HWND hwnd) {
   (void)hwnd;
   if (g.sound) g.sound->free(g.sound);
-  if (g.fmp) HeapFree(g.heap, 0, g.fmp);
+  if (g.driver) HeapFree(g.heap, 0, g.driver);
+  if (g.data) HeapFree(g.heap, 0, g.data);
   if (g.drum_rom) HeapFree(g.heap, 0, g.drum_rom);
   if (g.ppz8_buf) HeapFree(g.heap, 0, g.ppz8_buf);
   PostQuitMessage(0);

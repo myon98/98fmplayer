@@ -8,6 +8,8 @@ LIBOPNA_SRC=../libopna/opnaadpcm.c \
                 ../libopna/opna.c
 
 FMDRIVER_SRC=../fmdriver/fmdriver_fmp.c \
+             ../fmdriver/fmdriver_pmd.c \
+             ../fmdriver/fmdriver_common.c \
              ../fmdriver/ppz8.c
 
 FMDSP_SRC=../fmdsp/fmdsp.c \

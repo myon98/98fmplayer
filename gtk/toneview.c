@@ -3,7 +3,9 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 
-struct toneview_g toneview_g;
+struct toneview_g toneview_g = {
+  .flag = ATOMIC_FLAG_INIT
+};
 
 static struct {
   GtkWidget *tonewin;
@@ -14,7 +16,9 @@ static struct {
   enum fmplayer_tonedata_format format;
   bool normalize;
   GtkClipboard *clipboard;
-} g;
+} g = {
+  .normalize = true
+};
 
 static void on_destroy(GtkWidget *w, gpointer ptr) {
   (void)w;
@@ -26,11 +30,10 @@ gboolean tick_cb(GtkWidget *widget, GdkFrameClock *clock, gpointer ptr) {
   (void)widget;
   (void)clock;
   (void)ptr;
-  bool xchg = false;
-  if (atomic_compare_exchange_weak_explicit(&toneview_g.flag, &xchg, true,
-      memory_order_acquire, memory_order_relaxed)) {
+  if (!atomic_flag_test_and_set_explicit(
+      &toneview_g.flag, memory_order_acquire)) {
     g.tonedata = toneview_g.tonedata;
-    atomic_store_explicit(&toneview_g.flag, false, memory_order_release);
+    atomic_flag_clear_explicit(&toneview_g.flag, memory_order_release);
   }
   g.tonedata_n = g.tonedata;
   for (int c = 0; c < 6; c++) {

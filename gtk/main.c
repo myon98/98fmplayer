@@ -8,6 +8,7 @@
 #include <stdatomic.h>
 
 #include "fmdriver/fmdriver_fmp.h"
+#include "fmdriver/fmdriver_pmd.h"
 #include "fmdriver/ppz8.h"
 #include "libopna/opna.h"
 #include "libopna/opnatimer.h"
@@ -23,6 +24,11 @@ enum {
   AUDIOBUFLEN = 0,
 };
 
+union drivers {
+  struct driver_pmd pmd;
+  struct driver_fmp fmp;
+};
+
 static struct {
   GtkWidget *mainwin;
   bool pa_initialized;
@@ -36,8 +42,8 @@ static struct {
   char drum_rom[OPNA_ROM_SIZE];
   bool drum_rom_loaded;
   char adpcm_ram[OPNA_ADPCM_RAM_SIZE];
-  struct driver_fmp *fmp;
-  void *fmpdata;
+  union drivers *driver;
+  void *data;
   void *ppzbuf;
   uint8_t vram[PC98_W*PC98_H];
   struct fmdsp_font font98;
@@ -52,8 +58,8 @@ static void quit(void) {
     Pa_CloseStream(g.pastream);
   }
   if (g.pa_initialized) Pa_Terminate();
-  free(g.fmp);
-  free(g.fmpdata);
+  free(g.driver);
+  free(g.data);
   free(g.ppzbuf);
   gtk_main_quit();
 }
@@ -88,11 +94,10 @@ static int pastream_cb(const void *inptr, void *outptr, unsigned long frames,
   memset(outptr, 0, sizeof(int16_t)*frames*2);
   opna_timer_mix(timer, buf, frames);
 
-  bool xchg = false;
-  if (atomic_compare_exchange_weak_explicit(&toneview_g.flag, &xchg, true,
-      memory_order_acquire, memory_order_relaxed)) {
+  if (!atomic_flag_test_and_set_explicit(
+      &toneview_g.flag, memory_order_acquire)) {
     tonedata_from_opna(&toneview_g.tonedata, &g.opna);
-    atomic_store_explicit(&toneview_g.flag, false, memory_order_release);
+    atomic_flag_clear_explicit(&toneview_g.flag, memory_order_release);
   }  
   return paContinue;
 }
@@ -110,6 +115,11 @@ static void opna_mix_cb(void *userptr, int16_t *buf, unsigned samples) {
 static void opna_writereg_libopna(struct fmdriver_work *work, unsigned addr, unsigned data) {
   struct opna_timer *timer = (struct opna_timer *)work->opna;
   opna_timer_writereg(timer, addr, data);
+}
+
+static unsigned opna_readreg_libopna(struct fmdriver_work *work, unsigned addr) {
+  struct opna_timer *timer = (struct opna_timer *)work->opna;
+  return opna_readreg(&g.opna, addr);
 }
 
 static uint8_t opna_status_libopna(struct fmdriver_work *work, bool a1) {
@@ -278,6 +288,10 @@ err:
 }
 
 static bool openfile(const char *uri) {
+  enum {
+    DRIVER_PMD,
+    DRIVER_FMP
+  } driver_type;
   if (!g.pa_initialized) {
     msgbox_err("Could not initialize Portaudio");
     goto err;
@@ -316,33 +330,40 @@ static bool openfile(const char *uri) {
     msgbox_err("cannot read file");
     goto err_buf;
   }
-  struct driver_fmp *fmp = calloc(1, sizeof(struct driver_fmp));
-  if (!fmp) {
+  union drivers *driver = calloc(1, sizeof(*driver));
+  if (!driver) {
     msgbox_err("cannot allocate memory for fmp");
     goto err_buf;
   }
-  if (!fmp_load(fmp, fmbuf, filelen)) {
-    msgbox_err("invalid FMP file");
-   goto err_fmp;
+  if (fmp_load(&driver->fmp, fmbuf, filelen)) {
+    driver_type = DRIVER_FMP;
+  } else {
+    memset(driver, 0, sizeof(*driver));
+    if (pmd_load(&driver->pmd, fmbuf, filelen)) {
+      driver_type = DRIVER_PMD;
+    } else {
+      msgbox_err("invalid file");
+      goto err_driver;
+    }
   }
   if (!g.pastream) {
     PaError pe = Pa_OpenDefaultStream(&g.pastream, 0, 2, paInt16, SRATE, AUDIOBUFLEN,
                                       pastream_cb, &g.opna_timer);
     if (pe != paNoError) {
       msgbox_err("cannot open portaudio stream");
-      goto err_fmp;
+      goto err_driver;
     }
   } else if (!g.pa_paused) {
     PaError pe = Pa_StopStream(g.pastream);
     if (pe != paNoError) {
       msgbox_err("Portaudio Error");
-      goto err_fmp;
+      goto err_driver;
     }
   }
-  free(g.fmp);
-  g.fmp = fmp;
-  free(g.fmpdata);
-  g.fmpdata = fmbuf;
+  free(g.driver);
+  g.driver = driver;
+  free(g.data);
+  g.data = fmbuf;
   opna_reset(&g.opna);
   if (!g.drum_rom_loaded) {
     load_drumrom();
@@ -355,20 +376,25 @@ static bool openfile(const char *uri) {
   opna_timer_reset(&g.opna_timer, &g.opna);
   memset(&g.work, 0, sizeof(g.work));
   g.work.opna_writereg = opna_writereg_libopna;
+  g.work.opna_readreg = opna_readreg_libopna;
   g.work.opna_status = opna_status_libopna;
   g.work.opna = &g.opna_timer;
   g.work.ppz8 = &g.ppz8;
   g.work.ppz8_functbl = &ppz8_functbl;
   opna_timer_set_int_callback(&g.opna_timer, opna_int_cb, &g.work);
   opna_timer_set_mix_callback(&g.opna_timer, opna_mix_cb, &g.ppz8);
-  fmp_init(&g.work, g.fmp);
-  fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
-  GFile *dir = g_file_get_parent(fmfile);
-  if (dir) {
-    loadpvi(&g.work, g.fmp, dir);
-    loadppzpvi(&g.work, g.fmp, dir);
-    g_object_unref(G_OBJECT(dir));
+  if (driver_type == DRIVER_FMP) {
+    fmp_init(&g.work, &g.driver->fmp);
+    GFile *dir = g_file_get_parent(fmfile);
+    if (dir) {
+      loadpvi(&g.work, &g.driver->fmp, dir);
+      loadppzpvi(&g.work, &g.driver->fmp, dir);
+      g_object_unref(G_OBJECT(dir));
+    }
+  } else {
+    pmd_init(&g.work, &g.driver->pmd);
   }
+  fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   g_object_unref(G_OBJECT(fmstream));
   g_object_unref(G_OBJECT(fminfo));
   g_object_unref(G_OBJECT(fmfile));
@@ -380,8 +406,8 @@ static bool openfile(const char *uri) {
     g.current_uri = turi;
   }
   return true;
-err_fmp:
-  free(fmp);
+err_driver:
+  free(driver);
 err_buf:
   free(fmbuf);
 err_stream:

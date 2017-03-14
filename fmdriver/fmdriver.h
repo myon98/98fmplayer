@@ -35,11 +35,11 @@ enum fmdriver_track_type {
 
 enum fmdriver_track_info {
   FMDRIVER_TRACK_INFO_NORMAL,
-  FMDRIVER_TRACK_INFO_SSG_NOISE_ONLY,
-  FMDRIVER_TRACK_INFO_SSG_NOISE_MIX,
+  FMDRIVER_TRACK_INFO_SSG,
   FMDRIVER_TRACK_INFO_FM3EX,
   FMDRIVER_TRACK_INFO_PPZ8,
   FMDRIVER_TRACK_INFO_PDZF,
+  FMDRIVER_TRACK_INFO_SSGEFF,
 };
 
 struct fmdriver_track_status {
@@ -60,6 +60,8 @@ struct fmdriver_track_status {
   // for FMP, ppz8 channel+1 or 0
   // use for track mask or display
   uint8_t ppz8_ch;
+  bool ssg_tone;
+  bool ssg_noise;
 };
 
 struct fmdriver_work {

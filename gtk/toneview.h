@@ -6,9 +6,9 @@
 
 extern struct toneview_g {
   struct fmplayer_tonedata tonedata;
-  atomic_bool flag;
+  atomic_flag flag;
 } toneview_g;
 
-void show_toneview();
+void show_toneview(void);
 
 #endif // MYON_FMPLAYER_GTK_TONEVIEW_H_INCLUDED

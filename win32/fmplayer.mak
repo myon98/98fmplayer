@@ -7,7 +7,9 @@ DEFINES=UNICODE _UNICODE \
         WINVER=0x0500 _WIN32_WINNT=0x0500 \
         DIRECTSOUND_VERSION=0x0800
 
-FMDRIVER_OBJS=fmdriver_fmp \
+FMDRIVER_OBJS=fmdriver_pmd \
+              fmdriver_fmp \
+              fmdriver_common \
               ppz8
 LIBOPNA_OBJS=opna \
              opnatimer \
