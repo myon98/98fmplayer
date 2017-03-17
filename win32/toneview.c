@@ -68,10 +68,19 @@ enum {
 static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
   if (code == BN_CLICKED && ((ID_COPY0 <= id) && (id <= ID_COPY5))) {
     int i = id - ID_COPY0;
-    HGLOBAL gmem = GlobalAlloc(GMEM_MOVEABLE, FMPLAYER_TONEDATA_STR_SIZE*sizeof(wchar_t));
-    if (!gmem) return;
-    wchar_t *buf = GlobalLock(gmem);
+    wchar_t buf[FMPLAYER_TONEDATA_STR_SIZE];
     GetWindowText(g.tonelabel[i], buf, FMPLAYER_TONEDATA_STR_SIZE*sizeof(wchar_t));
+    HGLOBAL gmem = GlobalAlloc(GMEM_MOVEABLE, (FMPLAYER_TONEDATA_STR_SIZE+10)*sizeof(wchar_t));
+    if (!gmem) return;
+    wchar_t *gbuf = GlobalLock(gmem);
+    wchar_t *c = buf;
+    while (*c) {
+      if (*c == L'\n') {
+        *gbuf++ = L'\r';
+      }
+      *gbuf++ = *c++;
+    }
+    *gbuf = 0;
     GlobalUnlock(gmem);
     if (!OpenClipboard(hwnd)) return;
     EmptyClipboard();
