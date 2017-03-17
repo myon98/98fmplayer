@@ -24,6 +24,9 @@ Reads drum sample from `$HOME/.local/share/fmplayer/ym2608_adpcm_rom.bin` (same 
 Currently needs `$HOME/.local/share/fmplayer/font.rom` to display titles/comments.
 
 ### win32
+version 0.1.0:
+https://github.com/takamichih/fmplayer/releases/tag/v0.1.0
+
 Uses MinGW-w64 to compile.
 ```
 $ cd win32/x86
