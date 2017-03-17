@@ -108,8 +108,10 @@ unsigned opna_ssg_readreg(const struct opna_ssg *ssg, unsigned reg) {
   return ssg->regs[reg];
 }
 
-static int opna_ssg_tone_period(const struct opna_ssg *ssg, int chan) {
-  return ssg->regs[0+chan*2] | ((ssg->regs[1+chan*2] & 0xf) << 8);
+unsigned opna_ssg_tone_period(const struct opna_ssg *ssg, int ch) {
+  if (ch < 0) return 0;
+  if (ch >= 3) return 0;
+  return ssg->regs[0+ch*2] | ((ssg->regs[1+ch*2] & 0xf) << 8);
 }
 
 static bool opna_ssg_chan_env(const struct opna_ssg *ssg, int chan) {

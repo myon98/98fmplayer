@@ -53,6 +53,7 @@ void opna_ssg_writereg(struct opna_ssg *ssg, unsigned reg, unsigned val);
 unsigned opna_ssg_readreg(const struct opna_ssg *ssg, unsigned reg);
 // channel level (0 - 31)
 int opna_ssg_channel_level(const struct opna_ssg *ssg, int ch);
+unsigned opna_ssg_tone_period(const struct opna_ssg *ssg, int ch);
 
 #ifdef __cplusplus
 }
