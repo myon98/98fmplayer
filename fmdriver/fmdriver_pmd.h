@@ -252,8 +252,6 @@ struct pmd_ssgeff_data {
   uint8_t noisefreq_wait;
 };
 
-#include "pmd_ssgeff.h"
-
 struct driver_pmd {
   // pmd->data = data+1;
   // pmd->datalen = datalen-1;
