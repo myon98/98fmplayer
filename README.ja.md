@@ -6,8 +6,9 @@ PC-98用のFM音源ドライバエミュレーション(予定)
 * PMD: FM, SSG, リズムパートのみ対応、ADPCM, PPZ8 対応予定
 * FMP: PPZ8, PDZF にほぼ対応
 * UI: GTK3 で作った仮のものと、仮 Win32 版
-![ncurses screenshot](/img/screenshot_ncurses.png?raw=true)
 ![gtk screenshot](/img/screenshot_gtk.png?raw=true)
+![gtk toneviewer screenshot](/img/screenshot_gtk.toneview.png?raw=true)
+![w2k screenshot](/img/screenshotw2k.png?raw=true)
 * PMD, FMP の形式を解析するついでに作ったもので、手持ちのデータが少ないため再現性は PMDWin, WinFMP の劣化版
 * FM は 55467Hz で合成, SSG は 249600Hz で合成した後 sinc でフィルタして混合 (高調波の多い矩形波に対して線形補間を行ったりはしません)
 * CSM モード (効果音モードとの違いが分からない) と SSGEG とハードウェア LFO 未対応
@@ -33,6 +34,8 @@ $ ./fmplayer
 現在のところタイトル表示は font.rom を `$HOME/.local/share/fmplayer/font.rom` に置かなければ表示されません。(2バイト半角文字、 Ambiguous Width など色々な問題があるのでわざわざ自力でフォントを読む構造にしてあります、そのうち font.rom がなくてもとりあえず表示できるようにはします)
 
 ### WIN32 版の仮 UI
+Releases:
+https://github.com/takamichih/fmplayer/releases/
 MinGW でコンパイルします。MSVCでもコンパイルできると思います。
 ```
 $ cd win32/x86

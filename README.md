@@ -1,5 +1,8 @@
 # Fmplayer (beta)
 PC-98 FM driver emulation (very early version)
+![gtk screenshot](/img/screenshot_gtk.png?raw=true)
+![gtk toneviewer screenshot](/img/screenshot_gtk.toneview.png?raw=true)
+![w2k screenshot](/img/screenshotw2k.png?raw=true)
 
 ## Current status:
 * Supported formats: PMD, FMP(PLAY6)
@@ -24,8 +27,8 @@ Reads drum sample from `$HOME/.local/share/fmplayer/ym2608_adpcm_rom.bin` (same 
 Currently needs `$HOME/.local/share/fmplayer/font.rom` to display titles/comments.
 
 ### win32
-version 0.1.0:
-https://github.com/takamichih/fmplayer/releases/tag/v0.1.0
+Releases:
+https://github.com/takamichih/fmplayer/releases/
 
 Uses MinGW-w64 to compile.
 ```
