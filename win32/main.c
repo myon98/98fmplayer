@@ -471,6 +471,7 @@ static void toggle_2x(HWND hwnd) {
   AdjustWindowRectEx(&wr, style, 0, exstyle);
   SetWindowPos(hwnd, HWND_TOP, 0, 0, wr.right-wr.left, wr.bottom-wr.top,
                 SWP_NOZORDER | SWP_NOMOVE);
+  Button_SetCheck(g.button_2x, g.fmdsp_2x);
 }
 
 static bool proc_key(UINT vk, bool down, int repeat) {
@@ -646,7 +647,6 @@ static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
     break;
   case ID_2X:
     toggle_2x(hwnd);
-    Button_SetCheck(g.button_2x, g.fmdsp_2x);
     break;
   case ID_TONEVIEW:
     show_toneview(g.hinst, hwnd);
