@@ -364,7 +364,9 @@ static bool openfile(const char *uri) {
   g.driver = driver;
   free(g.data);
   g.data = fmbuf;
+  unsigned mask = opna_get_mask(&g.opna);
   opna_reset(&g.opna);
+  opna_set_mask(&g.opna, mask);
   if (!g.drum_rom_loaded) {
     load_drumrom();
   }
@@ -480,30 +482,12 @@ static void destroynothing(gpointer p) {
   (void)p;
 }
 
-static void mask_update(void) {
-  unsigned mask = opna_get_mask(&g.opna);
-  g.work.track_status[FMDRIVER_TRACK_FM_1].masked = mask & LIBOPNA_CHAN_FM_1;
-  g.work.track_status[FMDRIVER_TRACK_FM_2].masked = mask & LIBOPNA_CHAN_FM_2;
-  g.work.track_status[FMDRIVER_TRACK_FM_3].masked = mask & LIBOPNA_CHAN_FM_3;
-  g.work.track_status[FMDRIVER_TRACK_FM_3_EX_1].masked = mask & LIBOPNA_CHAN_FM_3;
-  g.work.track_status[FMDRIVER_TRACK_FM_3_EX_2].masked = mask & LIBOPNA_CHAN_FM_3;
-  g.work.track_status[FMDRIVER_TRACK_FM_3_EX_3].masked = mask & LIBOPNA_CHAN_FM_3;
-  g.work.track_status[FMDRIVER_TRACK_FM_4].masked = mask & LIBOPNA_CHAN_FM_4;
-  g.work.track_status[FMDRIVER_TRACK_FM_5].masked = mask & LIBOPNA_CHAN_FM_5;
-  g.work.track_status[FMDRIVER_TRACK_FM_6].masked = mask & LIBOPNA_CHAN_FM_6;
-  g.work.track_status[FMDRIVER_TRACK_SSG_1].masked = mask & LIBOPNA_CHAN_SSG_1;
-  g.work.track_status[FMDRIVER_TRACK_SSG_2].masked = mask & LIBOPNA_CHAN_SSG_2;
-  g.work.track_status[FMDRIVER_TRACK_SSG_3].masked = mask & LIBOPNA_CHAN_SSG_3;
-  g.work.track_status[FMDRIVER_TRACK_ADPCM].masked = mask & LIBOPNA_CHAN_ADPCM;
-}
-
 static void mask_set(unsigned mask, bool shift) {
   if (shift) {
     opna_set_mask(&g.opna, ~mask);
   } else {
     opna_set_mask(&g.opna, opna_get_mask(&g.opna) ^ mask);
   }
-  mask_update();
 }
 
 static gboolean key_press_cb(GtkWidget *w,
@@ -574,11 +558,9 @@ static gboolean key_press_cb(GtkWidget *w,
   // us
   case GDK_KEY_equal:
     opna_set_mask(&g.opna, ~opna_get_mask(&g.opna));
-    mask_update();
     break;
   case GDK_KEY_backslash:
     opna_set_mask(&g.opna, 0);
-    mask_update();
     break;
   default:
     return FALSE;
