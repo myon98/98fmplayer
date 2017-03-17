@@ -12,10 +12,14 @@
 #include "fmdsp/fmdsp.h"
 #include "soundout.h"
 #include "winfont.h"
+#include "version.h"
+#include "toneview.h"
 
 enum {
   ID_OPENFILE = 0x10,
   ID_PAUSE,
+  ID_2X,
+  ID_TONEVIEW,
 };
 
 #define FMPLAYER_CLASSNAME L"myon_fmplayer_ym2608_win32"
@@ -55,10 +59,15 @@ static struct {
   uint8_t opna_adpcm_ram[OPNA_ADPCM_RAM_SIZE];
   void *ppz8_buf;
   bool paused;
+  HWND mainwnd;
+  WNDPROC btn_defproc;
   HWND driverinfo;
+  HWND button_2x;
   const wchar_t *lastopenpath;
+  bool fmdsp_2x;
 } g;
 
+HWND g_currentdlg;
 
 static void opna_int_cb(void *userptr) {
   struct fmdriver_work *work = (struct fmdriver_work *)userptr;
@@ -93,6 +102,11 @@ static void sound_cb(void *p, int16_t *buf, unsigned frames) {
   struct opna_timer *timer = (struct opna_timer *)p;
   ZeroMemory(buf, sizeof(int16_t)*frames*2);
   opna_timer_mix(timer, buf, frames);
+  if (!atomic_flag_test_and_set_explicit(
+      &toneview_g.flag, memory_order_acquire)) {
+    tonedata_from_opna(&toneview_g.tonedata, &g.opna);
+    atomic_flag_clear_explicit(&toneview_g.flag, memory_order_release);
+  }  
 }
 
 static void on_timer(HWND hwnd, UINT id) {
@@ -302,7 +316,9 @@ static void openfile(HWND hwnd, const wchar_t *path) {
   g.driver = driver;
   if (g.data) HeapFree(g.heap, 0, g.data);
   g.data = data;
+  unsigned mask = opna_get_mask(&g.opna);
   opna_reset(&g.opna);
+  opna_set_mask(&g.opna, mask);
   if (g.drum_rom) opna_drum_set_rom(&g.opna.drum, g.drum_rom);
   opna_adpcm_set_ram_256k(&g.opna.adpcm, g.opna_adpcm_ram);
   opna_timer_reset(&g.opna_timer, &g.opna);
@@ -314,6 +330,7 @@ static void openfile(HWND hwnd, const wchar_t *path) {
   g.work.opna = &g.opna_timer;
   g.work.ppz8 = &g.ppz8;
   g.work.ppz8_functbl = &ppz8_functbl;
+  WideCharToMultiByte(932, WC_NO_BEST_FIT_CHARS, path, -1, g.work.filename, sizeof(g.work.filename), 0, 0);
   opna_timer_set_int_callback(&g.opna_timer, opna_int_cb, &g.work);
   opna_timer_set_mix_callback(&g.opna_timer, opna_mix_cb, &g.ppz8);
   if (driver_type == DRIVER_PMD) {
@@ -430,6 +447,118 @@ static void on_dropfiles(HWND hwnd, HDROP hdrop) {
 }
 #endif // ENABLE_WM_DROPFILES
 
+static void mask_set(unsigned mask, bool shift) {
+  if (shift) {
+    opna_set_mask(&g.opna, ~mask);
+  } else {
+    opna_set_mask(&g.opna, opna_get_mask(&g.opna) ^ mask);
+  }
+}
+
+static void toggle_2x(HWND hwnd) {
+  g.fmdsp_2x ^= 1;
+  RECT wr;
+  wr.left = 0;
+  wr.right = 640;
+  wr.top = 0;
+  wr.bottom = 480;
+  if (g.fmdsp_2x) {
+    wr.right = 1280;
+    wr.bottom = 880;
+  }
+  DWORD style = GetWindowLongPtr(hwnd, GWL_STYLE);
+  DWORD exstyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+  AdjustWindowRectEx(&wr, style, 0, exstyle);
+  SetWindowPos(hwnd, HWND_TOP, 0, 0, wr.right-wr.left, wr.bottom-wr.top,
+                SWP_NOZORDER | SWP_NOMOVE);
+}
+
+static bool proc_key(UINT vk, bool down, int repeat) {
+  if (down) {
+    if (VK_F1 <= vk && vk <= VK_F12) {
+      if (GetKeyState(VK_CONTROL) & 0x8000U) {
+        fmdsp_palette_set(&g.fmdsp, vk - VK_F1);
+        return true;
+      } else {
+        switch (vk) {
+        case VK_F6:
+          if (g.lastopenpath) {
+            openfile(g.mainwnd, g.lastopenpath);
+          }
+          return true;
+        case VK_F7:
+          if (g.sound) {
+            g.paused = !g.paused;
+            g.sound->pause(g.sound, g.paused);
+          }
+          return true;
+        case VK_F11:
+          fmdsp_dispstyle_set(&g.fmdsp, (g.fmdsp.style+1) % FMDSP_DISPSTYLE_CNT);
+          return true;
+        case VK_F12:
+          toggle_2x(g.mainwnd);
+        }
+      }
+    } else {
+      bool shift = GetKeyState(VK_SHIFT) & 0x8000U;
+      switch (vk) {
+      case '1':
+        mask_set(LIBOPNA_CHAN_FM_1, shift);
+        return true;
+      case '2':
+        mask_set(LIBOPNA_CHAN_FM_2, shift);
+        return true;
+      case '3':
+        mask_set(LIBOPNA_CHAN_FM_3, shift);
+        return true;
+      case '4':
+        mask_set(LIBOPNA_CHAN_FM_4, shift);
+        return true;
+      case '5':
+        mask_set(LIBOPNA_CHAN_FM_5, shift);
+        return true;
+      case '6':
+        mask_set(LIBOPNA_CHAN_FM_6, shift);
+        return true;
+      case '7':
+        mask_set(LIBOPNA_CHAN_SSG_1, shift);
+        return true;
+      case '8':
+        mask_set(LIBOPNA_CHAN_SSG_2, shift);
+        return true;
+      case '9':
+        mask_set(LIBOPNA_CHAN_SSG_3, shift);
+        return true;
+      case '0':
+        mask_set(LIBOPNA_CHAN_DRUM_ALL, shift);
+        return true;
+      case VK_OEM_MINUS:
+        mask_set(LIBOPNA_CHAN_ADPCM, shift);
+        return true;
+      case VK_OEM_PLUS:
+        opna_set_mask(&g.opna, ~opna_get_mask(&g.opna));
+        return true;
+      case VK_OEM_5:
+        opna_set_mask(&g.opna, 0);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+static LRESULT CALLBACK btn_wndproc(
+  HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
+) {
+  switch (msg) {
+  case WM_KEYDOWN:
+  case WM_KEYUP:
+    if (proc_key((UINT)wParam, msg == WM_KEYDOWN, (int)(short)LOWORD(lParam))) return 0;
+    break;
+  }
+  return CallWindowProc(g.btn_defproc, hwnd, msg, wParam, lParam);
+}
+
 static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   (void)cs;
   HWND button = CreateWindowEx(
@@ -459,6 +588,29 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
     100, 25,
     hwnd, 0, g.hinst, 0
   );
+  g.button_2x = CreateWindowEx(
+    0,
+    L"BUTTON",
+    L"2&x",
+    WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_CHECKBOX | BS_PUSHLIKE,
+    215, 10,
+    30, 25,
+    hwnd, (HMENU)ID_2X, g.hinst, 0
+  );
+  HWND button_toneview = CreateWindowEx(
+    0,
+    L"BUTTON",
+    L"Tone &viewer",
+    WS_TABSTOP | WS_VISIBLE | WS_CHILD,
+    250, 10,
+    100, 25,
+    hwnd, (HMENU)ID_TONEVIEW, g.hinst, 0
+  );
+  g.btn_defproc = (WNDPROC)GetWindowLongPtr(button, GWLP_WNDPROC);
+  SetWindowLongPtr(button, GWLP_WNDPROC, (intptr_t)btn_wndproc);
+  SetWindowLongPtr(pbutton, GWLP_WNDPROC, (intptr_t)btn_wndproc);
+  SetWindowLongPtr(g.button_2x, GWLP_WNDPROC, (intptr_t)btn_wndproc);
+  SetWindowLongPtr(button_toneview, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   NONCLIENTMETRICS ncm;
   ncm.cbSize = sizeof(ncm);
   SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
@@ -466,6 +618,8 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   SetWindowFont(button, font, TRUE);
   SetWindowFont(pbutton, font, TRUE);
   SetWindowFont(g.driverinfo, font, TRUE);
+  SetWindowFont(g.button_2x, font, TRUE);
+  SetWindowFont(button_toneview, font, TRUE);
   loadrom();
   loadfont();
   fmdsp_init(&g.fmdsp, g.font_loaded ? &g.font : 0);
@@ -489,6 +643,14 @@ static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
       g.paused = !g.paused;
       g.sound->pause(g.sound, g.paused);
     }
+    break;
+  case ID_2X:
+    toggle_2x(hwnd);
+    Button_SetCheck(g.button_2x, g.fmdsp_2x);
+    break;
+  case ID_TONEVIEW:
+    show_toneview(g.hinst, hwnd);
+    break;
   }
 }
 
@@ -531,7 +693,11 @@ static void on_paint(HWND hwnd) {
     g.vram,
     bi, DIB_RGB_COLORS);
   SelectObject(mdc, bitmap);
-  BitBlt(dc, 0, 80, 640, 400, mdc, 0, 0, SRCCOPY);
+  if (g.fmdsp_2x) {
+    StretchBlt(dc, 0, 80, 1280, 800, mdc, 0, 0, 640, 400, SRCCOPY);
+  } else {
+    BitBlt(dc, 0, 80, 640, 400, mdc, 0, 0, SRCCOPY);
+  }
   DeleteDC(mdc);
   DeleteObject(bitmap);
   EndPaint(hwnd, &ps);
@@ -559,34 +725,18 @@ static void on_syskey(HWND hwnd, UINT vk, BOOL down, int repeat, UINT scan) {
 }
 
 static void on_key(HWND hwnd, UINT vk, BOOL down, int repeat, UINT scan) {
-  if (down) {
-    if (VK_F1 <= vk && vk <= VK_F12) {
-      if (GetKeyState(VK_CONTROL) & 0x8000U) {
-        fmdsp_palette_set(&g.fmdsp, vk - VK_F1);
-        return;
-      } else {
-        switch (vk) {
-        case VK_F6:
-          if (g.lastopenpath) {
-            openfile(hwnd, g.lastopenpath);
-          }
-          break;
-        case VK_F7:
-          if (g.sound) {
-            g.paused = !g.paused;
-            g.sound->pause(g.sound, g.paused);
-          }
-          break;
-        case VK_F11:
-          fmdsp_dispstyle_set(&g.fmdsp, (g.fmdsp.style+1) % FMDSP_DISPSTYLE_CNT);
-          break;
-        }
-      }
+  if (!proc_key(vk, down, repeat)) {
+    if (down) {
+      FORWARD_WM_KEYDOWN(hwnd, vk, repeat, scan, DefWindowProc);
+    } else {
+      FORWARD_WM_KEYUP(hwnd, vk, repeat, scan, DefWindowProc);
     }
-    FORWARD_WM_KEYDOWN(hwnd, vk, repeat, scan, DefWindowProc);
-  } else {
-    FORWARD_WM_KEYUP(hwnd, vk, repeat, scan, DefWindowProc);
   }
+}
+
+static void on_activate(HWND hwnd, bool activate, HWND targetwnd, WINBOOL state) {
+  if (activate) g_currentdlg = hwnd;
+  else g_currentdlg = 0;
 }
 
 static LRESULT CALLBACK wndproc(
@@ -607,6 +757,7 @@ static LRESULT CALLBACK wndproc(
   HANDLE_MSG(hwnd, WM_KEYUP, on_key);
   HANDLE_MSG(hwnd, WM_SYSKEYDOWN, on_syskey);
   HANDLE_MSG(hwnd, WM_SYSKEYUP, on_syskey);
+  HANDLE_MSG(hwnd, WM_ACTIVATE, on_activate);
   }
   return DefWindowProc(hwnd, msg, wParam, lParam);
 }
@@ -665,24 +816,26 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
   wr.top = 0;
   wr.bottom = 480;
   AdjustWindowRectEx(&wr, style, 0, exStyle);
-  HWND hwnd = CreateWindowEx(
+  g.mainwnd = CreateWindowEx(
     exStyle,
-    (wchar_t*)((uintptr_t)wcatom), L"FMPlayer/Win32",
+    (wchar_t*)((uintptr_t)wcatom), L"FMPlayer/Win32 v" FMPLAYER_VERSION_STR,
     style,
     CW_USEDEFAULT, CW_USEDEFAULT,
     wr.right-wr.left, wr.bottom-wr.top,
     0, 0, g.hinst, 0
   );
-  ShowWindow(hwnd, cmdshow);
+  ShowWindow(g.mainwnd, cmdshow);
 
   if (argfile) {
-    openfile(hwnd, argfile);
+    openfile(g.mainwnd, argfile);
   }
 
   MSG msg = {0};
   while (GetMessage(&msg, 0, 0, 0)) {
-    TranslateMessage(&msg);
-    DispatchMessage(&msg);
+    if (!g_currentdlg || !IsDialogMessage(g_currentdlg, &msg)) {
+      TranslateMessage(&msg);
+      DispatchMessage(&msg);
+    }
   }
   return msg.wParam;
 }

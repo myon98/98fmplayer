@@ -2,6 +2,7 @@ vpath %.c ../
 vpath %.c ../../fmdriver
 vpath %.c ../../libopna
 vpath %.c ../../fmdsp
+vpath %.c ../../tonedata
 vpath %.rc ..
 
 include ../fmplayer.mak

@@ -20,7 +20,9 @@ LIBOPNA_OBJS=opna \
 FMDSP_OBJS=fmdsp \
            font_rom \
            font_fmdsp_small
+TONEDATA_OBJS=tonedata
 OBJBASE=main \
+        toneview \
         soundout \
         dsoundout \
         waveout \
@@ -29,6 +31,7 @@ OBJBASE=main \
         guid \
         $(FMDRIVER_OBJS) \
         $(LIBOPNA_OBJS) \
+        $(TONEDATA_OBJS) \
         $(FMDSP_OBJS)
 RESBASE=lnf
 LIBBASE=user32 \
