@@ -69,6 +69,7 @@ enum {
 void fmdsp_font_from_font_rom(struct fmdsp_font *font, const void *data);
 
 extern const struct fmdsp_font font_fmdsp_small;
+extern const struct fmdsp_font font_fmdsp_medium;
 
 #ifdef __cplusplus
 }

@@ -44,7 +44,6 @@ enum fmdriver_track_info {
 
 struct fmdriver_track_status {
   bool playing;
-  bool masked;
   enum fmdriver_track_info info;
   uint8_t ticks;
   uint8_t ticks_left;
@@ -84,6 +83,8 @@ struct fmdriver_work {
   // CP932 encoded
   //const char *title;
   char comment[3][FMDRIVER_TITLE_BUFLEN];
+  // only single-byte uppercase cp932
+  char filename[FMDRIVER_TITLE_BUFLEN];
   // driver status (for display)
   uint8_t ssg_noise_freq;
   struct fmdriver_track_status track_status[FMDRIVER_TRACK_NUM];

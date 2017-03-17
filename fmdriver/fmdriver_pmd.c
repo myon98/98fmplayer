@@ -1,5 +1,6 @@
 #include "fmdriver_pmd.h"
 #include "fmdriver_common.h"
+#include <stddef.h>
 
 enum {
   SSG_ENV_STATE_OLD_AL,
@@ -1057,6 +1058,8 @@ static void pmd_part_tone_fm(
   // 2dce
   pmd_part_tone_tl_update(part, toneptr);
 }
+
+#include "pmd_ssgeff.h"
 
 // 0d28, 0d09
 static void pmd_ssg_effect(
@@ -4261,12 +4264,37 @@ static void pmd_part_proc_opnarhythm(
   }
 }
 
-// 0149
+// 05cf
+static void pmd_part_off_adpcm(
+  struct pmd_part *part
+) {
+  if (part->ssg_env_state_old == SSG_ENV_STATE_OLD_NEW) {
+    if (part->ssg_env_state_new == SSG_ENV_STATE_NEW_RR) return;
+  } else {
+    if (part->ssg_env_state_old == SSG_ENV_STATE_OLD_RR) return;
+  }
+  // 05e2
+  // XXX
+}
+
+// 0149 / 026c
 static void pmd_part_proc_adpcm(
   struct fmdriver_work *work,
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  /*
+  if (!part->ptr) return;
+  part->proc_masked = pmd_part_masked(part);
+  part->len_cnt--;
+  if (!part->keystatus.off && !part->keystatus.off_mask) {
+    if (part->len_cnt <= part->gate) {
+      part->keystatus.off = true;
+      part->keystatus.off_mask = true;
+      // TODO: 05cf;
+    }
+  }
+  */
 }
 
 // 079b
@@ -4456,7 +4484,6 @@ static void pmd_work_status_update(
     struct fmdriver_track_status *track = &work->track_status[t];
     const struct pmd_part *part = &pmd->parts[pmd_track_map[t].ind];
     track->playing = !part->loop.ended;
-    track->masked = pmd_part_masked(part);
     track->info = FMDRIVER_TRACK_INFO_NORMAL;
     track->ticks = part->len;
     track->ticks_left = part->len_cnt;
@@ -4467,6 +4494,7 @@ static void pmd_work_status_update(
     track->fmslotmask[3] = !(part->fm_slotmask & (1<<7));
     track->tonenum = part->tonenum;
     track->volume = part->vol;
+    track->gate = part->gate;
     int detune = part->detune;
     if (detune > INT8_MAX) detune = INT8_MAX;
     if (detune < INT8_MIN) detune = INT8_MIN;
@@ -4573,7 +4601,7 @@ static const char *pmd_check_str(
 ) {
   uint16_t c = ptr;
   while (pmd->datalen >= (c+1)) {
-    if (!pmd->data[c++]) return &pmd->data[ptr];
+    if (!pmd->data[c++]) return (const char *)&pmd->data[ptr];
   }
   return 0;
 }
@@ -4645,15 +4673,15 @@ void pmd_init(struct fmdriver_work *work,
   }
   const char *pcmfile = pmd_get_memo(pmd, -2);
   if (pcmfile) {
-    pmd_filenamecopy(&pmd->ppzfile, pcmfile);
+    pmd_filenamecopy(pmd->ppzfile, pcmfile);
   }
   pcmfile = pmd_get_memo(pmd, -1);
   if (pcmfile) {
-    pmd_filenamecopy(&pmd->ppsfile, pcmfile);
+    pmd_filenamecopy(pmd->ppsfile, pcmfile);
   }
   pcmfile = pmd_get_memo(pmd, 0);
   if (pcmfile) {
-    pmd_filenamecopy(&pmd->ppcfile, pcmfile);
+    pmd_filenamecopy(pmd->ppcfile, pcmfile);
   }
 }
 

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "font.h"
+#include "fmdriver/fmdriver.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,6 +34,7 @@ struct fmdsp {
   const struct fmdsp_font *font98;
   enum FMDSP_DISPSTYLE style;
   bool style_updated;
+  bool masked[FMDRIVER_TRACK_NUM];
 };
 
 struct fmdriver_work;

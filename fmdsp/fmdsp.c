@@ -200,9 +200,6 @@ static void fmdsp_track_init_13(struct fmdsp *fmdsp,
       break;
     }
     fmdsp_putline(track_type, vram, &font_fmdsp_small, 1, TRACK_H_S*i, 2, true);
-    int tracknum = track_type_table[t].num;
-    vramblit(vram, NUM_X+NUM_W*0, TRACK_H_S*i+1, s_num[(tracknum/10)%10], NUM_W, NUM_H);
-    vramblit(vram, NUM_X+NUM_W*1, TRACK_H_S*i+1, s_num[tracknum%10], NUM_W, NUM_H);
 
     fmdsp_putline("TRACK.", vram, &font_fmdsp_small, 1, TRACK_H_S*i+6, 1, true);
     vramblit(vram, KEY_LEFT_X, TRACK_H_S*i+KEY_Y, s_key_left + KEY_LEFT_S_OFFSET, KEY_LEFT_W, KEY_H_S);
@@ -244,9 +241,6 @@ static void fmdsp_track_init_10(struct fmdsp *fmdsp,
       break;
     }
     fmdsp_putline(track_type, vram, &font_fmdsp_small, 1, TRACK_H*i, 2, true);
-    int tracknum = track_type_table[t].num;
-    vramblit(vram, NUM_X+NUM_W*0, TRACK_H*i+1, s_num[(tracknum/10)%10], NUM_W, NUM_H);
-    vramblit(vram, NUM_X+NUM_W*1, TRACK_H*i+1, s_num[tracknum%10], NUM_W, NUM_H);
 
     fmdsp_putline("TRACK.", vram, &font_fmdsp_small, 1, TRACK_H*i+6, 1, true);
     vramblit(vram, KEY_LEFT_X, TRACK_H*i+KEY_Y, s_key_left, KEY_LEFT_W, KEY_H);
@@ -276,9 +270,19 @@ void fmdsp_vram_init(struct fmdsp *fmdsp,
   }
   vramblit(vram, PLAYING_X, PLAYING_Y,
            s_playing, PLAYING_W, PLAYING_H);
+  vramblit(vram, FILEBAR_X, PLAYING_Y,
+           s_filebar, FILEBAR_W, FILEBAR_H);
+  fmdsp_putline("MUSIC", vram, &font_fmdsp_small,
+                FILEBAR_MUSIC_X, PLAYING_Y+1, 2, false);
+  fmdsp_putline("FILE", vram, &font_fmdsp_small,
+                FILEBAR_FILE_X, PLAYING_Y+1, 2, false);
+  vramblit(vram, FILEBAR_TRI_X, FILEBAR_TRI_Y,
+           s_filebar_tri, FILEBAR_TRI_W, FILEBAR_TRI_H);
   for (int x = 74; x < PC98_W; x++) {
     vram[332*PC98_W+x] = 7;
   }
+  fmdsp_putline(work->filename, vram, &font_fmdsp_medium,
+                FILEBAR_FILENAME_X, PLAYING_Y, 2, false);
   int height = (16+3)*3+8;
   for (int y = PC98_H-height; y < PC98_H; y++) {
     for (int x = 0; x < PC98_W; x++) {
@@ -390,6 +394,9 @@ static void fmdsp_track_info_ssg(const struct opna *opna,
       vram[(y+2+py)*PC98_W+(x+px*2)] = color;
     }
   }
+  char strbuf[5];
+  snprintf(strbuf, sizeof(strbuf), " %03X", opna_ssg_tone_period(&opna->ssg, chi));
+  fmdsp_putline(strbuf, vram, &font_fmdsp_small, x+170, y, 1, false);
 }
 
 static void fmdsp_track_info_adpcm(const struct opna *opna,
@@ -447,9 +454,19 @@ static void fmdsp_track_without_key(
   struct fmdsp *fmdsp,
   const struct fmdriver_work *work,
   const struct fmdriver_track_status *track,
+  int t,
   int y,
   uint8_t *vram
 ) {
+  int tracknum = track_type_table[t].num;
+  const uint8_t *num1 = s_num[(tracknum/10)%10];
+  const uint8_t *num2 = s_num[tracknum%10];
+  if (fmdsp->masked[t]) {
+    num1 = num2 = s_num[10];
+  }
+  
+  vramblit(vram, NUM_X+NUM_W*0, y+1, num1, NUM_W, NUM_H);
+  vramblit(vram, NUM_X+NUM_W*1, y+1, num2, NUM_W, NUM_H);
   const char *track_info1 = "    ";
   char track_info2[5] = "    ";
   if (track->playing || track->info == FMDRIVER_TRACK_INFO_SSGEFF) {
@@ -502,8 +519,8 @@ static void fmdsp_track_without_key(
   snprintf(numbuf, sizeof(numbuf), "%03d", track->volume);
   fmdsp_putline(numbuf, vram, &font_fmdsp_small, TDETAIL_VL_V_X, y+6, 1, true);
   fmdsp_putline("GT:", vram, &font_fmdsp_small, TDETAIL_GT_X, y+6, 1, true);
-  //snprintf(numbuf, sizeof(numbuf), "%03d", track->tonenum);
-  //fmdsp_putline(numbuf, vram, &font_fmdsp_small, TDETAIL_GT_V_X, y+6, 1, true);
+  snprintf(numbuf, sizeof(numbuf), "%03d", track->gate);
+  fmdsp_putline(numbuf, vram, &font_fmdsp_small, TDETAIL_GT_V_X, y+6, 1, true);
   fmdsp_putline("DT:", vram, &font_fmdsp_small, TDETAIL_DT_X, y+6, 1, true);
   if (track->detune) {
     snprintf(numbuf, sizeof(numbuf), "%+04d", track->detune);
@@ -513,7 +530,7 @@ static void fmdsp_track_without_key(
   fmdsp_putline(numbuf, vram, &font_fmdsp_small, TDETAIL_DT_V_X, y+6, 1, true);
   fmdsp_putline("M:", vram, &font_fmdsp_small, TDETAIL_M_X, y+6, 1, true);
   fmdsp_putline(track->status, vram, &font_fmdsp_small, TDETAIL_M_V_X, y+6, 1, true);
-  uint8_t color_on = ((track->key == 0xff) || track->masked) ? 7 : 2;
+  uint8_t color_on = ((track->key == 0xff) || fmdsp->masked[t]) ? 7 : 2;
   if (!track->playing) color_on = 3;
   vramblit_color(vram, BAR_L_X, y+BAR_Y,
                   s_bar_l, BAR_L_W, BAR_H, color_on);
@@ -563,7 +580,7 @@ static void fmdsp_update_10(struct fmdsp *fmdsp,
         fmdsp_track_info_adpcm(opna, 320, TRACK_H*it+6, vram);
       }
     }
-    fmdsp_track_without_key(fmdsp, work, track, TRACK_H*it, vram);
+    fmdsp_track_without_key(fmdsp, work, track, t, TRACK_H*it, vram);
     for (int i = 0; i < KEY_OCTAVES; i++) {
       vramblit(vram, KEY_X+KEY_W*i, TRACK_H*it+KEY_Y,
                 s_key_bg, KEY_W, KEY_H);
@@ -576,7 +593,7 @@ static void fmdsp_update_10(struct fmdsp *fmdsp,
         if (track->key >> 4 == i) {
           vramblit_key(vram, KEY_X+KEY_W*i, TRACK_H*it+KEY_Y,
                       s_key_mask, KEY_W, KEY_H,
-                      track->key & 0xf, track->masked ? 8 : 6);
+                      track->key & 0xf, fmdsp->masked[t] ? 8 : 6);
         }
       }
     }
@@ -617,7 +634,7 @@ static void fmdsp_update_13(struct fmdsp *fmdsp,
         fmdsp_track_info_adpcm(opna, 320, TRACK_H_S*it, vram);
       }
     }
-    fmdsp_track_without_key(fmdsp, work, track, TRACK_H_S*it, vram);
+    fmdsp_track_without_key(fmdsp, work, track, t, TRACK_H_S*it, vram);
     for (int i = 0; i < KEY_OCTAVES; i++) {
       vramblit(vram, KEY_X+KEY_W*i, TRACK_H_S*it+KEY_Y,
                 s_key_bg + KEY_S_OFFSET, KEY_W, KEY_H_S);
@@ -630,7 +647,7 @@ static void fmdsp_update_13(struct fmdsp *fmdsp,
         if (track->key >> 4 == i) {
           vramblit_key(vram, KEY_X+KEY_W*i, TRACK_H_S*it+KEY_Y,
                       s_key_mask + KEY_S_OFFSET, KEY_W, KEY_H_S,
-                      track->key & 0xf, track->masked ? 8 : 6);
+                      track->key & 0xf, fmdsp->masked[t] ? 8 : 6);
         }
       }
     }
@@ -648,6 +665,20 @@ void fmdsp_update(struct fmdsp *fmdsp,
       fmdsp_track_init_10(fmdsp, vram);
     }
   }
+  unsigned mask = opna_get_mask(opna);
+  fmdsp->masked[FMDRIVER_TRACK_FM_1] = mask & LIBOPNA_CHAN_FM_1;
+  fmdsp->masked[FMDRIVER_TRACK_FM_2] = mask & LIBOPNA_CHAN_FM_2;
+  fmdsp->masked[FMDRIVER_TRACK_FM_3] = mask & LIBOPNA_CHAN_FM_3;
+  fmdsp->masked[FMDRIVER_TRACK_FM_3_EX_1] = mask & LIBOPNA_CHAN_FM_3;
+  fmdsp->masked[FMDRIVER_TRACK_FM_3_EX_2] = mask & LIBOPNA_CHAN_FM_3;
+  fmdsp->masked[FMDRIVER_TRACK_FM_3_EX_3] = mask & LIBOPNA_CHAN_FM_3;
+  fmdsp->masked[FMDRIVER_TRACK_FM_4] = mask & LIBOPNA_CHAN_FM_4;
+  fmdsp->masked[FMDRIVER_TRACK_FM_5] = mask & LIBOPNA_CHAN_FM_5;
+  fmdsp->masked[FMDRIVER_TRACK_FM_6] = mask & LIBOPNA_CHAN_FM_6;
+  fmdsp->masked[FMDRIVER_TRACK_SSG_1] = mask & LIBOPNA_CHAN_SSG_1;
+  fmdsp->masked[FMDRIVER_TRACK_SSG_2] = mask & LIBOPNA_CHAN_SSG_2;
+  fmdsp->masked[FMDRIVER_TRACK_SSG_3] = mask & LIBOPNA_CHAN_SSG_3;
+  fmdsp->masked[FMDRIVER_TRACK_ADPCM] = mask & LIBOPNA_CHAN_ADPCM;
   fmdsp->style_updated = false;
   if (fmdsp->style == FMDSP_DISPSTYLE_13) {
     fmdsp_update_13(fmdsp, work, opna, vram);

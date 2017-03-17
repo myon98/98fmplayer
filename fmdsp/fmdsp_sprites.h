@@ -44,6 +44,16 @@ enum {
   PLAYING_Y = 324,
   PLAYING_W = 72,
   PLAYING_H = 9,
+  FILEBAR_X = 80,
+  FILEBAR_MUSIC_X = FILEBAR_X + 5,
+  FILEBAR_FILE_X = FILEBAR_MUSIC_X + 26,
+  FILEBAR_W = 2,
+  FILEBAR_H = 7,
+  FILEBAR_TRI_X = FILEBAR_FILE_X + 22,
+  FILEBAR_TRI_Y = PLAYING_Y+4,
+  FILEBAR_TRI_W = 3,
+  FILEBAR_TRI_H = 3,
+  FILEBAR_FILENAME_X = FILEBAR_TRI_X + 8,
 };
 
 enum {
@@ -188,7 +198,7 @@ static const uint8_t s_palettes[PALETTE_NUM][FMDSP_PALETTE_COLORS*3] = {
 #undef LCD
 
 
-static const uint8_t s_num[10][NUM_W*NUM_H] = {
+static const uint8_t s_num[11][NUM_W*NUM_H] = {
   {
     0, 0, 0, 2, 2, 2, 0, 0,
     0, 0, 2, 0, 0, 0, 3, 0,
@@ -318,6 +328,19 @@ static const uint8_t s_num[10][NUM_W*NUM_H] = {
     0, 3, 0, 0, 0, 2, 0, 0,
     0, 3, 0, 0, 0, 2, 0, 0,
     0, 0, 2, 2, 2, 0, 0, 0,
+  },
+  {
+    0, 0, 0, 3, 3, 3, 0, 0,
+    0, 0, 3, 0, 0, 0, 3, 0,
+    0, 0, 3, 0, 0, 0, 3, 0,
+    0, 0, 3, 0, 0, 0, 3, 0,
+    0, 0, 3, 0, 0, 0, 3, 0,
+    0, 0, 0, 3, 3, 0, 0, 0,
+    0, 3, 0, 0, 0, 3, 0, 0,
+    0, 3, 0, 0, 0, 3, 0, 0,
+    0, 3, 0, 0, 0, 3, 0, 0,
+    0, 3, 0, 0, 0, 3, 0, 0,
+    0, 0, 3, 3, 3, 0, 0, 0,
   }
 };
 static const uint8_t s_key_bg[KEY_W*KEY_H] = {
@@ -418,4 +441,19 @@ static const uint8_t s_playing[PLAYING_W*PLAYING_H] = {
   2,2,0,0,0,0,0,0,0,0,2,2,2,2,2,2,0,2,2,0,0,0,0,2,2,0,0,0,0,2,2,0,0,0,0,2,2,0,2,2,0,0,0,0,2,2,0,0,2,2,2,2,2,2,0,0,0,2,2,0,0,2,2,0,0,2,2,0,0,2,2,0,
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
   2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+};
+static const uint8_t s_filebar[FILEBAR_W*FILEBAR_H] = {
+  2, 2,
+  2, 2,
+  2, 2,
+  2, 2,
+  2, 2,
+  2, 2,
+  2, 2,
+};
+
+static const uint8_t s_filebar_tri[FILEBAR_TRI_W*FILEBAR_TRI_H] = {
+  2, 0, 0,
+  2, 2, 0,
+  2, 2, 2,
 };
