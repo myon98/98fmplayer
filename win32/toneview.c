@@ -206,8 +206,9 @@ static void on_timer(HWND hwnd, UINT id) {
         g.strbuf_w[i] = g.strbuf[i];
       }
       DefWindowProc(g.tonelabel[c], WM_SETTEXT, 0, (LPARAM)g.strbuf_w);
+      RedrawWindow(g.tonelabel[c], 0, 0, RDW_ERASE | RDW_INVALIDATE);
     }
-    RedrawWindow(hwnd, 0, 0, RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN);
+//     RedrawWindow(hwnd, 0, 0, RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN);
     InvalidateRect(hwnd, 0, FALSE);
   }
 }
