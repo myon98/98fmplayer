@@ -36,6 +36,7 @@ static struct {
   HFONT font_mono;
   HWND checkbox;
   HWND formatlist;
+  WNDPROC static_defproc;
 } g = {
   .normalize = true
 };
@@ -94,6 +95,35 @@ static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
   }
 }
 
+static void static_on_paint(HWND hwnd) {
+  PAINTSTRUCT ps;
+  RECT cr;
+  GetClientRect(hwnd, &cr);
+  HDC hdc = BeginPaint(hwnd, &ps);
+  HDC mdc = CreateCompatibleDC(hdc);
+  HBITMAP bitmap = CreateCompatibleBitmap(hdc, cr.right, cr.bottom);
+  SelectObject(mdc, bitmap);
+  HBRUSH brush = GetSysColorBrush(COLOR_BTNFACE);
+  FillRect(mdc, &cr, brush);
+  CallWindowProc(g.static_defproc, hwnd, WM_PRINTCLIENT, (WPARAM)mdc, 0);
+  BitBlt(hdc, 0, 0, cr.right, cr.bottom, mdc, 0, 0, SRCCOPY);
+  SelectObject(mdc, 0);
+  DeleteObject(bitmap);
+  DeleteDC(mdc);
+  EndPaint(hwnd, &ps);
+}
+
+static LRESULT static_wndproc(
+  HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
+) {
+  switch (msg) {
+  case WM_ERASEBKGND:
+    return 1;
+  HANDLE_MSG(hwnd, WM_PAINT, static_on_paint);
+  }
+  return CallWindowProc(g.static_defproc, hwnd, msg, wParam, lParam);
+}
+
 static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
   RECT wr;
   wr.left = 0;
@@ -142,6 +172,8 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
                                  WS_VISIBLE | WS_CHILD,
                                  10, 40 + (TONELABEL_H+5)*i, TONELABEL_W, TONELABEL_H,
                                  hwnd, 0, g.hinst, 0);
+    g.static_defproc = (WNDPROC)GetWindowLongPtr(g.tonelabel[i], GWLP_WNDPROC);
+    SetWindowLongPtr(g.tonelabel[i], GWLP_WNDPROC, (intptr_t)static_wndproc);
     SetWindowFont(g.tonelabel[i], g.font_mono, TRUE);
     wchar_t text[] = L"Copy (& )";
     text[7] = L'1' + i;
@@ -173,9 +205,10 @@ static void on_timer(HWND hwnd, UINT id) {
       for (int i = 0; i < FMPLAYER_TONEDATA_STR_SIZE; i++) {
         g.strbuf_w[i] = g.strbuf[i];
       }
-     // RedrawWindow(g.tonelabel[c], 0, 0, RDW_ERASE);
-      SetWindowText(g.tonelabel[c], g.strbuf_w);
+      DefWindowProc(g.tonelabel[c], WM_SETTEXT, 0, (LPARAM)g.strbuf_w);
     }
+    RedrawWindow(hwnd, 0, 0, RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN);
+    InvalidateRect(hwnd, 0, FALSE);
   }
 }
 
@@ -218,7 +251,7 @@ void show_toneview(HINSTANCE hinst, HWND parent) {
     g.toneviewer = CreateWindowEx(0,
                                   MAKEINTATOM(g.toneviewer_class),
                                   L"FMPlayer Tone Viewer",
-                                  WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+                                  WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
                                   CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                   parent, 0, g.hinst, 0);
   } else {

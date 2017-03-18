@@ -808,7 +808,7 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
   g.hinst = hinst;
   g.heap = GetProcessHeap();
   ATOM wcatom = register_class(g.hinst);
-  DWORD style = WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+  DWORD style = WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
   DWORD exStyle = 0;
   RECT wr;
   wr.left = 0;
