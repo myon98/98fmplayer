@@ -131,27 +131,42 @@ static uint8_t opna_status_libopna(struct fmdriver_work *work, bool a1) {
   return status;
 }
 
-static GFileInputStream *pvisearch(GFile *dir, const char *pvibase) {
-  // TODO: not SJIS aware
-  char pviname[8+3+2] = {0};
-  char pviname_l[8+3+2] = {0};
-  strcpy(pviname, pvibase);
-  strcat(pviname, ".PVI");
-  strcpy(pviname_l, pviname);
-  for (char *c = pviname_l; *c; c++) {
-    if (('A' <= *c) && (*c <= 'Z')) {
-      *c += ('a' - 'A');
+static GFileInputStream *pcmfilesearch(GFile *dir, const char *name) {
+  char *name_l = malloc(strlen(name));
+  if (name_l) {
+    strcpy(name_l, name);
+    // TODO: not SJIS aware
+    for (char *c = name_l; *c; c++) {
+      if (('A' <= *c) && (*c <= 'Z')) {
+        *c += ('a' - 'A');
+      }
     }
   }
-  GFile *pvifile = g_file_get_child(dir, pviname);
-  GFileInputStream *pvistream = g_file_read(pvifile, 0, 0);
-  g_object_unref(G_OBJECT(pvifile));
-  if (pvistream) return pvistream;
-  pvifile = g_file_get_child(dir, pviname_l);
-  pvistream = g_file_read(pvifile, 0, 0);
-  g_object_unref(G_OBJECT(pvifile));
-  if (pvistream) return pvistream;
+  GFile *file = g_file_get_child(dir, name);
+  GFileInputStream *stream = g_file_read(file, 0, 0);
+  g_object_unref(G_OBJECT(file));
+  if (stream) {
+    free(name_l);
+    return stream;
+  }
+  if (name_l) {
+    file = g_file_get_child(dir, name_l);
+    free(name_l);
+    stream = g_file_read(file, 0, 0);
+    g_object_unref(G_OBJECT(file));
+    if (stream) return stream;
+  }
   return 0;
+}
+
+static GFileInputStream *extsearch(GFile *dir, const char *base, const char *ext) {
+  char *name = malloc(strlen(base) + strlen(ext) + 1);
+  if (!name) return 0;
+  strcpy(name, base);
+  strcat(name, ext);
+  GFileInputStream *ret = pcmfilesearch(dir, name);
+  free(name);
+  return ret;
 }
 
 static bool loadpvi(struct fmdriver_work *work,
@@ -159,7 +174,7 @@ static bool loadpvi(struct fmdriver_work *work,
                     GFile *dir) {
   // no need to load, always success
   if(strlen(fmp->pvi_name) == 0) return true;
-  GFileInputStream *pvistream = pvisearch(dir, fmp->pvi_name);
+  GFileInputStream *pvistream = extsearch(dir, fmp->pvi_name, ".PVI");
   if (!pvistream) goto err;
   void *data = malloc(OPNA_ADPCM_RAM_SIZE);
   if (!data) goto err_stream;
@@ -184,7 +199,7 @@ static bool loadppzpvi(struct fmdriver_work *work,
                     GFile *dir) {
   // no need to load, always success
   if(strlen(fmp->ppz_name) == 0) return true;
-  GFileInputStream *pvistream = pvisearch(dir, fmp->ppz_name);
+  GFileInputStream *pvistream = extsearch(dir, fmp->ppz_name, ".PVI");
   if (!pvistream) goto err;
   GFileInfo *pviinfo = g_file_input_stream_query_info(
     pvistream, G_FILE_ATTRIBUTE_STANDARD_SIZE,
@@ -219,6 +234,46 @@ err_info:
   g_object_unref(pviinfo);
 err_stream:
   g_object_unref(pvistream);
+err:
+  return false;
+}
+
+static bool loadppc(struct fmdriver_work *work,
+                    struct driver_pmd *pmd,
+                    GFile *dir) {
+  // no need to load, always success
+  if(strlen(pmd->ppcfile) == 0) return true;
+  fprintf(stderr, "PPC: %s\n", pmd->ppcfile);
+  GFileInputStream *stream = extsearch(dir, pmd->ppcfile,  ".PPC");
+  if (!stream) goto err;
+  GFileInfo *info = g_file_input_stream_query_info(
+    stream, G_FILE_ATTRIBUTE_STANDARD_SIZE,
+    0, 0);
+  if (!info) goto err_stream;
+  gsize fsize;
+  {
+    goffset sfsize = g_file_info_get_size(info);
+    if (sfsize < 0) goto err_info;
+    fsize = sfsize;
+  }
+  void *data = malloc(fsize);
+  if (!data) goto err_info;
+  gsize read;
+  if (!g_input_stream_read_all(
+    G_INPUT_STREAM(stream), data, fsize, &read, 0, 0
+  )) goto err_data;
+  if (read != fsize) goto err_data;
+  if (!pmd_ppc_load(work, data, fsize)) goto err_data;
+  free(data);
+  g_object_unref(G_OBJECT(info));
+  g_object_unref(G_OBJECT(stream));
+  return true;
+err_data:
+  free(data);
+err_info:
+  g_object_unref(G_OBJECT(info));
+err_stream:
+  g_object_unref(G_OBJECT(stream));
 err:
   return false;
 }
@@ -383,6 +438,13 @@ static bool openfile(const char *uri) {
   g.work.opna = &g.opna_timer;
   g.work.ppz8 = &g.ppz8;
   g.work.ppz8_functbl = &ppz8_functbl;
+  char *disppath = g_filename_from_uri(uri, 0, 0);
+  if (disppath) {
+    strncpy(g.work.filename, disppath, sizeof(g.work.filename)-1);
+    g_free(disppath);
+  } else {
+    strncpy(g.work.filename, uri, sizeof(g.work.filename)-1);
+  }
   opna_timer_set_int_callback(&g.opna_timer, opna_int_cb, &g.work);
   opna_timer_set_mix_callback(&g.opna_timer, opna_mix_cb, &g.ppz8);
   if (driver_type == DRIVER_FMP) {
@@ -395,6 +457,11 @@ static bool openfile(const char *uri) {
     }
   } else {
     pmd_init(&g.work, &g.driver->pmd);
+    GFile *dir = g_file_get_parent(fmfile);
+    if (dir) {
+      loadppc(&g.work, &g.driver->pmd, dir);
+      g_object_unref(G_OBJECT(dir));
+    }
   }
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   g_object_unref(G_OBJECT(fmstream));

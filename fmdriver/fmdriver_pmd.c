@@ -42,6 +42,11 @@ enum {
   LFO_WF_ONESHOT
 };
 
+// 0790: PPZ8
+
+
+// 33f7: write standard
+// 341f: write extended
 // 3447
 static void pmd_reg_write(struct fmdriver_work *work,
                           struct driver_pmd *pmd,
@@ -163,7 +168,7 @@ static void pmd_reset_state(struct driver_pmd *pmd) {
   pmd->tonemask_fb_alg = false;
   pmd->adpcm_start = 0;
   pmd->adpcm_stop = 0;
-  // TODO: pmd->42c1 = 0x8000;
+  pmd->adpcm_release = 0x8000;
   pmd->ssgrhythm = 0;
   pmd->opnarhythm = 0;
   pmd->rand = 0;
@@ -211,7 +216,7 @@ static bool pmd_data_init(struct driver_pmd *pmd) {
     p->curr_note = 0xff;
     if (pi <= PMD_PART_FM_6) {
       p->vol = 108;
-      p->fm_pan_ams_pms = 0xc0;
+      p->pan = 0xc0;
       p->fm_slotmask = 0xf0;
       p->fm_tone_slotmask = 0xff;
     } else if (pi <= PMD_PART_SSG_3) {
@@ -220,7 +225,7 @@ static bool pmd_data_init(struct driver_pmd *pmd) {
       p->ssg_env_state_old = SSG_ENV_STATE_OLD_OFF;
     } else if (pi == PMD_PART_ADPCM) {
       p->vol = 128;
-      p->fm_pan_ams_pms = 0xc0;
+      p->pan = 0xc0;
     } else if (pi == PMD_PART_RHYTHM) {
       p->vol = 15;
     }
@@ -595,7 +600,7 @@ static void pmd_lfo_tick_if_needed_hlfo(
 ) {
   part->hlfo_delay = part->hlfo_delay_set;
   if (part->hlfo_delay) {
-    pmd_reg_write(work, pmd, 0xb3+pmd->proc_ch, part->fm_pan_ams_pms & 0xc0);
+    pmd_reg_write(work, pmd, 0xb3+pmd->proc_ch, part->pan & 0xc0);
   }
   // 30c0
   part->slot_delay_cnt = part->slot_delay;
@@ -1273,6 +1278,55 @@ static void pmd_note_freq_ssg(
   part->actual_freq = tonefreq;
 }
 
+// 0671
+static void pmd_note_freq_adpcm(
+  struct pmd_part *part,
+  uint8_t note
+) {
+  if ((note & 0xf) == 0xf) {
+    // 2798
+    part->actual_note = 0xff;
+    if (!part->lfof.freq && !part->lfof_b.freq) {
+      part->actual_freq = 0;
+    }
+    return;
+  }
+  part->actual_note = note;
+  static const uint16_t adpcm_tonetable[0x10] = {
+    // 0788
+    // ???
+    0x6264,
+    0x6840,
+    0x6e74,
+    0x7506,
+    0x7bfc,
+    0x835e,
+    0x8b2e,
+    0x9376,
+    0x9c3c,
+    0xa588,
+    0xaf62,
+    0xb9d0,
+    0, 0, 0, 0
+  };
+  uint8_t octave = note >> 4;
+  int cl = 5 - octave;
+  if (cl < 0) cl = 0;
+  uint16_t tonefreq = adpcm_tonetable[note & 0x0f];
+  if (octave <= 5) {
+    tonefreq >>= (5 - octave);
+  } else {
+    // 06a8
+    octave = 5;
+    if (!(tonefreq & 0x8000)) {
+      tonefreq <<= 1;
+      octave++;
+    }
+    part->actual_note = (part->actual_note & 0xf) | (octave << 4);
+  }
+  part->actual_freq = tonefreq;
+}
+
 // 14a0
 static void pmd_part_calc_gate(
   struct driver_pmd *pmd,
@@ -1464,7 +1518,7 @@ static void pmd_ssg_vol_out(
         if (part->lfof.vol) vol += part->lfo_diff;
         if (part->lfof_b.vol) vol += part->lfo_diff_b;
         lfovol += vol;
-        vol = u8s8(lfovol);
+        vol = lfovol;
         if (lfovol < 0) {
           vol = 0;
         } else if (lfovol > 0xf) {
@@ -1475,6 +1529,69 @@ static void pmd_ssg_vol_out(
   }
   // 2c0f
   work->opna_writereg(work, 0x07+pmd->proc_ch, vol);
+}
+
+// 049a
+static void pmd_adpcm_vol_out(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+) {
+  uint8_t vol = part->volume_save;
+  if (!vol) vol = part->vol;
+  
+  // 04a4
+  if (pmd->adpcm_voldown) {
+    uint8_t voldown = -pmd->adpcm_voldown;
+    vol = vol * voldown >> 8;
+  }
+  // 04b3
+  if (pmd->fadeout_vol) {
+    uint8_t fadeout = -pmd->fadeout_vol;
+    fadeout = ((uint16_t)fadeout * fadeout) >> 8;
+    vol = vol * fadeout >> 8;
+  }
+  if (vol) {
+    if (part->ssg_env_state_old == SSG_ENV_STATE_OLD_NEW) {
+      // 04d0
+      uint8_t envvol = part->ssg_env_vol;
+      if (!envvol) {
+        // 04fd
+        vol = 0;
+        // -> 053f
+      } else {
+        vol = (vol * (envvol+1)) >> 3;
+        if (vol & 1) {
+          vol >>= 1;
+          vol++;
+        } else {
+          vol >>= 1;
+        }
+      }
+    } else {
+      // 04e8
+      int newvol = vol + (part->ssg_env_vol << 4);
+      if (newvol > 0xff) newvol = 0xff;
+      if (newvol < 0) newvol = 0;
+      vol = newvol;
+    }
+    if (vol) {
+      if (part->lfof.vol || part->lfof_b.vol) {
+        int32_t lfovol = 0;
+        if (part->lfof.vol) vol += part->lfo_diff;
+        if (part->lfof_b.vol) vol += part->lfo_diff_b;
+        lfovol += vol;
+        vol = lfovol;
+        if (lfovol < 0) {
+          vol = 0;
+        } else if (lfovol > 0xff) {
+          vol = 0xff;
+        }
+      }
+    }
+  }
+  // 053f
+  work->opna_writereg(work, 0x10b, vol);
 }
 
 // 2985
@@ -1532,6 +1649,32 @@ static void pmd_ssg_freq_out(
   work->opna_writereg(work, (pmd->proc_ch-1)*2+1, freq>>8);
 }
 
+// 0620
+static void pmd_adpcm_freq_out(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+) {
+  uint16_t freq = part->actual_freq;
+  if (!freq) return;
+  freq += (unsigned)part->portamento_diff;
+  uint32_t det = 0;
+  if (part->lfof.freq || part->lfof_b.freq) {
+    // 29db
+    if (part->lfof.freq) det += part->lfo_diff;
+    if (part->lfof_b.freq) det += part->lfo_diff_b;
+    det <<= 2;
+  }
+  // 0649
+  det += part->detune;
+  int32_t newfreq = freq + u16s16(det);
+  if (newfreq > 0xffff) newfreq = 0xffff;
+  if (newfreq < 0) newfreq = 0;
+  freq = newfreq;
+  work->opna_writereg(work, 0x109, freq);
+  work->opna_writereg(work, 0x10a, freq >> 8);
+}
+
 // 2c9f
 static uint16_t pmd_part_ssg_readout(
   struct fmdriver_work *work,
@@ -1585,6 +1728,32 @@ static void pmd_part_fm_keyon(
     *slotkey &= part->slot_delay_mask;
   }
   work->opna_writereg(work, 0x28, *slotkey | (pmd->proc_ch-1) | (pmd->opna_a1<<2));
+}
+
+// 0547
+static void pmd_part_adpcm_keyon(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+) {
+  if (part->actual_note == 0xff) return;
+  work->opna_writereg(work, 0x101, 0x02);
+  work->opna_writereg(work, 0x100, 0x21);
+  work->opna_writereg(work, 0x102, pmd->adpcm_start);
+  work->opna_writereg(work, 0x103, pmd->adpcm_start >> 8);
+  work->opna_writereg(work, 0x104, pmd->adpcm_stop);
+  work->opna_writereg(work, 0x105, pmd->adpcm_stop >> 8);
+  if (!pmd->adpcm_start_loop && !pmd->adpcm_stop_loop) {
+    work->opna_writereg(work, 0x100, 0xa0);
+    work->opna_writereg(work, 0x101, part->pan | 0x02);
+  } else {
+    work->opna_writereg(work, 0x100, 0xb0);
+    work->opna_writereg(work, 0x101, part->pan | 0x02);
+    work->opna_writereg(work, 0x102, pmd->adpcm_start_loop);
+    work->opna_writereg(work, 0x103, pmd->adpcm_start_loop >> 8);
+    work->opna_writereg(work, 0x104, pmd->adpcm_stop_loop);
+    work->opna_writereg(work, 0x105, pmd->adpcm_stop_loop >> 8);
+  }
 }
 
 // 2942
@@ -1733,6 +1902,36 @@ static void pmd_part_ssg_out(
   pmd_part_loop_check(pmd, part);
 }
 
+// 01b1
+static void pmd_part_adpcm_out(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+) {
+  if (part->volume_save && part->actual_note != 0xff) {
+    if (!pmd->volume_saved) {
+      part->volume_save = 0;
+    }
+    pmd->volume_saved = false;
+  }
+  pmd_adpcm_vol_out(work, pmd, part);
+  pmd_adpcm_freq_out(work, pmd, part);
+  if (part->keystatus.off) {
+    pmd_part_adpcm_keyon(work, pmd, part);
+  }
+  part->note_proc++;
+  pmd->no_keyoff = false;
+  pmd->volume_saved = false;
+  part->keystatus.off = false;
+  part->keystatus.off_mask = false;
+  if (pmd->datalen > (part->ptr + 1)) {
+    if (pmd->data[part->ptr] == 0xfb) {
+      part->keystatus.off_mask = true;
+    }
+  }
+  pmd_part_loop_check(pmd, part);
+}
+
 // none
 static bool pmd_part_masked(
   const struct pmd_part *part
@@ -1836,6 +2035,36 @@ static void pmd_cmdff_tonenum(
     pmd->fm3ex_fb_alg = fb_alg;
     part->fb_alg = fb_alg;
   }
+}
+
+// 046c
+static void pmd_cmdff_tonenum_adpcm(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  uint8_t tonenum = pmd_part_cmdload(pmd, part);
+  part->tonenum = tonenum;
+  pmd->adpcm_start = pmd->adpcm_addr[tonenum][0];
+  pmd->adpcm_stop = pmd->adpcm_addr[tonenum][1];
+  pmd->adpcm_start_loop = 0;
+  pmd->adpcm_stop_loop = 0;
+  pmd->adpcm_release = 0x8000;
+}
+
+// 0a3c
+static void pmd() {
+  // 0790
+}
+
+// 0afd
+static void pmd_cmdff_tonenum_ppz8(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  part->tonenum = pmd_part_cmdload(pmd, part);
+  // 0a3c
 }
 
 // 22b3
@@ -2025,6 +2254,17 @@ static void pmd_cmdf4_volinc_ssg(
   if (part->vol < 0xf) part->vol++;
 }
 
+// 0421
+static void pmd_cmdf4_volinc_adpcm(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  int newvol = part->vol + 0x10;
+  if (newvol > 0xff) newvol = 0xff;
+  part->vol = newvol;
+}
+
 // 241c
 static void pmd_cmdf3_voldec_fm(
   struct fmdriver_work *work,
@@ -2043,6 +2283,17 @@ static void pmd_cmdf3_voldec_ssg(
   struct pmd_part *part
 ){
   if (part->vol) part->vol--;
+}
+
+// 0434
+static void pmd_cmdf3_voldec_adpcm(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  int newvol = part->vol - 0x10;
+  if (newvol < 0) newvol = 0;
+  part->vol = newvol;
 }
 
 // 24ea
@@ -2163,14 +2414,14 @@ static void pmd_part_set_pan(
   uint8_t pan
 ){
   uint8_t pan_ams_pms = (pan & 3) << 6;
-  pan_ams_pms |= part->fm_pan_ams_pms & 0x3f;
-  part->fm_pan_ams_pms = pan_ams_pms;
+  pan_ams_pms |= part->pan & 0x3f;
+  part->pan = pan_ams_pms;
   // 258e
   if (pmd->proc_ch == 3 && !pmd->opna_a1) {
-    pmd->parts[PMD_PART_FM_3].fm_pan_ams_pms = pan_ams_pms;
-    pmd->parts[PMD_PART_FM_3B].fm_pan_ams_pms = pan_ams_pms;
-    pmd->parts[PMD_PART_FM_3C].fm_pan_ams_pms = pan_ams_pms;
-    pmd->parts[PMD_PART_FM_3D].fm_pan_ams_pms = pan_ams_pms;
+    pmd->parts[PMD_PART_FM_3].pan = pan_ams_pms;
+    pmd->parts[PMD_PART_FM_3B].pan = pan_ams_pms;
+    pmd->parts[PMD_PART_FM_3C].pan = pan_ams_pms;
+    pmd->parts[PMD_PART_FM_3D].pan = pan_ams_pms;
   }
   // 25b6
   if (pmd_part_masked(part)) return;
@@ -2185,6 +2436,15 @@ static void pmd_cmdec_pan(
   struct pmd_part *part
 ){
   pmd_part_set_pan(work, pmd, part, pmd_part_cmdload(pmd, part));
+}
+
+// 044d
+static void pmd_cmdec_pan_adpcm(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  part->pan = pmd_part_cmdload(pmd, part) << 6;
 }
 
 // 265d
@@ -2354,8 +2614,20 @@ static void pmd_cmde3_vol_add_ssg(
   part->vol = vol;
 }
 
-// FM:  2427
-// SSG: 2440
+// 042e
+static void pmd_cmde3_vol_add_adpcm(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  int vol = part->vol + pmd_part_cmdload(pmd, part);
+  if (vol > 0xff) vol = 0xff;
+  part->vol = vol;
+}
+
+// FM:    2427
+// SSG:   2440
+// ADPCM: 043f
 static void pmd_cmde2_vol_sub(
   struct fmdriver_work *work,
   struct driver_pmd *pmd,
@@ -2373,13 +2645,13 @@ static void pmd_cmde1_ams_pms(
   struct pmd_part *part
 ){
   uint8_t pan_ams_pms = pmd_part_cmdload(pmd, part);
-  pan_ams_pms |= part->fm_pan_ams_pms & 0xc0;
-  part->fm_pan_ams_pms = pan_ams_pms;
+  pan_ams_pms |= part->pan & 0xc0;
+  part->pan = pan_ams_pms;
   if (pmd->proc_ch == 3 && !pmd->opna_a1) {
-    pmd->parts[PMD_PART_FM_3].fm_pan_ams_pms = pan_ams_pms;
-    pmd->parts[PMD_PART_FM_3B].fm_pan_ams_pms = pan_ams_pms;
-    pmd->parts[PMD_PART_FM_3C].fm_pan_ams_pms = pan_ams_pms;
-    pmd->parts[PMD_PART_FM_3D].fm_pan_ams_pms = pan_ams_pms;
+    pmd->parts[PMD_PART_FM_3].pan = pan_ams_pms;
+    pmd->parts[PMD_PART_FM_3B].pan = pan_ams_pms;
+    pmd->parts[PMD_PART_FM_3C].pan = pan_ams_pms;
+    pmd->parts[PMD_PART_FM_3D].pan = pan_ams_pms;
   }
   if (pmd_part_masked(part)) return;
   pan_ams_pms = pmd_hlfo_delay_check(part, pan_ams_pms);
@@ -2426,6 +2698,18 @@ static void pmd_cmdde_echo_init_add_ssg(
 ){
   uint8_t vol = part->vol + pmd_part_cmdload(pmd, part);
   if (vol > 0xf) vol = 0xf;
+  part->volume_save = vol+1;
+  pmd->volume_saved = true;
+}
+
+// 21ed
+static void pmd_cmdde_echo_init_add_adpcm(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  int vol = part->vol + pmd_part_cmdload(pmd, part);
+  if (vol > 0xfe) vol = 0xfe;
   part->volume_save = vol+1;
   pmd->volume_saved = true;
 }
@@ -2537,6 +2821,41 @@ static void pmd_cmdda_portamento_ssg(
   part->portamento_rem = p_rem;
   part->lfof.portamento = true;
   pmd_part_ssg_out(work, pmd, part);
+}
+
+// 03d6
+static void pmd_cmdda_portamento_adpcm(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  uint8_t note = pmd_part_cmdload(pmd, part);
+  if (pmd_part_masked(part)) return;
+  pmd_part_lfo_init_ssg(work, pmd, part, note);
+  note = pmd_part_note_transpose(part, note);
+  pmd_note_freq_adpcm(part, note);
+  uint16_t f1 = part->actual_freq;
+  uint8_t n1 = part->actual_note;
+  note = pmd_part_cmdload(pmd, part);
+  note = pmd_part_note_transpose(part, note);
+  pmd_note_freq_fm(part, note);
+  uint16_t f2 = part->actual_freq;
+  part->actual_freq = f1;
+  part->actual_note = n1;
+  int freqdiff = f2 - f1;
+  uint8_t clocks = pmd_part_cmdload(pmd, part);
+  part->len = part->len_cnt = clocks;
+  pmd_part_calc_gate(pmd, part);
+  int16_t p_add = 0;
+  int16_t p_rem = 0;
+  if (clocks) {
+    p_add = freqdiff / clocks;
+    p_rem = freqdiff % clocks;
+  }
+  part->portamento_add = p_add;
+  part->portamento_rem = p_rem;
+  part->lfof.portamento = true;
+  pmd_part_adpcm_out(work, pmd, part);
 }
 
 // 20bf
@@ -2666,6 +2985,31 @@ static void pmd_cmdcf_slotmask(
   part->proc_masked = pmd_part_masked(part);
 }
 
+// 039a
+static void pmd_cmdce_adpcm_loop(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  uint16_t diff = pmd_part_cmdload(pmd, part);
+  diff |= (uint16_t)pmd_part_cmdload(pmd, part) << 8;
+  if (!(diff & 0x80)) diff += pmd->adpcm_start;
+  else diff += pmd->adpcm_stop;
+  pmd->adpcm_start_loop = diff;
+  diff = pmd_part_cmdload(pmd, part);
+  diff |= (uint16_t)pmd_part_cmdload(pmd, part) << 8;
+  if (diff && !(diff & 0x80)) diff += pmd->adpcm_start;
+  else diff += pmd->adpcm_stop;
+  pmd->adpcm_stop_loop = diff;
+  diff = pmd_part_cmdload(pmd, part);
+  diff |= (uint16_t)pmd_part_cmdload(pmd, part) << 8;
+  if (diff != 0x8000) {
+    if (!(diff & 0x80)) diff += pmd->adpcm_start;
+    else diff += pmd->adpcm_stop;
+  }
+  pmd->adpcm_release = diff;
+}
+
 // 1e1b
 static void pmd_cmdcd_env_new(
   struct fmdriver_work *work,
@@ -2793,7 +3137,7 @@ static void pmd_fm3ex_init(
   part->actual_note = 0xff;
   part->curr_note = 0xff;
   part->vol = 0x6c;
-  part->fm_pan_ams_pms = pmd->parts[PMD_PART_FM_3].fm_pan_ams_pms;
+  part->pan = pmd->parts[PMD_PART_FM_3].pan;
   part->mask.slot = true;
 }
 
@@ -2832,27 +3176,6 @@ static void pmd_cmdc5_lfo_slotmask(
   pmd_fm3ex_mode_update_check(work, pmd, part);
 }
 
-// 1d61
-static void pmd_cmdba_lfo2_slotmask(
-  struct fmdriver_work *work,
-  struct driver_pmd *pmd,
-  struct pmd_part *part
-){
-  uint8_t mask = pmd_part_cmdload(pmd, part);
-  mask &= 0x0f;
-  if (mask) {
-    // 1d4a
-    mask <<= 4;
-    mask |= 0x0f;
-    part->vol_lfo_slotmask_b = mask;
-  } else {
-    // 1d59
-    part->vol_lfo_slotmask_b = part->fm_slotout;
-  }
-  // 1d7b
-  pmd_fm3ex_mode_update_check(work, pmd, part);
-}
-
 // 22c6
 static void pmd_cmdc4_gate_rel(
   struct fmdriver_work *work,
@@ -2875,6 +3198,21 @@ static void pmd_cmdc3_pan_ex(
   else if (data & 0x80) pan = 1;
   else pan = 2;
   pmd_part_set_pan(work, pmd, part, pan);
+}
+
+// 0458
+static void pmd_cmdc3_pan_ex_adpcm(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  uint8_t data = pmd_part_cmdload(pmd, part);
+  pmd_part_cmdload(pmd, part);
+  uint8_t pan;
+  if (!data) pan = 0xc0;
+  else if (data & 0x80) pan = 0x40;
+  else pan = 0x80;
+  part->pan = pan;
 }
 
 // 2509
@@ -3102,7 +3440,7 @@ static void pmd_part_fm_unmask(
     }
   }
   // 1d23
-  pmd_reg_write(work, pmd, 0xb3+pmd->proc_ch, pmd_hlfo_delay_check(part, part->fm_pan_ams_pms));
+  pmd_reg_write(work, pmd, 0xb3+pmd->proc_ch, pmd_hlfo_delay_check(part, part->pan));
 }
 
 // 1c50
@@ -3162,6 +3500,33 @@ static void pmd_cmdc0_mml_mask_ssg(
     part->proc_masked = true;
   } else {
     // 1ca0
+    part->mask.mml = false;
+    part->proc_masked = pmd_part_masked(part);
+  }
+}
+
+// 036a
+static void pmd_cmdc0_mml_mask_adpcm(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  uint8_t data = pmd_part_cmdload(pmd, part);
+  if (data >= 2) {
+    pmd_cmdc0_extended(work, pmd, part, data);
+    return;
+  } else if (data == 1) {
+    // 0376
+    part->mask.mml = false;
+    bool masked = pmd_part_masked(part);
+    part->mask.mml = true;
+    if (!masked) {
+      work->opna_writereg(work, 0x101, 0x02);
+      work->opna_writereg(work, 0x100, 0x01);
+    }
+    part->proc_masked = true;
+  } else {
+    // 0390
     part->mask.mml = false;
     part->proc_masked = pmd_part_masked(part);
   }
@@ -3251,6 +3616,27 @@ static void pmd_cmdbb_lfo2_ext(
   pmd_part_lfo_flip(part);
   pmd_cmdca_lfo_ext(work, pmd, part);
   pmd_part_lfo_flip(part);
+}
+
+// 1d61
+static void pmd_cmdba_lfo2_slotmask(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  uint8_t mask = pmd_part_cmdload(pmd, part);
+  mask &= 0x0f;
+  if (mask) {
+    // 1d4a
+    mask <<= 4;
+    mask |= 0x0f;
+    part->vol_lfo_slotmask_b = mask;
+  } else {
+    // 1d59
+    part->vol_lfo_slotmask_b = part->fm_slotout;
+  }
+  // 1d7b
+  pmd_fm3ex_mode_update_check(work, pmd, part);
 }
 
 // 246e
@@ -3378,6 +3764,31 @@ static void pmd_cmdb5_slot_delay(
   part->slot_delay_mask = data;
   part->slot_delay = pmd_part_cmdload(pmd, part);
   part->slot_delay_cnt = part->slot_delay;
+}
+
+// 099f
+static void pmd_cmdb4_ppz8_init(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  for (int i = 0; i < 8; i++) {
+    uint16_t ptr = pmd_part_cmdload(pmd, part);
+    ptr |= (uint16_t)pmd_part_cmdload(pmd, part) << 8;
+    if (!ptr) continue;
+    struct pmd_part *ppzpart = &pmd->parts[PMD_PART_PPZ_1+i];
+    ppzpart->ptr = ptr;
+    ppzpart->len = ppzpart->len_cnt = 1;
+    ppzpart->keystatus.off = true;
+    ppzpart->keystatus.off_mask = true;
+    ppzpart->md_cnt = 0xff;
+    ppzpart->md_cnt_set = 0xff;
+    ppzpart->md_cnt_b = 0xff;
+    ppzpart->md_cnt_set_b = 0xff;
+    ppzpart->actual_note = 0xff;
+    ppzpart->vol = 0x80;
+    ppzpart->pan = 5;
+  }
 }
 
 // 22bc
@@ -3657,6 +4068,92 @@ static const pmd_cmd_func pmd_cmd_table_rhythm[PMD_CMD_CNT] = {
   pmd_cmd_null_1
 };
 
+static const pmd_cmd_func pmd_cmd_table_adpcm[PMD_CMD_CNT] = {
+  pmd_cmdff_tonenum_adpcm,
+  pmd_cmdfe_gate_abs,
+  pmd_cmdfd_vol,
+  pmd_cmdfc_tempo,
+  pmd_cmdfb_tie,
+  pmd_cmdfa_d5_det,
+  pmd_cmdf9_repeat_reset,
+  pmd_cmdf8_repeat,
+  pmd_cmdf7_repeat_exit,
+  pmd_cmdf6_set_loop,
+  pmd_cmdf5_transpose,
+  pmd_cmdf4_volinc_adpcm,
+  pmd_cmdf3_voldec_adpcm,
+  pmd_cmdf2_lfo,
+  pmd_cmdf1_lfo_switch,
+  pmd_cmdf0_env_old,
+  pmd_cmdef_poke,
+  pmd_cmd_null_1,
+  pmd_cmd_null_1,
+  pmd_cmdec_pan_adpcm,
+  pmd_cmdeb_opnarhythm,
+  pmd_cmdea_opnarhythm_il,
+  pmd_cmde9_opnarhythm_pan,
+  pmd_cmde8_opnarhythm_tl,
+  pmd_cmde7_transpose_rel,
+  pmd_cmde6_opnarhythm_tl_rel,
+  pmd_cmde5_opnarhythm_il_rel,
+  pmd_cmd_null_1,
+  pmd_cmde3_vol_add_adpcm,
+  pmd_cmde2_vol_sub,
+  pmd_cmde1_ams_pms,
+  pmd_cmde0_hlfo,
+  pmd_cmddf_meas_len,
+  pmd_cmdde_echo_init_add_adpcm,
+  pmd_cmddd_echo_init_sub,
+  pmd_cmddc_status1,
+  pmd_cmddb_status1_add,
+  pmd_cmdda_portamento_adpcm,
+  pmd_cmd_null_1,
+  pmd_cmd_null_1,
+  pmd_cmd_null_1,
+  pmd_cmdd6_md,
+  pmd_cmdfa_d5_det,
+  pmd_cmdd4_ssgeff,
+  pmd_cmdd3_fmeff,
+  pmd_cmdd2_fadeout,
+  pmd_cmd_null_1,
+  pmd_cmd_null_1,
+  pmd_cmd_null_1,
+  pmd_cmdce_adpcm_loop,
+  pmd_cmdcd_env_new,
+  pmd_cmd_null_1,
+  pmd_cmdcb_lfo_waveform,
+  pmd_cmdca_lfo_ext,
+  pmd_cmdc9_env_ext,
+  pmd_cmd_null_3,
+  pmd_cmd_null_3,
+  pmd_cmd_null_6,
+  pmd_cmd_null_1,
+  pmd_cmdc4_gate_rel,
+  pmd_cmdc3_pan_ex_adpcm,
+  pmd_cmdc2_lfo_delay,
+  pmd_cmd_null_0,
+  pmd_cmdc0_mml_mask_adpcm,
+  pmd_cmdbf_lfo2,
+  pmd_cmdbe_lfo2_switch,
+  pmd_cmdbd_lfo2_md,
+  pmd_cmdbc_lfo2_waveform,
+  pmd_cmdbb_lfo2_ext,
+  pmd_cmdba_lfo2_slotmask, // slotmask on ADPCM??
+  pmd_cmdb9_lfo2_delay,
+  pmd_cmd_null_2,
+  pmd_cmdb7_lfo_md_cnt,
+  pmd_cmd_null_1,
+  pmd_cmd_null_2,
+  pmd_cmdb4_ppz8_init,
+  pmd_cmdb3_gate_min,
+  pmd_cmdb2_transpose_master,
+  pmd_cmdb1_gate_rand_range
+};
+
+static const pmd_cmd_func pmd_cmd_table_ppz8[PMD_CMD_CNT] = {
+  
+};
+
 // 1857
 static void pmd_part_cmd_ssg(
   struct fmdriver_work *work,
@@ -3697,6 +4194,20 @@ static void pmd_part_cmd_rhythm(
     return;
   }
   pmd_cmd_table_rhythm[cmd^0xff](work, pmd, part);
+}
+
+// 02c6
+static void pmd_part_cmd_adpcm(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part,
+  uint8_t cmd
+) {
+  if (cmd < 0xb1) {
+    part->ptr = 0;
+    return;
+  }
+  pmd_cmd_table_adpcm[cmd^0xff](work, pmd, part);
 }
 
 // 20e8
@@ -3823,6 +4334,47 @@ static void pmd_part_proc_ssg_lfoenv(
   pmd_part_loop_check(pmd, part);
 }
 
+// 01fa
+static void pmd_part_proc_adpcm_lfoenv(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+) {
+  static const struct pmd_part_lfo_flags lfof_z;
+  pmd->lfoprocf = lfof_z;
+  pmd->lfoprocf_b = lfof_z;
+  pmd->lfoprocf.portamento = part->lfof.portamento;
+  if (part->lfof.freq || part->lfof.vol || part->lfof.sync || part->lfof.portamento ||
+      part->lfof_b.freq || part->lfof_b.vol || part->lfof_b.sync || part->lfof_b.portamento) {
+    if (part->lfof.freq || part->lfof.vol) {
+      if (pmd_lfo_tick(pmd, part)) {
+        pmd->lfoprocf.freq = part->lfof.freq;
+        pmd->lfoprocf.vol = part->lfof.vol;
+      }
+    }
+    if (part->lfof_b.freq || part->lfof_b.vol) {
+      pmd_part_lfo_flip(part);
+      if (pmd_lfo_tick(pmd, part)) {
+        pmd->lfoprocf_b.freq = part->lfof_b.freq;
+        pmd->lfoprocf_b.vol = part->lfof_b.vol;
+      }
+      pmd_part_lfo_flip(part);
+    }
+    if (pmd->lfoprocf.freq || pmd->lfoprocf.portamento || pmd->lfoprocf_b.freq) {
+      if (pmd->lfoprocf.portamento) {
+        pmd_portamento_tick(part);
+      }
+      pmd_adpcm_freq_out(work, pmd, part);
+    }
+  }
+  // 0250
+  if (pmd_ssg_env_proc(pmd, part) || pmd->lfoprocf.vol || pmd->lfoprocf_b.vol || pmd->fadeout_speed) {
+    // 049a
+    pmd_adpcm_vol_out(work, pmd, part);
+  }
+  pmd_part_loop_check(pmd, part);
+}
+
 // 16d9
 static bool pmd_part_ssg_next_masked(
   struct fmdriver_work *work,
@@ -3889,7 +4441,7 @@ static void pmd_part_proc_fm_lfo(
 ) {
   if (part->hlfo_delay) {
     if (!--part->hlfo_delay) {
-      pmd_reg_write(work, pmd, 0xb3+pmd->proc_ch, part->fm_pan_ams_pms);
+      pmd_reg_write(work, pmd, 0xb3+pmd->proc_ch, part->pan);
     }
   }
   // 1410
@@ -3992,9 +4544,9 @@ static void pmd_part_proc_fm(
         part->actual_note = 0xff;
         if (!part->loop_ptr) {
           if (part->proc_masked) {
-            pmd_part_proc_fm_lfo(work, pmd, part);
-          } else {
             pmd_part_loop_check_masked(pmd, part);
+          } else {
+            pmd_part_proc_fm_lfo(work, pmd, part);
           }
           return;
         }
@@ -4026,7 +4578,16 @@ static void pmd_part_proc_ssg(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
-  if (!part->ptr) return;
+  if (!part->ptr) {
+    // original
+    if (part->ssg_env_state_old == SSG_ENV_STATE_OLD_NEW) {
+      part->ssg_env_state_new = SSG_ENV_STATE_NEW_RR;
+    } else {
+      part->ssg_env_state_old = SSG_ENV_STATE_OLD_RR;
+    }
+    // original end
+    return;
+  }
   part->proc_masked = pmd_part_masked(part);
   
   part->len_cnt--;
@@ -4070,9 +4631,9 @@ static void pmd_part_proc_ssg(
         part->actual_note = 0xff;
         if (!part->loop_ptr) {
           if (part->proc_masked) {
-            pmd_part_proc_ssg_lfoenv(work, pmd, part);
-          } else {
             pmd_part_loop_check_masked(pmd, part);
+          } else {
+            pmd_part_proc_ssg_lfoenv(work, pmd, part);
           }
           return;
         }
@@ -4266,6 +4827,8 @@ static void pmd_part_proc_opnarhythm(
 
 // 05cf
 static void pmd_part_off_adpcm(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
   if (part->ssg_env_state_old == SSG_ENV_STATE_OLD_NEW) {
@@ -4274,11 +4837,103 @@ static void pmd_part_off_adpcm(
     if (part->ssg_env_state_old == SSG_ENV_STATE_OLD_RR) return;
   }
   // 05e2
-  // XXX
+  if (pmd->adpcm_release != 0x8000) {
+    work->opna_writereg(work, 0x100, 0x21);
+    work->opna_writereg(work, 0x102, pmd->adpcm_release);
+    work->opna_writereg(work, 0x103, pmd->adpcm_release>>8);
+    work->opna_writereg(work, 0x104, pmd->adpcm_stop);
+    work->opna_writereg(work, 0x105, pmd->adpcm_stop>>8);
+    work->opna_writereg(work, 0x100, 0xa0);
+  }
+  pmd_part_off_ssg(part);
+}
+
+// 0c0e
+static void pmd_part_off_ppz8(
+  struct pmd_part *part
+) {
+  if (part->ssg_env_state_old != SSG_ENV_STATE_OLD_NEW) {
+    if (part->ssg_env_state_old != SSG_ENV_STATE_OLD_RR) pmd_part_off_ssg(part);
+  } else {
+    if (part->ssg_env_state_new != SSG_ENV_STATE_NEW_RR) pmd_part_off_ssg(part);
+  }
 }
 
 // 0149 / 026c
 static void pmd_part_proc_adpcm(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+) {
+  if (!part->ptr) return;
+  part->proc_masked = pmd_part_masked(part);
+  part->len_cnt--;
+  if (part->proc_masked) {
+    part->keystatus.off = true;
+    part->keystatus.off_mask = true;
+  } else if (!part->keystatus.off && !part->keystatus.off_mask) {
+    //0164
+    if (part->len_cnt <= part->gate) {
+      part->keystatus.off = true;
+      part->keystatus.off_mask = true;
+      pmd_part_off_adpcm(work, pmd, part);
+    }
+  }
+  // 0170 / 0273
+  if (part->len_cnt) {
+    if (part->proc_masked) {
+      pmd_part_loop_check(pmd, part);
+    } else {
+      pmd_part_proc_adpcm_lfoenv(work, pmd, part);
+    }
+    return;
+  }
+  // PCM effect not implemented
+  // 0177
+  part->lfof.portamento = false;
+  for (;;) {
+    // 017b / 029a
+    uint8_t cmd = pmd_part_cmdload(pmd, part);
+    if (cmd & 0x80) {
+      if (cmd != 0x80) {
+        pmd_part_cmd_adpcm(work, pmd, part, cmd);
+        if (cmd == 0xda && !pmd_part_masked(part)) return;
+      } else {
+        // 0187
+        part->ptr = 0;
+        part->loop.looped = true;
+        part->loop.ended = true;
+        part->actual_note = 0xff;
+        if (!part->loop_ptr) {
+          if (part->proc_masked) {
+            pmd_part_loop_check_masked(pmd, part);
+          } else {
+            pmd_part_proc_adpcm_lfoenv(work, pmd, part);
+          }
+          return;
+        }
+        part->ptr = part->loop_ptr;
+        part->loop.ended = false;
+      }
+    } else {
+      // 01a1 / 02a1
+      if (part->proc_masked) {
+        pmd_part_proc_note_masked(work, pmd, part);
+      } else {
+        pmd_part_lfo_init_ssg(work, pmd, part, cmd);
+        cmd = pmd_part_note_transpose(part, cmd);
+        pmd_note_freq_adpcm(part, cmd);
+        part->len = part->len_cnt = pmd_part_cmdload(pmd, part);
+        pmd_part_calc_gate(pmd, part);
+        pmd_part_adpcm_out(work, pmd, part);
+      }
+      return;
+    }
+  }
+}
+
+// 079b / 08be
+static void pmd_part_proc_ppz8(
   struct fmdriver_work *work,
   struct driver_pmd *pmd,
   struct pmd_part *part
@@ -4288,21 +4943,31 @@ static void pmd_part_proc_adpcm(
   part->proc_masked = pmd_part_masked(part);
   part->len_cnt--;
   if (!part->keystatus.off && !part->keystatus.off_mask) {
+    // 07b6
     if (part->len_cnt <= part->gate) {
       part->keystatus.off = true;
       part->keystatus.off_mask = true;
-      // TODO: 05cf;
+      pmd_part_off_ppz8(work, pmd, part);
+    }
+  }
+  // 07c2
+  if (part->len_cnt) {
+    // 084c
+  }
+  part->lfof.portamento = false;
+  for (;;) {
+    // 07cd
+    uint8_t cmd = pmd_part_cmdload(pmd, part);
+    if (cmd & 0x80) {
+      if (cmd != 0x80) {
+        pmd_part_cmd_adpcm(work, pmd, part, cmd);
+        if (cmd == 0xda && !pmd_part_masked(part)) return;
+      } else {
+        // 0187
+      }
     }
   }
   */
-}
-
-// 079b
-static void pmd_part_proc_ppz8(
-  struct fmdriver_work *work,
-  struct driver_pmd *pmd,
-  struct pmd_part *part
-) {
 }
 
 // 11fd
@@ -4533,7 +5198,8 @@ static void pmd_work_status_update(
       }
       break;
     case PART_TYPE_ADPCM:
-      track->playing = false;
+      //track->playing = false;
+      break;
     }
   }
   work->ssg_noise_freq = pmd->ssg_noise_freq_wrote;
@@ -4643,6 +5309,10 @@ const char *pmd_get_memo(
 void pmd_filenamecopy(char *dest, const char *src) {
   int i;
   for (i = 0; i < (PMD_FILENAMELEN+1); i++) {
+    if (src[i] == '.') {
+      dest[i] = 0;
+      return;
+    }
     dest[i] = src[i];
     if (!src[i]) return;
   }
@@ -4693,10 +5363,37 @@ bool pmd_ppc_load(
   struct fmdriver_work *work,
   uint8_t *data, size_t datalen
 ) {
+  struct driver_pmd *pmd = (struct driver_pmd *)work->driver;
   if (datalen < PPC_HEADER_SIZE) return false;
   const char *header = "ADPCM DATA for  PMD ver.4.4-  ";
   for (int i = 0; i < 30; i++) {
     if (data[i] != (uint8_t)header[i]) return false;
   }
+  for (int i = 0; i < 256; i++) {
+    pmd->adpcm_addr[i][0] = read16le(&data[32+4*i+0]);
+    pmd->adpcm_addr[i][1] = read16le(&data[32+4*i+2]);
+  }
   
+  work->opna_writereg(work, 0x100, 0x01);
+  work->opna_writereg(work, 0x110, 0x13);
+  work->opna_writereg(work, 0x110, 0x80);
+  work->opna_writereg(work, 0x100, 0x60);
+  work->opna_writereg(work, 0x101, 0x02);
+  work->opna_writereg(work, 0x102, 0x00);
+  work->opna_writereg(work, 0x103, 0x00);
+  work->opna_writereg(work, 0x104, 0xff);
+  work->opna_writereg(work, 0x105, 0xff);
+  work->opna_writereg(work, 0x10c, 0xff);
+  work->opna_writereg(work, 0x10d, 0xff);
+
+  for (int i = 0; i < 0x4c0; i++) {
+    work->opna_writereg(work, 0x108, 0);
+  }
+  
+  for (size_t i = PPC_HEADER_SIZE; i < datalen; i++) {
+    work->opna_writereg(work, 0x108, data[i]);
+  }
+
+  work->opna_writereg(work, 0x110, 0x0c);
+  work->opna_writereg(work, 0x100, 0x01);
 }

@@ -116,7 +116,7 @@ struct pmd_part {
     bool env;
   } flagext, flagext_b;
   // 002f
-  uint8_t fm_pan_ams_pms;
+  uint8_t pan;
   // 0030
   uint8_t ssg_mix;
   // 0031
@@ -310,7 +310,12 @@ struct driver_pmd {
   } loop;
   // 42ba
   bool ppsdrv_enabled;
+  // 42bd
+  uint16_t adpcm_start_loop;
+  // 42bf
+  uint16_t adpcm_stop_loop;
   // 42c1
+  uint16_t adpcm_release;
   // 42c3
   // timera_cnt sampled at timerb
   uint8_t timera_cnt_b;
@@ -441,6 +446,9 @@ struct driver_pmd {
   uint8_t ppz8_voldown_orig;
   // 43ce
   struct pmd_part parts[PMD_PART_NUM];
+
+  // 4c9e
+  uint16_t adpcm_addr[256][2];
 
   bool ssgeff_tone_mix;
   bool ssgeff_noise_mix;
