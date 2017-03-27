@@ -1,5 +1,6 @@
 #include "opnatimer.h"
 #include "opna.h"
+#include "oscillo/oscillo.h"
 
 enum {
   TIMERA_BITS = 10,
@@ -65,9 +66,12 @@ void opna_timer_writereg(struct opna_timer *timer, unsigned reg, unsigned val) {
     }
   }
 }
-#include <stdio.h>
-#include <stdlib.h>
+
 void opna_timer_mix(struct opna_timer *timer, int16_t *buf, unsigned samples) {
+  opna_timer_mix_oscillo(timer, buf, samples, 0);
+}
+
+void opna_timer_mix_oscillo(struct opna_timer *timer, int16_t *buf, unsigned samples, struct oscillodata *oscillo) {
   do {
     unsigned generate_samples = samples;
     if (timer->timerb_enable && timer->timerb_load) {
@@ -82,7 +86,7 @@ void opna_timer_mix(struct opna_timer *timer, int16_t *buf, unsigned samples) {
         generate_samples = timera_samples;
       }
     }
-    opna_mix(timer->opna, buf, generate_samples);
+    opna_mix_oscillo(timer->opna, buf, generate_samples, oscillo);
     if (timer->mix_cb) {
       timer->mix_cb(timer->mix_userptr, buf, generate_samples);
     }

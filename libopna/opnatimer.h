@@ -37,6 +37,8 @@ void opna_timer_set_mix_callback(struct opna_timer *timer,
                                  opna_timer_mix_cb_t func, void *userptr);
 void opna_timer_writereg(struct opna_timer *timer, unsigned reg, unsigned val);
 void opna_timer_mix(struct opna_timer *timer, int16_t *buf, unsigned samples);
+struct oscillodata;
+void opna_timer_mix_oscillo(struct opna_timer *timer, int16_t *buf, unsigned samples, struct oscillodata *oscillo);
 
 #ifdef __cplusplus
 }

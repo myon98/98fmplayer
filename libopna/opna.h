@@ -30,6 +30,10 @@ enum {
   LIBOPNA_CHAN_ADPCM = 0x8000,
 };
 
+enum {
+  LIBOPNA_OSCILLO_TRACK_COUNT = 11
+};
+
 struct opna {
   struct opna_fm fm;
   struct opna_ssg ssg;
@@ -43,6 +47,8 @@ void opna_reset(struct opna *opna);
 void opna_writereg(struct opna *opna, unsigned reg, unsigned val);
 unsigned opna_readreg(const struct opna *opna, unsigned reg);
 void opna_mix(struct opna *opna, int16_t *buf, unsigned samples);
+struct oscillodata;
+void opna_mix_oscillo(struct opna *opna, int16_t *buf, unsigned samples, struct oscillodata *oscillo);
 unsigned opna_get_mask(const struct opna *opna);
 void opna_set_mask(struct opna *opna, unsigned mask);
 

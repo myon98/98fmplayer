@@ -88,7 +88,8 @@ struct opna_fm {
 };
 
 void opna_fm_reset(struct opna_fm *fm);
-void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples);
+struct oscillodata;
+void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples, struct oscillodata *oscillo, unsigned offset);
 void opna_fm_writereg(struct opna_fm *fm, unsigned reg, unsigned val);
 
 //

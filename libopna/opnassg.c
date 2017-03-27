@@ -1,4 +1,5 @@
 #include "opnassg.h"
+#include "oscillo/oscillo.h"
 /*
 static const float voltable[32] = {
   0.0f,           0.0f,           0x1.ae89f9p-8f, 0x1.000000p-7f,
@@ -126,10 +127,12 @@ static bool opna_ssg_tone_out(const struct opna_ssg *ssg, int chan) {
   return (ssg->ch[chan].out || (reg & 0x1)) && ((ssg->lfsr & 1) || (reg & 0x8));
 }
 
+#if 0
 static bool opna_ssg_tone_silent(const struct opna_ssg *ssg, int chan) {
   unsigned reg = ssg->regs[0x7] >> chan;
   return (reg & 0x1) && (reg & 0x8);
 }
+#endif
 
 static int opna_ssg_noise_period(const struct opna_ssg *ssg) {
   return ssg->regs[0x6] & 0x1f;
@@ -149,6 +152,10 @@ int opna_ssg_channel_level(const struct opna_ssg *ssg, int ch) {
        : (opna_ssg_tone_volume(ssg, ch) << 1) + 1;
 }
 
+#define COEFF 0x3fff
+#define COEFFSH 14
+
+// 3 samples per frame
 void opna_ssg_generate_raw(struct opna_ssg *ssg, int16_t *buf, int samples) {
   for (int i = 0; i < samples; i++) {
     if (((++ssg->noise_counter) >> 1) >= opna_ssg_noise_period(ssg)) {
@@ -173,31 +180,38 @@ void opna_ssg_generate_raw(struct opna_ssg *ssg, int16_t *buf, int samples) {
       }
     }
 
-    int16_t out = 0;
+    //int16_t out = 0;
     for (int ch = 0; ch < 3; ch++) {
+      buf[i*3+ch] = 0;
       if (++ssg->ch[ch].tone_counter >= opna_ssg_tone_period(ssg, ch)) {
         ssg->ch[ch].tone_counter = 0;
         ssg->ch[ch].out = !ssg->ch[ch].out;
       }
-      if (ssg->mask & (1<<ch)) continue;
 #if 1
-      // may output DC offset
       // YMF288 seems to disable output when 0 <= Tp < 8
+      int32_t previntmp = 0;
       if (opna_ssg_tone_out(ssg, ch)) {
         int level = opna_ssg_chan_env(ssg, ch)
           ? opna_ssg_env_level(ssg)
           : (opna_ssg_tone_volume(ssg, ch) << 1) + 1;
-        out += voltable[level];
+        //out += voltable[level];
+        previntmp = voltable[level]/2;
       }
+      previntmp *= COEFF;
+      ssg->prevout[ch] = previntmp - ssg->previn[ch] + ((((int64_t)COEFF)*ssg->prevout[ch]) >> COEFFSH);
+      ssg->previn[ch] = previntmp;
+      buf[i*3+ch] = ssg->prevout[ch] >> COEFFSH;
+      //buf[i*3+ch] = voltable[level]/2;
 #else
       if (!opna_ssg_tone_silent(ssg, ch)) {
         int level = opna_ssg_channel_level(ssg, ch);
-        out += (opna_ssg_tone_out(ssg, ch) ? voltable[level] : -voltable[level]) / 2;
+        //out += (opna_ssg_tone_out(ssg, ch) ? voltable[level] : -voltable[level]) / 2;
+        buf[i*3+ch] = (opna_ssg_tone_out(ssg, ch) ? voltable[level] : -voltable[level]) / 4;
       }
 #endif
       
     }
-    buf[i] = out / 2;
+    //buf[i] = out / 2;
   }
 }
 
@@ -205,27 +219,46 @@ void opna_ssg_generate_raw(struct opna_ssg *ssg, int16_t *buf, int samples) {
 
 void opna_ssg_mix_55466(
   struct opna_ssg *ssg, struct opna_ssg_resampler *resampler,
-  int16_t *buf, int samples) {
+  int16_t *buf, int samples,
+  struct oscillodata *oscillo, unsigned offset
+) {
+  if (oscillo) {
+    for (unsigned c = 0; c < 3; c++) {
+      unsigned period = (opna_ssg_tone_period(ssg, c) << OSCILLO_OFFSET_SHIFT) * 2 * 32 / 144;
+      if (period) {
+        oscillo[c].offset += (samples << OSCILLO_OFFSET_SHIFT);
+        oscillo[c].offset %= period;
+      } else {
+        oscillo[c].offset = 0;
+      }
+    }
+  }
   for (int i = 0; i < samples; i++) {
     {
       int ssg_samples = ((resampler->index + 9)>>1) - ((resampler->index)>>1);
-      int16_t ssgbuf[5];
+      int16_t ssgbuf[15];
       opna_ssg_generate_raw(ssg, ssgbuf, ssg_samples);
       for (int j = 0; j < ssg_samples; j++) {
-        resampler->buf[BUFINDEX(j)] = ssgbuf[j];
+        resampler->buf[BUFINDEX(j)*3+0] = ssgbuf[j*3+0];
+        resampler->buf[BUFINDEX(j)*3+1] = ssgbuf[j*3+1];
+        resampler->buf[BUFINDEX(j)*3+2] = ssgbuf[j*3+2];
       }
       resampler->index += 9;
     }
     int32_t sample = 0;
-    for (int j = 0; j < SINCTABLELEN; j++) {
-      unsigned sincindex = j*2;
-      if (!(resampler->index&1)) sincindex++;
-      bool sincsign = sincindex & (1<<(SINCTABLEBIT));
-      unsigned sincmask = ((1<<(SINCTABLEBIT))-1);
-      sincindex = (sincindex & sincmask) ^ (sincsign ? sincmask : 0);
-      sample += (resampler->buf[BUFINDEX(j)] * sinctable[sincindex])>>2;
+    for (int ch = 0; ch < 3; ch++) {
+      int32_t chsample = 0;
+      for (int j = 0; j < SINCTABLELEN; j++) {
+        unsigned sincindex = j*2;
+        if (!(resampler->index&1)) sincindex++;
+        bool sincsign = sincindex & (1<<(SINCTABLEBIT));
+        unsigned sincmask = ((1<<(SINCTABLEBIT))-1);
+        sincindex = (sincindex & sincmask) ^ (sincsign ? sincmask : 0);
+        chsample += (resampler->buf[BUFINDEX(j)*3+ch] * sinctable[sincindex])>>2;
+      }
+      if (oscillo) oscillo[ch].buf[offset+i] = chsample >> 13;
+      if (!(ssg->mask & (1<<ch))) sample += chsample;
     }
-
     sample >>= 16;
     sample *= 13000;
     sample >>= 14;

@@ -1,4 +1,5 @@
 #include "opnafm.h"
+#include "oscillo/oscillo.h"
 
 #include "opnatables.h"
 
@@ -539,7 +540,46 @@ void opna_fm_chan_env(struct opna_fm_channel *chan) {
   }
 }
 
-void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples) {
+static int gcd(int a, int b) {
+  if (a < b) {
+    int t = a;
+    a = b;
+    b = t;
+  }
+  for (;;) {
+    int r = a % b;
+    if (!r) break;
+    a = b;
+    b = r;
+  }
+  return b;
+}
+
+
+
+void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
+                 struct oscillodata *oscillo, unsigned offset) {
+  if (oscillo) {
+    for (unsigned c = 0; c < 6; c++) {
+      const struct opna_fm_channel *ch = &fm->channel[c];
+      unsigned freq = blkfnum2freq(ch->blk, ch->fnum);
+      int mul[4];
+      for (int i = 0; i < 4; i++) {
+        mul[i] = ch->slot[i].mul << 1;
+        if (!mul[i]) mul[i] = 1;
+      }
+      freq *= gcd(gcd(gcd(mul[0], mul[1]), mul[2]), mul[3]);
+      freq /= 2;
+      unsigned period = 0;
+      if (freq) period = (1u<<(20+OSCILLO_OFFSET_SHIFT)) / freq;
+      if (period) {
+        oscillo[c].offset += (samples << OSCILLO_OFFSET_SHIFT);
+        oscillo[c].offset %= period;
+      } else {
+        oscillo[c].offset = 0;
+      }
+    }
+  }
   for (unsigned i = 0; i < samples; i++) {
     if (!fm->env_div3) {
       for (int c = 0; c < 6; c++) {
@@ -554,6 +594,7 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples) {
 
     for (int c = 0; c < 6; c++) {
       int16_t o = opna_fm_chanout(&fm->channel[c]);
+      if (oscillo) oscillo[c].buf[offset+i] = o*2;
       // TODO: CSM
       if (c == 2 && fm->ch3.mode != CH3_MODE_NORMAL) {
         opna_fm_chan_phase_se(&fm->channel[c], fm);

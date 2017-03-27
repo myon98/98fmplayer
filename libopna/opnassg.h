@@ -25,10 +25,12 @@ struct opna_ssg {
   bool env_hld;
   bool env_holding;
   unsigned mask;
+  int32_t previn[3];
+  int32_t prevout[3];
 };
 
 struct opna_ssg_resampler {
-  int16_t buf[(1<<7)];
+  int16_t buf[(1<<7)*3];
   unsigned index;
 };
 
@@ -46,9 +48,10 @@ void opna_ssg_generate_raw(struct opna_ssg *ssg, int16_t *buf, int samples);
 // call to buffer written with OPNA output
 // samplerate: 7987200/144 Hz
 //            (55466.66..) Hz
+struct oscillodata;
 void opna_ssg_mix_55466(
   struct opna_ssg *ssg, struct opna_ssg_resampler *resampler,
-  int16_t *buf, int samples);
+  int16_t *buf, int samples, struct oscillodata *oscillo, unsigned offset);
 void opna_ssg_writereg(struct opna_ssg *ssg, unsigned reg, unsigned val);
 unsigned opna_ssg_readreg(const struct opna_ssg *ssg, unsigned reg);
 // channel level (0 - 31)

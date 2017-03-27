@@ -1,4 +1,6 @@
 #include "opna.h"
+#include "oscillo/oscillo.h"
+#include <string.h>
 
 void opna_reset(struct opna *opna) {
   opna_fm_reset(&opna->fm);
@@ -23,8 +25,20 @@ unsigned opna_readreg(const struct opna *opna, unsigned reg) {
 }
 
 void opna_mix(struct opna *opna, int16_t *buf, unsigned samples) {
-  opna_fm_mix(&opna->fm, buf, samples);
-  opna_ssg_mix_55466(&opna->ssg, &opna->resampler, buf, samples);
+  opna_mix_oscillo(opna, buf, samples, 0);
+}
+
+void opna_mix_oscillo(struct opna *opna, int16_t *buf, unsigned samples, struct oscillodata *oscillo) {
+  if (oscillo) {
+    for (int i = 0; i < LIBOPNA_OSCILLO_TRACK_COUNT; i++) {
+      memmove(&oscillo[i].buf[0],
+              &oscillo[i].buf[samples],
+              (OSCILLO_SAMPLE_COUNT - samples)*sizeof(oscillo[i].buf[0]));
+    }
+  }
+  unsigned offset = OSCILLO_SAMPLE_COUNT - samples;
+  opna_fm_mix(&opna->fm, buf, samples, &oscillo[0], offset);
+  opna_ssg_mix_55466(&opna->ssg, &opna->resampler, buf, samples, &oscillo[6], offset);
   opna_drum_mix(&opna->drum, buf, samples);
   opna_adpcm_mix(&opna->adpcm, buf, samples);
 }
