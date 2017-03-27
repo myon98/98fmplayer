@@ -4,9 +4,12 @@
 #include <shlwapi.h>
 #include <windowsx.h>
 #include <commctrl.h>
+#include <stdlib.h>
+#include <stdatomic.h>
 
 #include "fmdriver/fmdriver_fmp.h"
 #include "fmdriver/fmdriver_pmd.h"
+#include "common/fmplayer_file.h"
 #include "libopna/opna.h"
 #include "libopna/opnatimer.h"
 #include "fmdsp/fmdsp.h"
@@ -14,12 +17,15 @@
 #include "winfont.h"
 #include "version.h"
 #include "toneview.h"
+#include "oscillo/oscillo.h"
+#include "oscilloview.h"
 
 enum {
   ID_OPENFILE = 0x10,
   ID_PAUSE,
   ID_2X,
   ID_TONEVIEW,
+  ID_OSCILLOVIEW,
 };
 
 #define FMPLAYER_CLASSNAME L"myon_fmplayer_ym2608_win32"
@@ -35,11 +41,6 @@ enum {
 #define ENABLE_WM_DROPFILES
 // #define ENABLE_IDROPTARGET
 
-union drivers {
-  struct driver_pmd pmd;
-  struct driver_fmp fmp;
-};
-
 static struct {
   HINSTANCE hinst;
   HANDLE heap;
@@ -48,8 +49,7 @@ static struct {
   struct opna_timer opna_timer;
   struct ppz8 ppz8;
   struct fmdriver_work work;
-  union drivers *driver;
-  uint8_t *data;
+  struct fmplayer_file *fmfile;
   struct fmdsp fmdsp;
   uint8_t vram[PC98_W*PC98_H];
   struct fmdsp_font font;
@@ -57,7 +57,6 @@ static struct {
   bool font_loaded;
   void *drum_rom;
   uint8_t opna_adpcm_ram[OPNA_ADPCM_RAM_SIZE];
-  void *ppz8_buf;
   bool paused;
   HWND mainwnd;
   WNDPROC btn_defproc;
@@ -65,6 +64,8 @@ static struct {
   HWND button_2x;
   const wchar_t *lastopenpath;
   bool fmdsp_2x;
+  struct oscillodata oscillodata_audiothread[LIBOPNA_OSCILLO_TRACK_COUNT];
+  UINT mmtimer;
 } g;
 
 HWND g_currentdlg;
@@ -85,7 +86,7 @@ static void opna_writereg_libopna(struct fmdriver_work *work, unsigned addr, uns
 }
 
 static unsigned opna_readreg_libopna(struct fmdriver_work *work, unsigned addr) {
-  struct opna_timer *timer = (struct opna_timer *)work->opna;
+//  struct opna_timer *timer = (struct opna_timer *)work->opna;
   return opna_readreg(&g.opna, addr);
 }
 
@@ -101,41 +102,17 @@ static uint8_t opna_status_libopna(struct fmdriver_work *work, bool a1) {
 static void sound_cb(void *p, int16_t *buf, unsigned frames) {
   struct opna_timer *timer = (struct opna_timer *)p;
   ZeroMemory(buf, sizeof(int16_t)*frames*2);
-  opna_timer_mix(timer, buf, frames);
+  opna_timer_mix_oscillo(timer, buf, frames, g.oscillodata_audiothread);
   if (!atomic_flag_test_and_set_explicit(
       &toneview_g.flag, memory_order_acquire)) {
     tonedata_from_opna(&toneview_g.tonedata, &g.opna);
     atomic_flag_clear_explicit(&toneview_g.flag, memory_order_release);
-  }  
-}
-
-static void on_timer(HWND hwnd, UINT id) {
-  if (id == TIMER_FMDSP) {
-    InvalidateRect(hwnd, 0, FALSE);
   }
-}
-
-static HANDLE pvisearch(const wchar_t *filename, const char *pviname_a) {
-  enum {
-    WPVINAMELEN = 8*2+1+3+1,
-  };
-  wchar_t pviname[WPVINAMELEN];
-  wchar_t pvipath[MAX_PATH];
-  if (MultiByteToWideChar(932, MB_ERR_INVALID_CHARS,
-                          pviname_a, -1, pviname, WPVINAMELEN) == 0) {
-    return INVALID_HANDLE_VALUE;
+  if (!atomic_flag_test_and_set_explicit(
+    &oscilloview_g.flag, memory_order_acquire)) {
+    memcpy(oscilloview_g.oscillodata, g.oscillodata_audiothread, sizeof(oscilloview_g.oscillodata));
+    atomic_flag_clear_explicit(&oscilloview_g.flag, memory_order_release);
   }
-  lstrcat(pviname, L".PVI");
-  if (lstrlen(filename) >= MAX_PATH) return INVALID_HANDLE_VALUE;
-  lstrcpy(pvipath, filename);
-  PathRemoveFileSpec(pvipath);
-  if (lstrlen(pvipath) + lstrlen(pviname) + 1 >= MAX_PATH) {
-    return INVALID_HANDLE_VALUE;
-  }
-  lstrcat(pvipath, L"\\");
-  lstrcat(pvipath, pviname);
-  return CreateFile(pvipath, GENERIC_READ,
-                            0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 }
 
 static bool loadfontrom(void) {
@@ -207,115 +184,26 @@ err:
   return;
 }
 
-static bool loadpvi(struct fmdriver_work *work,
-                    struct driver_fmp *fmp,
-                    const wchar_t *filename) {
-  if (!fmp->pvi_name[0]) return true;
-  HANDLE pvifile = pvisearch(filename, fmp->pvi_name);
-  if (pvifile == INVALID_HANDLE_VALUE) goto err;
-  DWORD filesize = GetFileSize(pvifile, 0);
-  if (filesize == INVALID_FILE_SIZE) goto err_file;
-  void *data = HeapAlloc(g.heap, 0, filesize);
-  if (!data) goto err_file;
-  DWORD readbytes;
-  if (!ReadFile(pvifile, data, filesize, &readbytes, 0)
-      || readbytes != filesize) goto err_data;
-  if (!fmp_adpcm_load(work, data, filesize)) goto err_data;
-  HeapFree(g.heap, 0, data);
-  CloseHandle(pvifile);
-  return true;
-err_data:
-  HeapFree(g.heap, 0, data);
-err_file:
-  CloseHandle(pvifile);
-err:
-  return false;
-}
-
-static bool loadppzpvi(struct fmdriver_work *work,
-                    struct driver_fmp *fmp,
-                    const wchar_t *filename) {
-  if (!fmp->ppz_name[0]) return true;
-  HANDLE pvifile = pvisearch(filename, fmp->ppz_name);
-  if (pvifile == INVALID_HANDLE_VALUE) goto err;
-  DWORD filesize = GetFileSize(pvifile, 0);
-  if (filesize == INVALID_FILE_SIZE) goto err_file;
-  void *data = HeapAlloc(g.heap, 0, filesize);
-  if (!data) goto err_file;
-  void *buf = HeapAlloc(g.heap, 0, ppz8_pvi_decodebuf_samples(filesize) * sizeof(int16_t));
-  if (!buf) goto err_data;
-  DWORD readbytes;
-  if (!ReadFile(pvifile, data, filesize, &readbytes, 0)
-      || readbytes != filesize) goto err_buf;
-  if (!ppz8_pvi_load(work->ppz8, 0, data, filesize, buf)) goto err_buf;
-  if (g.ppz8_buf) HeapFree(g.heap, 0, g.ppz8_buf);
-  g.ppz8_buf = buf;
-  HeapFree(g.heap, 0, data);
-  CloseHandle(pvifile);
-  return true;
-err_buf:
-  HeapFree(g.heap, 0, buf);
-err_data:
-  HeapFree(g.heap, 0, data);
-err_file:
-  CloseHandle(pvifile);
-err:
-  return false;
-}
-
 static void openfile(HWND hwnd, const wchar_t *path) {
-  enum {
-    DRIVER_PMD,
-    DRIVER_FMP
-  } driver_type;
-  HANDLE file = CreateFile(path, GENERIC_READ,
-                            0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-  if (file == INVALID_HANDLE_VALUE) {
-    MessageBox(hwnd, L"Cannot open file", L"Error", MB_ICONSTOP);
-    return;
-  }
-  LARGE_INTEGER li;
-  if (!GetFileSizeEx(file, &li)) {
-    MessageBox(hwnd, L"Cannot open file", L"Error", MB_ICONSTOP);
-    goto err_file;
-  }
-  if (li.QuadPart > 0xffff) {
-    MessageBox(hwnd, L"Invalid File (Filesize too large)", L"Error", MB_ICONSTOP);
-    goto err_file;
-  }
-  void *data = HeapAlloc(g.heap, 0, li.QuadPart);
-  if (!data) {
-    MessageBox(hwnd, L"Cannot allocate memory for file", L"Error", MB_ICONSTOP);
-    goto err_file;
-  }
-  DWORD readbytes;
-  if (!ReadFile(file, data, li.QuadPart, &readbytes, 0) || readbytes != li.QuadPart) {
-    MessageBox(hwnd, L"Cannot read file", L"Error", MB_ICONSTOP);
-    goto err_data;
-  }
-  union drivers *driver = HeapAlloc(g.heap, HEAP_ZERO_MEMORY, sizeof(*driver));
-  if (!driver) {
-    MessageBox(hwnd, L"Cannot allocate memory for fmp", L"Error", MB_ICONSTOP);
-    goto err_data;
-  }
-  if (fmp_load(&driver->fmp, data, li.QuadPart)) {
-    driver_type = DRIVER_FMP;
-  } else {
-    ZeroMemory(driver, sizeof(*driver));
-    if (pmd_load(&driver->pmd, data, li.QuadPart)) {
-      driver_type = DRIVER_PMD;
-    } else {
-      MessageBox(hwnd, L"Invalid File (not FMP or PMD)", L"Error", MB_ICONSTOP);
-      goto err_driver;
+  enum fmplayer_file_error error;
+  struct fmplayer_file *fmfile = fmplayer_file_alloc(path, &error);
+  if (!fmfile) {
+    const wchar_t *msg = L"Cannot open file: ";
+    const wchar_t *errmsg = fmplayer_file_strerror_w(error);
+    wchar_t *msgbuf = malloc((wcslen(msg) + wcslen(errmsg) + 1) * sizeof(wchar_t));
+    if (msgbuf) {
+      wcscpy(msgbuf, msg);
+      wcscat(msgbuf, errmsg);
     }
+    MessageBox(hwnd, msgbuf ? msgbuf : L"Cannot open file", L"Error", MB_ICONSTOP);
+    free(msgbuf);
+    goto err;
   }
   if (g.sound) {
     g.sound->pause(g.sound, 1);
   }
-  if (g.driver) HeapFree(g.heap, 0, g.driver);
-  g.driver = driver;
-  if (g.data) HeapFree(g.heap, 0, g.data);
-  g.data = data;
+  fmplayer_file_free(g.fmfile);
+  g.fmfile = fmfile;
   unsigned mask = opna_get_mask(&g.opna);
   opna_reset(&g.opna);
   opna_set_mask(&g.opna, mask);
@@ -333,23 +221,16 @@ static void openfile(HWND hwnd, const wchar_t *path) {
   WideCharToMultiByte(932, WC_NO_BEST_FIT_CHARS, path, -1, g.work.filename, sizeof(g.work.filename), 0, 0);
   opna_timer_set_int_callback(&g.opna_timer, opna_int_cb, &g.work);
   opna_timer_set_mix_callback(&g.opna_timer, opna_mix_cb, &g.ppz8);
-  if (driver_type == DRIVER_PMD) {
-    pmd_init(&g.work, &g.driver->pmd);
-  } else {
-    fmp_init(&g.work, &g.driver->fmp);
-    loadpvi(&g.work, &g.driver->fmp, path);
-    loadppzpvi(&g.work, &g.driver->fmp, path);
-  }
+  fmplayer_file_load(&g.work, g.fmfile);
   if (!g.sound) {
     g.sound = sound_init(hwnd, SRATE, SECTLEN,
                          sound_cb, &g.opna_timer);
     SetWindowText(g.driverinfo, g.sound->apiname);
   }
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
-  if (!g.sound) goto err_driver;
+  if (!g.sound) goto err;
   g.sound->pause(g.sound, 0);
   g.paused = false;
-  CloseHandle(file);
   wchar_t *pathcpy = HeapAlloc(g.heap, 0, (lstrlen(path)+1)*sizeof(wchar_t));
   if (pathcpy) {
     lstrcpy(pathcpy, path);
@@ -357,12 +238,8 @@ static void openfile(HWND hwnd, const wchar_t *path) {
   if (g.lastopenpath) HeapFree(g.heap, 0, (void *)g.lastopenpath);
   g.lastopenpath = pathcpy;
   return;
-err_driver:
-  HeapFree(g.heap, 0, driver);
-err_data:
-  HeapFree(g.heap, 0, data);
-err_file:
-  CloseHandle(file);
+err:
+  fmplayer_file_free(fmfile);
 }
 
 static void openfiledialog(HWND hwnd) {
@@ -560,6 +437,12 @@ static LRESULT CALLBACK btn_wndproc(
   return CallWindowProc(g.btn_defproc, hwnd, msg, wParam, lParam);
 }
 
+static void CALLBACK mmtimer_cb(UINT timerid, UINT msg,
+                                DWORD_PTR userptr,
+                                DWORD_PTR dw1, DWORD_PTR dw2) {
+  PostMessage(g.mainwnd, WM_USER, 0, 0);
+}
+
 static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   (void)cs;
   HWND button = CreateWindowEx(
@@ -601,17 +484,27 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   HWND button_toneview = CreateWindowEx(
     0,
     L"BUTTON",
-    L"Tone &viewer",
+    L"&Tone viewer",
     WS_TABSTOP | WS_VISIBLE | WS_CHILD,
     250, 10,
     100, 25,
     hwnd, (HMENU)ID_TONEVIEW, g.hinst, 0
+  );
+  HWND button_oscilloview = CreateWindowEx(
+    0,
+    L"BUTTON",
+    L"Oscillo&view",
+    WS_TABSTOP | WS_VISIBLE | WS_CHILD,
+    355, 10,
+    100, 25,
+    hwnd, (HMENU)ID_OSCILLOVIEW, g.hinst, 0
   );
   g.btn_defproc = (WNDPROC)GetWindowLongPtr(button, GWLP_WNDPROC);
   SetWindowLongPtr(button, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   SetWindowLongPtr(pbutton, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   SetWindowLongPtr(g.button_2x, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   SetWindowLongPtr(button_toneview, GWLP_WNDPROC, (intptr_t)btn_wndproc);
+  SetWindowLongPtr(button_oscilloview, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   NONCLIENTMETRICS ncm;
   ncm.cbSize = sizeof(ncm);
   SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
@@ -621,11 +514,13 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   SetWindowFont(g.driverinfo, font, TRUE);
   SetWindowFont(g.button_2x, font, TRUE);
   SetWindowFont(button_toneview, font, TRUE);
+  SetWindowFont(button_oscilloview, font, TRUE);
   loadrom();
   loadfont();
   fmdsp_init(&g.fmdsp, g.font_loaded ? &g.font : 0);
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
-  SetTimer(hwnd, TIMER_FMDSP, 16, 0);
+  //SetTimer(hwnd, TIMER_FMDSP, 16, 0);
+  g.mmtimer = timeSetEvent(16, 16, mmtimer_cb, 0, TIME_PERIODIC);
 #ifdef ENABLE_WM_DROPFILES
   DragAcceptFiles(hwnd, TRUE);
 #endif
@@ -651,16 +546,18 @@ static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
   case ID_TONEVIEW:
     show_toneview(g.hinst, hwnd);
     break;
+  case ID_OSCILLOVIEW:
+    show_oscilloview(g.hinst, hwnd);
+    break;
   }
 }
 
 static void on_destroy(HWND hwnd) {
   (void)hwnd;
+  timeKillEvent(g.mmtimer);
   if (g.sound) g.sound->free(g.sound);
-  if (g.driver) HeapFree(g.heap, 0, g.driver);
-  if (g.data) HeapFree(g.heap, 0, g.data);
+  fmplayer_file_free(g.fmfile);
   if (g.drum_rom) HeapFree(g.heap, 0, g.drum_rom);
-  if (g.ppz8_buf) HeapFree(g.heap, 0, g.ppz8_buf);
   PostQuitMessage(0);
 }
 
@@ -739,6 +636,15 @@ static void on_activate(HWND hwnd, bool activate, HWND targetwnd, WINBOOL state)
   else g_currentdlg = 0;
 }
 
+static bool on_erasebkgnd(HWND hwnd, HDC dc) {
+  RECT cr;
+  GetClientRect(hwnd, &cr);
+  // separate fmdsp drawing area to another window and remove this hack
+  cr.bottom -= 400 * (g.fmdsp_2x + 1);
+  FillRect(dc, &cr, (HBRUSH)(COLOR_BTNFACE+1));
+  return true;
+}
+
 static LRESULT CALLBACK wndproc(
   HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 ) {
@@ -747,7 +653,7 @@ static LRESULT CALLBACK wndproc(
   HANDLE_MSG(hwnd, WM_CREATE, on_create);
   HANDLE_MSG(hwnd, WM_COMMAND, on_command);
   HANDLE_MSG(hwnd, WM_PAINT, on_paint);
-  HANDLE_MSG(hwnd, WM_TIMER, on_timer);
+  HANDLE_MSG(hwnd, WM_ERASEBKGND, on_erasebkgnd);
   case WM_COPYDATA:
     return on_copydata(hwnd, (HWND)wParam, (COPYDATASTRUCT *)lParam);
 #ifdef ENABLE_WM_DROPFILES
@@ -758,6 +664,9 @@ static LRESULT CALLBACK wndproc(
   HANDLE_MSG(hwnd, WM_SYSKEYDOWN, on_syskey);
   HANDLE_MSG(hwnd, WM_SYSKEYUP, on_syskey);
   HANDLE_MSG(hwnd, WM_ACTIVATE, on_activate);
+  case WM_USER:
+    InvalidateRect(hwnd, 0, FALSE);
+    return 0;
   }
   return DefWindowProc(hwnd, msg, wParam, lParam);
 }
@@ -829,7 +738,7 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
   if (argfile) {
     openfile(g.mainwnd, argfile);
   }
-
+  timeBeginPeriod(1);
   MSG msg = {0};
   while (GetMessage(&msg, 0, 0, 0)) {
     if (!g_currentdlg || !IsDialogMessage(g_currentdlg, &msg)) {
@@ -837,6 +746,7 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
       DispatchMessage(&msg);
     }
   }
+  timeEndPeriod(1);
   return msg.wParam;
 }
 

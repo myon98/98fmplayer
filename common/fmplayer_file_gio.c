@@ -1,0 +1,120 @@
+#include "common/fmplayer_file.h"
+#include <gio/gio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static void *fileread(GFile *f, size_t maxsize, size_t *filesize, enum fmplayer_file_error *error) {
+  GFileInfo *finfo = 0;
+  GFileInputStream *fstream = 0;
+  void *buf = 0;
+  finfo = g_file_query_info(f, G_FILE_ATTRIBUTE_STANDARD_SIZE, 0, 0, 0);
+  if (!finfo) {
+    if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
+    goto err;
+  }
+  gsize filelen;
+  {
+    goffset sfilelen = g_file_info_get_size(finfo);
+    if (sfilelen < 0) {
+      if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
+      goto err;
+    }
+    filelen = sfilelen;
+  }
+  if (maxsize && (filelen > maxsize)) {
+    if (error) *error = FMPLAYER_FILE_ERR_BADFILE_SIZE;
+    goto err;
+  }
+  fstream = g_file_read(f, 0, 0);
+  if (!fstream) {
+    if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
+    goto err;
+  }
+  buf = malloc(filelen);
+  if (!buf) {
+    if (error) *error = FMPLAYER_FILE_ERR_NOMEM;
+    goto err;
+  }
+  gsize fileread;
+  g_input_stream_read_all(G_INPUT_STREAM(fstream), buf, filelen, &fileread, 0, 0);
+  if (fileread != filelen) {
+    if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
+    goto err;
+  }
+  *filesize = filelen;
+  g_object_unref(G_OBJECT(fstream));
+  g_object_unref(G_OBJECT(finfo));
+  return buf;
+err:
+  free(buf);
+  if (fstream) g_object_unref(G_OBJECT(fstream));
+  if (finfo) g_object_unref(G_OBJECT(finfo));
+  return 0;
+}
+
+void *fmplayer_fileread(const void *pathptr, const char *pcmname, const char *extension,
+                        size_t maxsize, size_t *filesize, enum fmplayer_file_error *error) {
+  GFile *file = 0, *dir = 0;
+  GFileEnumerator *direnum = 0;
+  char *pcmnamebuf = 0;
+  const char *uri = pathptr;
+  file = g_file_new_for_uri(uri);
+  if (!pcmname) {
+    void *buf = fileread(file, maxsize, filesize, error);
+    g_object_unref(G_OBJECT(file));
+    return buf;
+  }
+  if (extension) {
+    size_t namebuflen = strlen(pcmname) + strlen(extension) + 1;
+    pcmnamebuf = malloc(namebuflen);
+    if (!pcmnamebuf) goto err;
+    strcpy(pcmnamebuf, pcmname);
+    strcat(pcmnamebuf, extension);
+    pcmname = pcmnamebuf;
+  }
+
+  dir = g_file_get_parent(file);
+  if (!dir) {
+    if (error) *error = FMPLAYER_FILE_ERR_NOMEM;
+    goto err;
+  }
+  direnum = g_file_enumerate_children(dir,
+                                      G_FILE_ATTRIBUTE_STANDARD_NAME,
+                                      G_FILE_QUERY_INFO_NONE,
+                                      0, 0);
+  if (!direnum) {
+    if (error) *error = FMPLAYER_FILE_ERR_NOMEM;
+    goto err;
+  }
+  for (;;) {
+    GFileInfo *info;
+    GFile *pcmfile;
+    if (!g_file_enumerator_iterate(direnum, &info, &pcmfile, 0, 0)) {
+      if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
+      goto err;
+    }
+    if (!info || !pcmfile) {
+      if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
+      goto err;
+    }
+    if (!strcasecmp(g_file_info_get_name(info), pcmname)) {
+      void *buf = fileread(pcmfile, maxsize, filesize, error);
+      g_object_unref(G_OBJECT(direnum));
+      g_object_unref(G_OBJECT(dir));
+      g_object_unref(G_OBJECT(file));
+      free(pcmnamebuf);
+      return buf;
+    }
+  }
+  if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
+err:
+  if (direnum) g_object_unref(G_OBJECT(direnum));
+  if (dir) g_object_unref(G_OBJECT(dir));
+  g_object_unref(G_OBJECT(file));
+  free(pcmnamebuf);
+  return 0;
+}
+
+void *fmplayer_path_dup(const void *path) {
+  return strdup(path);
+}

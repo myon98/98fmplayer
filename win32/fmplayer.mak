@@ -23,12 +23,14 @@ FMDSP_OBJS=fmdsp \
 TONEDATA_OBJS=tonedata
 OBJBASE=main \
         toneview \
+        oscilloview \
         soundout \
         dsoundout \
         waveout \
-        wasapiout \
         winfont \
         guid \
+        fmplayer_file \
+        fmplayer_file_win \
         $(FMDRIVER_OBJS) \
         $(LIBOPNA_OBJS) \
         $(TONEDATA_OBJS) \

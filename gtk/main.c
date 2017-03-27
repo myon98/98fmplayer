@@ -7,6 +7,7 @@
 #include <cairo.h>
 #include <stdatomic.h>
 
+#include "common/fmplayer_file.h"
 #include "fmdriver/fmdriver_fmp.h"
 #include "fmdriver/fmdriver_pmd.h"
 #include "fmdriver/ppz8.h"
@@ -14,6 +15,8 @@
 #include "libopna/opnatimer.h"
 #include "fmdsp/fmdsp.h"
 #include "toneview.h"
+#include "oscillo/oscillo.h"
+#include "oscilloview.h"
 
 #define DATADIR "/.local/share/fmplayer/"
 //#define FMDSP_2X
@@ -22,11 +25,6 @@ enum {
   SRATE = 55467,
   PPZ8MIX = 0xa000,
   AUDIOBUFLEN = 0,
-};
-
-union drivers {
-  struct driver_pmd pmd;
-  struct driver_fmp fmp;
 };
 
 static struct {
@@ -42,15 +40,15 @@ static struct {
   char drum_rom[OPNA_ROM_SIZE];
   bool drum_rom_loaded;
   char adpcm_ram[OPNA_ADPCM_RAM_SIZE];
-  union drivers *driver;
+  struct fmplayer_file *fmfile;
   void *data;
-  void *ppzbuf;
   uint8_t vram[PC98_W*PC98_H];
   struct fmdsp_font font98;
   uint8_t font98data[FONT_ROM_FILESIZE];
   void *vram32;
   int vram32_stride;
   const char *current_uri;
+  struct oscillodata oscillodata_audiothread[LIBOPNA_OSCILLO_TRACK_COUNT];
 } g;
 
 static void quit(void) {
@@ -58,9 +56,7 @@ static void quit(void) {
     Pa_CloseStream(g.pastream);
   }
   if (g.pa_initialized) Pa_Terminate();
-  free(g.driver);
-  free(g.data);
-  free(g.ppzbuf);
+  fmplayer_file_free(g.fmfile);
   gtk_main_quit();
 }
 
@@ -74,6 +70,10 @@ static void on_menu_quit(GtkMenuItem *menuitem, gpointer ptr) {
 
 static void on_tone_view(GtkMenuItem *menuitem, gpointer ptr) {
   show_toneview();
+}
+
+static void on_oscillo_view(GtkMenuItem *menuitem, gpointer ptr) {
+  show_oscilloview();
 }
 
 static void msgbox_err(const char *msg) {
@@ -92,13 +92,18 @@ static int pastream_cb(const void *inptr, void *outptr, unsigned long frames,
   struct opna_timer *timer = (struct opna_timer *)userdata;
   int16_t *buf = (int16_t *)outptr;
   memset(outptr, 0, sizeof(int16_t)*frames*2);
-  opna_timer_mix(timer, buf, frames);
+  opna_timer_mix_oscillo(timer, buf, frames, g.oscillodata_audiothread);
 
   if (!atomic_flag_test_and_set_explicit(
       &toneview_g.flag, memory_order_acquire)) {
     tonedata_from_opna(&toneview_g.tonedata, &g.opna);
     atomic_flag_clear_explicit(&toneview_g.flag, memory_order_release);
-  }  
+  }
+  if (!atomic_flag_test_and_set_explicit(
+    &oscilloview_g.flag, memory_order_acquire)) {
+    memcpy(oscilloview_g.oscillodata, g.oscillodata_audiothread, sizeof(oscilloview_g.oscillodata));
+    atomic_flag_clear_explicit(&oscilloview_g.flag, memory_order_release);
+  }
   return paContinue;
 }
 
@@ -129,153 +134,6 @@ static uint8_t opna_status_libopna(struct fmdriver_work *work, bool a1) {
     status &= 0x83;
   }
   return status;
-}
-
-static GFileInputStream *pcmfilesearch(GFile *dir, const char *name) {
-  char *name_l = malloc(strlen(name));
-  if (name_l) {
-    strcpy(name_l, name);
-    // TODO: not SJIS aware
-    for (char *c = name_l; *c; c++) {
-      if (('A' <= *c) && (*c <= 'Z')) {
-        *c += ('a' - 'A');
-      }
-    }
-  }
-  GFile *file = g_file_get_child(dir, name);
-  GFileInputStream *stream = g_file_read(file, 0, 0);
-  g_object_unref(G_OBJECT(file));
-  if (stream) {
-    free(name_l);
-    return stream;
-  }
-  if (name_l) {
-    file = g_file_get_child(dir, name_l);
-    free(name_l);
-    stream = g_file_read(file, 0, 0);
-    g_object_unref(G_OBJECT(file));
-    if (stream) return stream;
-  }
-  return 0;
-}
-
-static GFileInputStream *extsearch(GFile *dir, const char *base, const char *ext) {
-  char *name = malloc(strlen(base) + strlen(ext) + 1);
-  if (!name) return 0;
-  strcpy(name, base);
-  strcat(name, ext);
-  GFileInputStream *ret = pcmfilesearch(dir, name);
-  free(name);
-  return ret;
-}
-
-static bool loadpvi(struct fmdriver_work *work,
-                    struct driver_fmp *fmp,
-                    GFile *dir) {
-  // no need to load, always success
-  if(strlen(fmp->pvi_name) == 0) return true;
-  GFileInputStream *pvistream = extsearch(dir, fmp->pvi_name, ".PVI");
-  if (!pvistream) goto err;
-  void *data = malloc(OPNA_ADPCM_RAM_SIZE);
-  if (!data) goto err_stream;
-  gsize read;
-  if (!g_input_stream_read_all(
-    G_INPUT_STREAM(pvistream), data, OPNA_ADPCM_RAM_SIZE, &read, 0, 0
-  )) goto err_data;
-  if (!fmp_adpcm_load(work, data, OPNA_ADPCM_RAM_SIZE)) goto err_data;
-  free(data);
-  g_object_unref(pvistream);
-  return true;
-err_data:
-  free(data);
-err_stream:
-  g_object_unref(G_OBJECT(pvistream));
-err:
-  return false;
-}
-
-static bool loadppzpvi(struct fmdriver_work *work,
-                    struct driver_fmp *fmp,
-                    GFile *dir) {
-  // no need to load, always success
-  if(strlen(fmp->ppz_name) == 0) return true;
-  GFileInputStream *pvistream = extsearch(dir, fmp->ppz_name, ".PVI");
-  if (!pvistream) goto err;
-  GFileInfo *pviinfo = g_file_input_stream_query_info(
-    pvistream, G_FILE_ATTRIBUTE_STANDARD_SIZE,
-    0, 0);
-  if (!pviinfo) goto err_stream;
-  gsize fsize;
-  {
-    goffset sfsize = g_file_info_get_size(pviinfo);
-    if (sfsize < 0) goto err_info;
-    fsize = sfsize;
-  }
-  void *data = malloc(fsize);
-  if (!data) goto err_info;
-  gsize readsize;
-  g_input_stream_read_all(G_INPUT_STREAM(pvistream),
-                          data, fsize, &readsize, 0, 0);
-  if (readsize != fsize) goto err_memory;
-  int16_t *decbuf = calloc(ppz8_pvi_decodebuf_samples(fsize), sizeof(int16_t));
-  if (!decbuf) goto err_memory;
-  if (!ppz8_pvi_load(work->ppz8, 0, data, fsize, decbuf)) goto err_decbuf;
-  free(g.ppzbuf);
-  g.ppzbuf = decbuf;
-  free(data);
-  g_object_unref(G_OBJECT(pviinfo));
-  g_object_unref(G_OBJECT(pvistream));
-  return true;
-err_decbuf:
-  free(decbuf);
-err_memory:
-  free(data);
-err_info:
-  g_object_unref(pviinfo);
-err_stream:
-  g_object_unref(pvistream);
-err:
-  return false;
-}
-
-static bool loadppc(struct fmdriver_work *work,
-                    struct driver_pmd *pmd,
-                    GFile *dir) {
-  // no need to load, always success
-  if(strlen(pmd->ppcfile) == 0) return true;
-  fprintf(stderr, "PPC: %s\n", pmd->ppcfile);
-  GFileInputStream *stream = extsearch(dir, pmd->ppcfile,  ".PPC");
-  if (!stream) goto err;
-  GFileInfo *info = g_file_input_stream_query_info(
-    stream, G_FILE_ATTRIBUTE_STANDARD_SIZE,
-    0, 0);
-  if (!info) goto err_stream;
-  gsize fsize;
-  {
-    goffset sfsize = g_file_info_get_size(info);
-    if (sfsize < 0) goto err_info;
-    fsize = sfsize;
-  }
-  void *data = malloc(fsize);
-  if (!data) goto err_info;
-  gsize read;
-  if (!g_input_stream_read_all(
-    G_INPUT_STREAM(stream), data, fsize, &read, 0, 0
-  )) goto err_data;
-  if (read != fsize) goto err_data;
-  if (!pmd_ppc_load(work, data, fsize)) goto err_data;
-  free(data);
-  g_object_unref(G_OBJECT(info));
-  g_object_unref(G_OBJECT(stream));
-  return true;
-err_data:
-  free(data);
-err_info:
-  g_object_unref(G_OBJECT(info));
-err_stream:
-  g_object_unref(G_OBJECT(stream));
-err:
-  return false;
 }
 
 static void load_drumrom(void) {
@@ -343,82 +201,41 @@ err:
 }
 
 static bool openfile(const char *uri) {
-  enum {
-    DRIVER_PMD,
-    DRIVER_FMP
-  } driver_type;
+  struct fmplayer_file *fmfile = 0;
   if (!g.pa_initialized) {
     msgbox_err("Could not initialize Portaudio");
     goto err;
   }
-  GFile *fmfile = g_file_new_for_uri(uri);
-  GFileInfo *fminfo = g_file_query_info(
-    fmfile, G_FILE_ATTRIBUTE_STANDARD_SIZE,
-    0, 0, 0
-  );
-  if (!fminfo) {
-    msgbox_err("Cannot get size information for file");
-    goto err_file;
-  }
-  gsize filelen;
-  {
-    goffset sfilelen = g_file_info_get_size(fminfo);
-    if (sfilelen < 0) {
-      goto err_info;
+  enum fmplayer_file_error error;
+  fmfile = fmplayer_file_alloc(uri, &error);
+  if (!fmfile) {
+    const char *errstr = fmplayer_file_strerror(error);
+    const char *errmain = "cannot load file: ";
+    char *errbuf = malloc(strlen(errstr) + strlen(errmain) + 1);
+    if (errbuf) {
+      strcpy(errbuf, errmain);
+      strcat(errbuf, errstr);
     }
-    filelen = sfilelen;
-  }
-  GFileInputStream *fmstream = g_file_read(fmfile, 0, 0);
-  if (!fmstream) {
-    msgbox_err("cannot open file for read");
-    goto err_info;
-  }
-  void *fmbuf = malloc(filelen);
-  if (!fmbuf) {
-    msgbox_err("cannot allocate memory for file");
-    goto err_stream;
-  }
-  gsize fileread;
-  g_input_stream_read_all(
-    G_INPUT_STREAM(fmstream), fmbuf, filelen, &fileread, 0, 0);
-  if (fileread != filelen) {
-    msgbox_err("cannot read file");
-    goto err_buf;
-  }
-  union drivers *driver = calloc(1, sizeof(*driver));
-  if (!driver) {
-    msgbox_err("cannot allocate memory for fmp");
-    goto err_buf;
-  }
-  if (fmp_load(&driver->fmp, fmbuf, filelen)) {
-    driver_type = DRIVER_FMP;
-  } else {
-    memset(driver, 0, sizeof(*driver));
-    if (pmd_load(&driver->pmd, fmbuf, filelen)) {
-      driver_type = DRIVER_PMD;
-    } else {
-      msgbox_err("invalid file");
-      goto err_driver;
-    }
+    msgbox_err(errbuf ? errbuf : "cannot load file");
+    free(errbuf);
+    goto err;
   }
   if (!g.pastream) {
     PaError pe = Pa_OpenDefaultStream(&g.pastream, 0, 2, paInt16, SRATE, AUDIOBUFLEN,
                                       pastream_cb, &g.opna_timer);
     if (pe != paNoError) {
       msgbox_err("cannot open portaudio stream");
-      goto err_driver;
+      goto err;
     }
   } else if (!g.pa_paused) {
     PaError pe = Pa_StopStream(g.pastream);
     if (pe != paNoError) {
       msgbox_err("Portaudio Error");
-      goto err_driver;
+      goto err;
     }
   }
-  free(g.driver);
-  g.driver = driver;
-  free(g.data);
-  g.data = fmbuf;
+  fmplayer_file_free(g.fmfile);
+  g.fmfile = fmfile;
   unsigned mask = opna_get_mask(&g.opna);
   opna_reset(&g.opna);
   opna_set_mask(&g.opna, mask);
@@ -447,26 +264,8 @@ static bool openfile(const char *uri) {
   }
   opna_timer_set_int_callback(&g.opna_timer, opna_int_cb, &g.work);
   opna_timer_set_mix_callback(&g.opna_timer, opna_mix_cb, &g.ppz8);
-  if (driver_type == DRIVER_FMP) {
-    fmp_init(&g.work, &g.driver->fmp);
-    GFile *dir = g_file_get_parent(fmfile);
-    if (dir) {
-      loadpvi(&g.work, &g.driver->fmp, dir);
-      loadppzpvi(&g.work, &g.driver->fmp, dir);
-      g_object_unref(G_OBJECT(dir));
-    }
-  } else {
-    pmd_init(&g.work, &g.driver->pmd);
-    GFile *dir = g_file_get_parent(fmfile);
-    if (dir) {
-      loadppc(&g.work, &g.driver->pmd, dir);
-      g_object_unref(G_OBJECT(dir));
-    }
-  }
+  fmplayer_file_load(&g.work, g.fmfile);
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
-  g_object_unref(G_OBJECT(fmstream));
-  g_object_unref(G_OBJECT(fminfo));
-  g_object_unref(G_OBJECT(fmfile));
   Pa_StartStream(g.pastream);
   g.pa_paused = false;
   {
@@ -475,17 +274,8 @@ static bool openfile(const char *uri) {
     g.current_uri = turi;
   }
   return true;
-err_driver:
-  free(driver);
-err_buf:
-  free(fmbuf);
-err_stream:
-  g_object_unref(G_OBJECT(fmstream));
-err_info:
-  g_object_unref(G_OBJECT(fminfo));
-err_file:
-  g_object_unref(G_OBJECT(fmfile));
 err:
+  fmplayer_file_free(fmfile);
   return false;
 }
 
@@ -517,6 +307,9 @@ static GtkWidget *create_menubar() {
   GtkWidget *toneview = gtk_menu_item_new_with_label("Tone view");
   g_signal_connect(toneview, "activate", G_CALLBACK(on_tone_view), 0);
   gtk_menu_shell_append(GTK_MENU_SHELL(filemenu), toneview);
+  GtkWidget *oscilloview = gtk_menu_item_new_with_label("Oscillo view");
+  g_signal_connect(oscilloview, "activate", G_CALLBACK(on_oscillo_view), 0);
+  gtk_menu_shell_append(GTK_MENU_SHELL(filemenu), oscilloview);
   return menubar;
 }
 

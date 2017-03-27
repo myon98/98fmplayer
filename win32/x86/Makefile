@@ -3,6 +3,7 @@ vpath %.c ../../fmdriver
 vpath %.c ../../libopna
 vpath %.c ../../fmdsp
 vpath %.c ../../tonedata
+vpath %.c ../../common
 vpath %.rc ..
 
 include ../fmplayer.mak
@@ -13,9 +14,9 @@ PREFIX=$(ARCH)-w64-mingw32-
 CC=$(PREFIX)gcc
 WINDRES=$(PREFIX)windres
 STRIP=$(PREFIX)strip
-CFLAGS=-std=c99 -Os -Wall -Wextra -pedantic -I../.. \
+CFLAGS=-std=c99 -O2 -Wall -Wextra -Werror -pedantic -I../.. \
        $(addprefix -D,$(DEFINES)) \
-       -march=i586
+       -march=i586 -Wno-unused-parameter -Wno-missing-field-initializers
 LIBS=-s -mwindows -municode \
      $(addprefix -l,$(LIBBASE))
 

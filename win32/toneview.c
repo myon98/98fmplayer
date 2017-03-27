@@ -181,7 +181,7 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
                                      text,
                                      WS_VISIBLE | WS_CHILD | WS_TABSTOP,
                                      COPY_X, 40 + (TONELABEL_H+5)*i, 100, TONELABEL_H,
-                                     hwnd, (HMENU)(ID_COPY0+i), g.hinst, 0);
+                                     hwnd, (HMENU)((intptr_t)(ID_COPY0+i)), g.hinst, 0);
     SetWindowFont(copybutton, g.font, TRUE);
   }
   ShowWindow(hwnd, SW_SHOW);
@@ -252,7 +252,7 @@ void show_toneview(HINSTANCE hinst, HWND parent) {
     g.toneviewer = CreateWindowEx(0,
                                   MAKEINTATOM(g.toneviewer_class),
                                   L"FMPlayer Tone Viewer",
-                                  WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
+                                  WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN,
                                   CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                   parent, 0, g.hinst, 0);
   } else {

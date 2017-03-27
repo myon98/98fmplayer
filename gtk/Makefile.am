@@ -18,7 +18,10 @@ FMDSP_SRC=../fmdsp/fmdsp.c \
 
 fmplayer_SOURCES=main.c \
                  toneview.c \
+                 oscilloview.c \
                  ../tonedata/tonedata.c \
+                 ../common/fmplayer_file.c \
+                 ../common/fmplayer_file_gio.c \
                  $(LIBOPNA_SRC) \
                  $(FMDRIVER_SRC) \
                  $(FMDSP_SRC)
