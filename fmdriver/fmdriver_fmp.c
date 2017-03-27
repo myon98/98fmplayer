@@ -2746,6 +2746,14 @@ static const uint8_t fmp_track_map[FMDRIVER_TRACK_NUM] = {
   FMP_PART_SSG_2,
   FMP_PART_SSG_3,
   FMP_PART_ADPCM,
+  FMP_PART_PPZ8_1,
+  FMP_PART_PPZ8_2,
+  FMP_PART_PPZ8_3,
+  FMP_PART_PPZ8_4,
+  FMP_PART_PPZ8_5,
+  FMP_PART_PPZ8_6,
+  FMP_PART_PPZ8_7,
+  FMP_PART_PPZ8_8,
 };
 
 static void fmp_work_status_init(struct fmdriver_work *work,
@@ -3468,27 +3476,12 @@ bool fmp_load(struct driver_fmp *fmp,
   return true;
 }
 
-static const uint8_t fmp_fmdriver_track_map[FMDRIVER_TRACK_NUM] = {
-  FMP_PART_FM_1,
-  FMP_PART_FM_2,
-  FMP_PART_FM_3,
-  FMP_PART_FM_EX1,
-  FMP_PART_FM_EX2,
-  FMP_PART_FM_EX3,
-  FMP_PART_FM_4,
-  FMP_PART_FM_5,
-  FMP_PART_FM_6,
-  FMP_PART_SSG_1,
-  FMP_PART_SSG_2,
-  FMP_PART_SSG_3,
-  FMP_PART_ADPCM
-};
-
 void fmp_init(struct fmdriver_work *work, struct driver_fmp *fmp) {
   fmp_title(work, fmp, read16le(fmp->data)+4);
   fmp_struct_init(work, fmp);
   fmp_init_parts(work, fmp);
   uint16_t fmtoneptr = fmp->datainfo.fmtoneptr;
+  (void)fmtoneptr;
   FMDRIVER_DEBUG(" 000 %03d %03d\n",
                  fmp->data[fmtoneptr+0x18]&0x7,
                  (fmp->data[fmtoneptr+0x18]>>3)&0x7
@@ -3497,6 +3490,8 @@ void fmp_init(struct fmdriver_work *work, struct driver_fmp *fmp) {
   work->driver = fmp;
   work->driver_opna_interrupt = fmp_opna_interrupt;
   fmp_work_status_init(work, fmp);
+  fmdriver_fillpcmname(work->pcmname[0], fmp->pvi_name);
+  fmdriver_fillpcmname(work->pcmname[1], fmp->ppz_name);
 }
 
 // 4235

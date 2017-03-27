@@ -1,6 +1,7 @@
 #include "ppz8.h"
 #include "fmdriver_common.h"
 //#include <stdio.h>
+#include <string.h>
 
 void ppz8_init(struct ppz8 *ppz8, uint16_t srate, uint16_t mix_volume) {
   for (int i = 0; i < 2; i++) {
@@ -69,7 +70,6 @@ static int32_t ppz8_channel_calc(struct ppz8 *ppz8, struct ppz8_channel *channel
     out += (int32_t)channel->prevout[0] * (0x10000u - coeff);
     out += (int32_t)channel->prevout[1] * coeff;
     out >>= 16;
-
     // volume: out * 2**((volume-15)/2)
     out >>= (7 - ((channel->vol&0xf)>>1));
     if (!(channel->vol&1)) {
@@ -83,7 +83,7 @@ static int32_t ppz8_channel_calc(struct ppz8 *ppz8, struct ppz8_channel *channel
   channel->ptr += ptrdiff;
   uint32_t bufdiff = (channel->ptr>>16) - (oldptr>>16);
   if (bufdiff) {
-    if (/*bufdiff == 1*/0) {
+    if (bufdiff == 1) {
       channel->prevout[0] = channel->prevout[1];
       channel->prevout[1] = 0;
       channel->ptr = ppz8_loop(channel, channel->ptr);
@@ -219,6 +219,33 @@ bool ppz8_pvi_load(struct ppz8 *ppz8, uint8_t bnum,
   return true;
 }
 
+bool ppz8_pzi_load(struct ppz8 *ppz8, uint8_t bnum,
+                   const uint8_t *pzidata, uint32_t pzidatalen,
+                   int16_t *decodebuf) {
+  if (bnum >= 2) return false;
+  if (pzidatalen < (0x20+(18*128))) return false;
+  if (memcmp(pzidata, "PZI0", 4) && memcmp(pzidata, "PZI1", 4)) return false;
+  struct ppz8_pcmbuf *buf = &ppz8->buf[bnum];
+  for (int i = 0; i < 0x80; i++) {
+    struct ppz8_pcmvoice *voice = &buf->voice[i];
+    voice->start = read32le(&pzidata[0x20+18*i+0]) * 2;
+    voice->len = read32le(&pzidata[0x20+18*i+4]) * 2;
+    voice->loopstart = read32le(&pzidata[0x20+18*i+8]);
+    voice->loopend = read32le(&pzidata[0x20+18*i+12]);
+    voice->origfreq = read16le(&pzidata[0x20+18*i+16]);/*
+    if (voice->origfreq) {
+      voice->origfreq = 0x100000000 / voice->origfreq;
+    }*/
+    //voice->origfreq = 15974;
+  }
+  buf->data = decodebuf;
+  buf->buflen = pzidatalen - (0x20+(18*128));
+  for (uint32_t i = 0; i < buf->buflen; i++) {
+    buf->data[i] = (pzidata[0x20+18*128+i] - 0x80) << 8;
+  }
+  return true;
+}
+
 static void ppz8_channel_play(struct ppz8 *ppz8, uint8_t ch, uint8_t v) {
   if (ch >= 8) return;
   struct ppz8_channel *channel = &ppz8->channel[ch];
@@ -285,6 +312,21 @@ static void ppz8_total_volume(struct ppz8 *ppz8, uint8_t vol) {
   ppz8->totalvol = vol;
 }
 
+static void ppz8_channel_loop_voice(struct ppz8 *ppz8, uint8_t ch, uint8_t v) {
+  if (ch >= 8) return;
+  struct ppz8_channel *channel = &ppz8->channel[ch];
+  struct ppz8_pcmbuf *buf = &ppz8->buf[v>>7];
+  struct ppz8_pcmvoice *voice = &buf->voice[v & 0x7f];
+  channel->loopstartptr = ((uint64_t)(voice->loopstart)>>1)<<16;
+  channel->loopendptr = ((uint64_t)(voice->loopend)>>1)<<16;
+}
+
+static uint32_t ppz8_voice_length(struct ppz8 *ppz8, uint8_t v) {
+  struct ppz8_pcmbuf *buf = &ppz8->buf[v>>7];
+  struct ppz8_pcmvoice *voice = &buf->voice[v & 0x7f];
+  return voice->len;
+}
+
 const struct ppz8_functbl ppz8_functbl = {
   ppz8_channel_play,
   ppz8_channel_stop,
@@ -292,5 +334,7 @@ const struct ppz8_functbl ppz8_functbl = {
   ppz8_channel_freq,
   ppz8_channel_loopoffset,
   ppz8_channel_pan,
-  ppz8_total_volume
+  ppz8_total_volume,
+  ppz8_channel_loop_voice,
+  ppz8_voice_length
 };

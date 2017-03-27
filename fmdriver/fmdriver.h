@@ -19,6 +19,14 @@ enum {
   FMDRIVER_TRACK_SSG_2,
   FMDRIVER_TRACK_SSG_3,
   FMDRIVER_TRACK_ADPCM,
+  FMDRIVER_TRACK_PPZ8_1,
+  FMDRIVER_TRACK_PPZ8_2,
+  FMDRIVER_TRACK_PPZ8_3,
+  FMDRIVER_TRACK_PPZ8_4,
+  FMDRIVER_TRACK_PPZ8_5,
+  FMDRIVER_TRACK_PPZ8_6,
+  FMDRIVER_TRACK_PPZ8_7,
+  FMDRIVER_TRACK_PPZ8_8,
   FMDRIVER_TRACK_NUM
 };
 enum {
@@ -30,6 +38,7 @@ enum fmdriver_track_type {
   FMDRIVER_TRACKTYPE_FM,
   FMDRIVER_TRACKTYPE_SSG,
   FMDRIVER_TRACKTYPE_ADPCM,
+  FMDRIVER_TRACKTYPE_PPZ8,
   FMDRIVER_TRACKTYPE_CNT,
 };
 
@@ -85,7 +94,10 @@ struct fmdriver_work {
   char comment[3][FMDRIVER_TITLE_BUFLEN];
   // only single-byte uppercase cp932
   char filename[FMDRIVER_TITLE_BUFLEN];
+  // always 8 characters and pad with ' '
+  char pcmname[2][9];
   // driver status (for display)
+  bool pcmerror[2];
   uint8_t ssg_noise_freq;
   struct fmdriver_track_status track_status[FMDRIVER_TRACK_NUM];
   // fm3ex part map

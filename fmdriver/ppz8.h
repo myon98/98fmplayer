@@ -50,10 +50,17 @@ void ppz8_mix(struct ppz8 *ppz8, int16_t *buf, unsigned samples);
 bool ppz8_pvi_load(struct ppz8 *ppz8, uint8_t buf,
                    const uint8_t *pvidata, uint32_t pvidatalen,
                    int16_t *decodebuf);
+bool ppz8_pzi_load(struct ppz8 *ppz8, uint8_t bnum,
+                   const uint8_t *pzidata, uint32_t pzidatalen,
+                   int16_t *decodebuf);
 
 static inline uint32_t ppz8_pvi_decodebuf_samples(uint32_t pvidatalen) {
   if (pvidatalen < 0x210) return 0;
   return (pvidatalen - 0x210) * 2;
+}
+static inline uint32_t ppz8_pzi_decodebuf_samples(uint32_t pzidatalen) {
+  if (pzidatalen < 0x920) return 0;
+  return (pzidatalen - 0x920) * 2;
 }
 
 struct ppz8_functbl {
@@ -65,6 +72,8 @@ struct ppz8_functbl {
                              uint32_t startoff, uint32_t endoff);
   void (*channel_pan)(struct ppz8 *ppz8, uint8_t channel, uint8_t pan);
   void (*total_volume)(struct ppz8 *ppz8, uint8_t vol);
+  void (*channel_loop_voice)(struct ppz8 *ppz8, uint8_t channel, uint8_t voice);
+  uint32_t (*voice_length)(struct ppz8 *ppz8, uint8_t voice);
 };
 
 extern const struct ppz8_functbl ppz8_functbl;
