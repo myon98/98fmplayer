@@ -3,7 +3,7 @@ PC-98用のFM音源ドライバエミュレーション(予定)
 
 ## 現在の状況:
 * 対応ドライバ: PMD, FMP (PLAY6含む)
-* PMD: FM, SSG, リズムパートのみ対応、ADPCM, PPZ8 対応予定
+* PMD: FM, SSG, リズムパート, ADPCM, PPZ8(一部)のみ対応, PPS, P86 対応は未定
 * FMP: PPZ8, PDZF にほぼ対応
 * UI: GTK3 で作った仮のものと、仮 Win32 版
 ![gtk screenshot](/img/screenshot_gtk.png?raw=true)
@@ -36,7 +36,7 @@ $ ./fmplayer
 ### WIN32 版の仮 UI
 Releases:
 https://github.com/takamichih/fmplayer/releases/
-MinGW でコンパイルします。MSVCでもコンパイルできると思います。
+MinGW でコンパイルします。~~MSVCでもコンパイルできると思います。~~ c11 atomics を使い始めたので MSVC ではコンパイルできないと思います。
 ```
 $ cd win32/x86
 $ make

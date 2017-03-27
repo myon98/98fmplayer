@@ -6,7 +6,7 @@ PC-98 FM driver emulation (very early version)
 
 ## Current status:
 * Supported formats: PMD, FMP(PLAY6)
-* PMD: FM, SSG, Rhythm part supported; ADPCM, PPZ8 not supported yet
+* PMD: FM, SSG, Rhythm, ADPCM, PPZ8(partially) supported; PPS, P86 not supported yet
 * FMP: FM, SSG, Rhythm, ADPCM, PPZ8, PDZF supported
 * This is just a byproduct of reverse-engineering formats, and its emulation is much worse than PMDWin, WinFMP
 * FM always generated in 55467Hz (closest integer to 7987200 / 144), SSG always generated in 249600Hz and downsampled with sinc filter (Never linear interpolates harmonics-rich signal like square wave)
