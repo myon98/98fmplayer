@@ -24,16 +24,6 @@ static void vramblit_color(uint8_t *vram, int x, int y,
   }
 }
 
-static void vramfill_color(uint8_t *vram, int x, int y,
-                           int w, int h,
-                           uint8_t color) {
-  for (int yi = 0; yi < h; yi++) {
-    for (int xi = 0; xi < w; xi++) {
-      vram[(y+yi)*PC98_W+(x+xi)] = color;
-    }
-  }
-}
-
 static void vramblit_key(uint8_t *vram, int x, int y,
                          const uint8_t *data, int w, int h,
                          uint8_t key, uint8_t color) {
@@ -126,10 +116,6 @@ static void fmdsp_putline(const char *strptr, uint8_t *vram,
   }
 }
 
-static const char *track_type_string_table[FMDRIVER_TRACKTYPE_CNT] = {
-  "FM   ", "SSG  ", "ADPCM"
-};
-
 static struct {
   uint8_t type;
   uint8_t num;
@@ -147,6 +133,14 @@ static struct {
   {FMDRIVER_TRACKTYPE_SSG, 2},
   {FMDRIVER_TRACKTYPE_SSG, 3},
   {FMDRIVER_TRACKTYPE_ADPCM, 1},
+  {FMDRIVER_TRACKTYPE_PPZ8, 1},
+  {FMDRIVER_TRACKTYPE_PPZ8, 2},
+  {FMDRIVER_TRACKTYPE_PPZ8, 3},
+  {FMDRIVER_TRACKTYPE_PPZ8, 4},
+  {FMDRIVER_TRACKTYPE_PPZ8, 5},
+  {FMDRIVER_TRACKTYPE_PPZ8, 6},
+  {FMDRIVER_TRACKTYPE_PPZ8, 7},
+  {FMDRIVER_TRACKTYPE_PPZ8, 8},
 };
 
 enum {
@@ -177,6 +171,18 @@ static uint8_t track_disp_table_opn[FMDSP_TRACK_DISP_CNT_DEFAULT] = {
   FMDRIVER_TRACK_SSG_3,
   FMDRIVER_TRACK_ADPCM,
 };
+static uint8_t track_disp_table_ppz8[FMDSP_TRACK_DISP_CNT_DEFAULT] = {
+  FMDRIVER_TRACK_PPZ8_1,
+  FMDRIVER_TRACK_PPZ8_2,
+  FMDRIVER_TRACK_PPZ8_3,
+  FMDRIVER_TRACK_PPZ8_4,
+  FMDRIVER_TRACK_PPZ8_5,
+  FMDRIVER_TRACK_PPZ8_6,
+  FMDRIVER_TRACK_PPZ8_7,
+  FMDRIVER_TRACK_PPZ8_8,
+  FMDRIVER_TRACK_SSG_3,
+  FMDRIVER_TRACK_ADPCM,
+};
 
 static void fmdsp_track_init_13(struct fmdsp *fmdsp,
                                 uint8_t *vram) {
@@ -185,9 +191,9 @@ static void fmdsp_track_init_13(struct fmdsp *fmdsp,
       vram[y*PC98_W+x] = 0;
     }
   }
-  for (int i = 0; i < FMDRIVER_TRACK_NUM; i++) {
+  for (int i = 0; i < FMDRIVER_TRACK_PPZ8_1; i++) {
     int t = i;
-    const char *track_type;
+    const char *track_type = "     ";
     switch (track_type_table[t].type) {
     case FMDRIVER_TRACKTYPE_FM:
       track_type = "FM   ";
@@ -225,10 +231,11 @@ static void fmdsp_track_init_10(struct fmdsp *fmdsp,
     }
   }
   for (int i = 0; i < FMDSP_TRACK_DISP_CNT_DEFAULT; i++) {
-    int t = (fmdsp->style == FMDSP_DISPSTYLE_DEFAULT) ?
-            track_disp_table_default[i] :
-            track_disp_table_opn[i];
-    const char *track_type;
+    int t;
+    if (fmdsp->style == FMDSP_DISPSTYLE_DEFAULT) t = track_disp_table_default[i];
+    else if (fmdsp->style == FMDSP_DISPSTYLE_OPN) t = track_disp_table_opn[i];
+    else t = track_disp_table_ppz8[i];
+    const char *track_type = "     ";
     switch (track_type_table[t].type) {
     case FMDRIVER_TRACKTYPE_FM:
       track_type = "FM   ";
@@ -238,6 +245,9 @@ static void fmdsp_track_init_10(struct fmdsp *fmdsp,
       break;
     case FMDRIVER_TRACKTYPE_ADPCM:
       track_type = "ADPCM";
+      break;
+    case FMDRIVER_TRACKTYPE_PPZ8:
+      track_type = "PPZ8 ";
       break;
     }
     fmdsp_putline(track_type, vram, &font_fmdsp_small, 1, TRACK_H*i, 2, true);
@@ -272,10 +282,14 @@ void fmdsp_vram_init(struct fmdsp *fmdsp,
            s_playing, PLAYING_W, PLAYING_H);
   vramblit(vram, FILEBAR_X, PLAYING_Y,
            s_filebar, FILEBAR_W, FILEBAR_H);
-  fmdsp_putline("MUSIC", vram, &font_fmdsp_small,
-                FILEBAR_MUSIC_X, PLAYING_Y+1, 2, false);
-  fmdsp_putline("FILE", vram, &font_fmdsp_small,
-                FILEBAR_FILE_X, PLAYING_Y+1, 2, false);
+  fmdsp_putline("MUS", vram, &font_fmdsp_small,
+                FILEBAR_MUS_X, PLAYING_Y+1, 2, false);
+  fmdsp_putline("IC", vram, &font_fmdsp_small,
+                FILEBAR_IC_X, PLAYING_Y+1, 2, false);
+  fmdsp_putline("F", vram, &font_fmdsp_small,
+                FILEBAR_F_X, PLAYING_Y+1, 2, false);
+  fmdsp_putline("ILE", vram, &font_fmdsp_small,
+                FILEBAR_ILE_X, PLAYING_Y+1, 2, false);
   vramblit(vram, FILEBAR_TRI_X, FILEBAR_TRI_Y,
            s_filebar_tri, FILEBAR_TRI_W, FILEBAR_TRI_H);
   for (int x = 74; x < PC98_W; x++) {
@@ -283,6 +297,22 @@ void fmdsp_vram_init(struct fmdsp *fmdsp,
   }
   fmdsp_putline(work->filename, vram, &font_fmdsp_medium,
                 FILEBAR_FILENAME_X, PLAYING_Y, 2, false);
+  vramblit(vram, PCM1FILEBAR_X, PLAYING_Y,
+           s_filebar, FILEBAR_W, FILEBAR_H);
+  fmdsp_putline("PCM1", vram, &font_fmdsp_small,
+                PCM1FILETXT_X, PLAYING_Y+1, 2, false);
+  vramblit(vram, PCM1FILETRI_X, FILEBAR_TRI_Y,
+           s_filebar_tri, FILEBAR_TRI_W, FILEBAR_TRI_H);
+  fmdsp_putline(work->pcmname[0], vram, &font_fmdsp_medium,
+                PCM1FILENAME_X, PLAYING_Y, 2 + work->pcmerror[0], false);
+  vramblit(vram, PCM2FILEBAR_X, PLAYING_Y,
+           s_filebar, FILEBAR_W, FILEBAR_H);
+  fmdsp_putline("PCM2", vram, &font_fmdsp_small,
+                PCM2FILETXT_X, PLAYING_Y+1, 2, false);
+  vramblit(vram, PCM2FILETRI_X, FILEBAR_TRI_Y,
+           s_filebar_tri, FILEBAR_TRI_W, FILEBAR_TRI_H);
+  fmdsp_putline(work->pcmname[1], vram, &font_fmdsp_medium,
+                PCM2FILENAME_X, PLAYING_Y, 2 + work->pcmerror[1], false);
   int height = (16+3)*3+8;
   for (int y = PC98_H-height; y < PC98_H; y++) {
     for (int x = 0; x < PC98_W; x++) {
@@ -421,6 +451,7 @@ static void fmdsp_track_info_ppz8(const struct ppz8 *ppz8,
                                   int chi,
                                   int x, int y,
                                   uint8_t *vram) {
+  if (!ppz8) return;
   const struct ppz8_channel *ch = &ppz8->channel[chi];
   fmdsp_putline("PAN VOL     FREQ      PTR      END    LOOPS    LOOPE",
                 vram, &font_fmdsp_small, x, y, 1, false);
@@ -492,6 +523,8 @@ static void fmdsp_track_without_key(
         track_info2[c] = track->fmslotmask[c] ? ' ' : ('1'+c);
       }
       break;
+    default:
+      break;
     }
   }
   fmdsp_putline(track_info1, vram, &font_fmdsp_small, TINFO_X, y+0, 2, true);
@@ -522,12 +555,13 @@ static void fmdsp_track_without_key(
   snprintf(numbuf, sizeof(numbuf), "%03d", track->gate);
   fmdsp_putline(numbuf, vram, &font_fmdsp_small, TDETAIL_GT_V_X, y+6, 1, true);
   fmdsp_putline("DT:", vram, &font_fmdsp_small, TDETAIL_DT_X, y+6, 1, true);
-  if (track->detune) {
-    snprintf(numbuf, sizeof(numbuf), "%+04d", track->detune);
-  } else {
-    snprintf(numbuf, sizeof(numbuf), " 000");
-  }
+  snprintf(numbuf, sizeof(numbuf), "%03d", (track->detune > 0) ? track->detune : -track->detune);
   fmdsp_putline(numbuf, vram, &font_fmdsp_small, TDETAIL_DT_V_X, y+6, 1, true);
+  int sign;
+  if (!track->detune) sign = 0;
+  else if (track->detune < 0) sign = 1;
+  else sign = 2;
+  vramblit(vram, TDETAIL_DT_S_X, y+6+2, s_dt_sign[sign], DT_SIGN_W, DT_SIGN_H);
   fmdsp_putline("M:", vram, &font_fmdsp_small, TDETAIL_M_X, y+6, 1, true);
   fmdsp_putline(track->status, vram, &font_fmdsp_small, TDETAIL_M_V_X, y+6, 1, true);
   uint8_t color_on = ((track->key == 0xff) || fmdsp->masked[t]) ? 7 : 2;
@@ -553,13 +587,14 @@ static void fmdsp_update_10(struct fmdsp *fmdsp,
     }
   }
   for (int it = 0; it < FMDSP_TRACK_DISP_CNT_DEFAULT; it++) {
-    int t = (fmdsp->style == FMDSP_DISPSTYLE_DEFAULT) ?
-            track_disp_table_default[it] :
-            track_disp_table_opn[it];
+    int t;
+    if (fmdsp->style == FMDSP_DISPSTYLE_DEFAULT) t = track_disp_table_default[it];
+    else if (fmdsp->style == FMDSP_DISPSTYLE_OPN) t = track_disp_table_opn[it];
+    else t = track_disp_table_ppz8[it];
     const struct fmdriver_track_status *track = &work->track_status[t];
 
-    if ((track->info == FMDRIVER_TRACK_INFO_PPZ8)
-         || (track->info == FMDRIVER_TRACK_INFO_PDZF)
+    if (((track->info == FMDRIVER_TRACK_INFO_PPZ8)
+         || (track->info == FMDRIVER_TRACK_INFO_PDZF))
         && track->ppz8_ch) {
       fmdsp_track_info_ppz8(work->ppz8, track->ppz8_ch-1,
                             320, TRACK_H*it+6, vram);
@@ -578,6 +613,11 @@ static void fmdsp_update_10(struct fmdsp *fmdsp,
         break;
       case FMDRIVER_TRACKTYPE_ADPCM:
         fmdsp_track_info_adpcm(opna, 320, TRACK_H*it+6, vram);
+        break;
+      case FMDRIVER_TRACKTYPE_PPZ8:
+        fmdsp_track_info_ppz8(work->ppz8, track_type_table[t].num-1,
+                              320, TRACK_H*it+6, vram);
+        break;
       }
     }
     fmdsp_track_without_key(fmdsp, work, track, t, TRACK_H*it, vram);
@@ -608,12 +648,12 @@ static void fmdsp_update_13(struct fmdsp *fmdsp,
       vram[y*PC98_W+x] = 0;
     }
   }
-  for (int it = 0; it < FMDRIVER_TRACK_NUM; it++) {
+  for (int it = 0; it < FMDRIVER_TRACK_PPZ8_1; it++) {
     int t = it;
     const struct fmdriver_track_status *track = &work->track_status[t];
 
-    if ((track->info == FMDRIVER_TRACK_INFO_PPZ8)
-         || (track->info == FMDRIVER_TRACK_INFO_PDZF)
+    if (((track->info == FMDRIVER_TRACK_INFO_PPZ8)
+         || (track->info == FMDRIVER_TRACK_INFO_PDZF))
         && track->ppz8_ch) {
       fmdsp_track_info_ppz8(work->ppz8, track->ppz8_ch-1,
                             320, TRACK_H_S*it, vram);
@@ -696,22 +736,6 @@ void fmdsp_vrampalette(struct fmdsp *fmdsp, const uint8_t *vram, uint8_t *vram32
       uint32_t data = (((uint32_t)r)<<16) | (((uint32_t)g)<<8) | ((uint32_t)b);
       uint32_t *row = (uint32_t *)(vram32 + y*stride);
       row[x] = data;
-    }
-  }
-}
-
-//2/1 - 7/14
-// 0x21 - 0x7e
-static void fontrom_copy_rows(uint8_t *font, const uint8_t *fontrom,
-                              int rowstart, int rowend) {
-  for (int row = rowstart; row < rowend; row++) {
-    for (int cell = 0x20; cell < 0x80; cell++) {
-      for (int y = 0; y < 16; y++) {
-        // left
-        font[0x000+((row-0x20)<<4)+(cell<<12)+y] = fontrom[0x800+(0x60*16*2*(row-0x20))+(cell<<5)+y];
-        // right
-        font[0x800+((row-0x20)<<4)+(cell<<12)+y] = fontrom[0x800+(0x60*16*2*(row-0x20))+(cell<<5)+y+16];
-      }
     }
   }
 }
