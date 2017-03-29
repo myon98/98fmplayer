@@ -29,6 +29,11 @@ enum {
 
 static struct {
   GtkWidget *mainwin;
+  bool fmdsp_2x;
+  GtkWidget *root_box_widget;
+  GtkWidget *box_widget;
+  GtkWidget *fmdsp_widget;
+  GtkWidget *filechooser_widget;
   bool pa_initialized;
   bool pa_paused;
   PaStream *pastream;
@@ -320,9 +325,7 @@ static gboolean draw_cb(GtkWidget *w,
   fmdsp_vrampalette(&g.fmdsp, g.vram, g.vram32, g.vram32_stride);
   cairo_surface_t *s = cairo_image_surface_create_for_data(
     g.vram32, CAIRO_FORMAT_RGB24, PC98_W, PC98_H, g.vram32_stride);
-#ifdef FMDSP_2X
-  cairo_scale(cr, 2.0, 2.0);
-#endif
+  if (g.fmdsp_2x) cairo_scale(cr, 2.0, 2.0);
   cairo_set_source_surface(cr, s, 0.0, 0.0);
   cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
   cairo_paint(cr);
@@ -350,19 +353,45 @@ static void mask_set(unsigned mask, bool shift) {
   }
 }
 
+static void create_box(void) {
+  if (g.box_widget) {
+    g_object_ref(G_OBJECT(g.fmdsp_widget));
+    gtk_container_remove(GTK_CONTAINER(g.box_widget), g.fmdsp_widget);
+    g_object_ref(G_OBJECT(g.filechooser_widget));
+    gtk_container_remove(GTK_CONTAINER(g.box_widget), g.filechooser_widget);
+    gtk_container_remove(GTK_CONTAINER(g.root_box_widget), g.box_widget);
+  }
+  gtk_widget_set_size_request(g.fmdsp_widget,
+                              PC98_W * (g.fmdsp_2x + 1),
+                              PC98_H * (g.fmdsp_2x + 1));
+  GtkOrientation o = g.fmdsp_2x ? GTK_ORIENTATION_HORIZONTAL : GTK_ORIENTATION_VERTICAL;
+  g.box_widget = gtk_box_new(o, 0);
+  gtk_box_pack_start(GTK_BOX(g.root_box_widget), g.box_widget, FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(g.box_widget), g.fmdsp_widget, FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(g.box_widget), g.filechooser_widget, TRUE, TRUE, 0);
+  gtk_widget_show_all(g.root_box_widget);
+}
+
 static gboolean key_press_cb(GtkWidget *w,
                              GdkEvent *e,
                              gpointer ptr) {
   (void)w;
   (void)ptr;
+  const GdkModifierType ALLACCELS = GDK_CONTROL_MASK | GDK_SHIFT_MASK | GDK_MOD1_MASK;
   if (GDK_KEY_F1 <= e->key.keyval && e->key.keyval <= GDK_KEY_F10) {
-    if (e->key.state & GDK_CONTROL_MASK) {
+    if ((e->key.state & ALLACCELS) == GDK_CONTROL_MASK) {
       fmdsp_palette_set(&g.fmdsp, e->key.keyval - GDK_KEY_F1);
       return TRUE;
     }
   }
-  bool shift = e->key.state & GDK_CONTROL_MASK;
-  switch (e->key.keyval) {
+  guint keyval;
+  gdk_keymap_translate_keyboard_state(gdk_keymap_get_default(),
+                                      e->key.hardware_keycode,
+                                      0,
+                                      e->key.group,
+                                      &keyval, 0, 0, 0);
+  bool shift = (e->key.state & ALLACCELS) == GDK_SHIFT_MASK;
+  switch (keyval) {
   case GDK_KEY_F6:
     if (g.current_uri) {
       openfile(g.current_uri);
@@ -379,6 +408,10 @@ static gboolean key_press_cb(GtkWidget *w,
     break;
   case GDK_KEY_F11:
     fmdsp_dispstyle_set(&g.fmdsp, (g.fmdsp.style+1) % FMDSP_DISPSTYLE_CNT);
+    break;
+  case GDK_KEY_F12:
+    g.fmdsp_2x ^= 1;
+    create_box();
     break;
   case GDK_KEY_1:
     mask_set(LIBOPNA_CHAN_FM_1, shift);
@@ -451,43 +484,23 @@ int main(int argc, char **argv) {
   gtk_init(&argc, &argv);
   GtkWidget *w = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   g.mainwin = w;
-  //gtk_window_set_resizable(GTK_WINDOW(w), FALSE);
+  gtk_window_set_resizable(GTK_WINDOW(w), FALSE);
   gtk_window_set_title(GTK_WINDOW(w), "FMPlayer");
   g_signal_connect(w, "destroy", G_CALLBACK(on_destroy), 0);
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_container_add(GTK_CONTAINER(w), box);
+  g.root_box_widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_container_add(GTK_CONTAINER(w), g.root_box_widget);
 
   GtkWidget *menubar = create_menubar();
-  gtk_box_pack_start(GTK_BOX(box), menubar, FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(g.root_box_widget), menubar, FALSE, TRUE, 0);
 
-  GtkWidget *hbox;
-  {
-    GtkOrientation o = GTK_ORIENTATION_VERTICAL;
-#ifdef FMDSP_2X
-    o = GTK_ORIENTATION_HORIZONTAL;
-#endif
-    hbox = gtk_box_new(o, 0);
-  }
-  gtk_box_pack_start(GTK_BOX(box), hbox, FALSE, TRUE, 0);
-  
-  GtkWidget *drawarea = gtk_drawing_area_new();
-  {
-    gint ww = PC98_W;
-    gint wh = PC98_H;
-#ifdef FMDSP_2X
-    ww *= 2;
-    wh *= 2;
-#endif
-    gtk_widget_set_size_request(drawarea, ww, wh);
-  }
-  g_signal_connect(drawarea, "draw", G_CALLBACK(draw_cb), 0);
-  gtk_box_pack_start(GTK_BOX(hbox), drawarea, FALSE, TRUE, 0);
+  g.fmdsp_widget = gtk_drawing_area_new();
+  g_signal_connect(g.fmdsp_widget, "draw", G_CALLBACK(draw_cb), 0);
 
-  GtkWidget *filechooser = gtk_file_chooser_widget_new(GTK_FILE_CHOOSER_ACTION_OPEN);
-  g_signal_connect(filechooser, "file-activated", G_CALLBACK(on_file_activated), 0);
-  gtk_box_pack_start(GTK_BOX(hbox), filechooser, TRUE, TRUE, 0);
+  g.filechooser_widget = gtk_file_chooser_widget_new(GTK_FILE_CHOOSER_ACTION_OPEN);
+  g_signal_connect(g.filechooser_widget, "file-activated", G_CALLBACK(on_file_activated), 0);
 
-  
+  create_box();
+
   g.pa_initialized = (Pa_Initialize() == paNoError);
   fmdsp_init(&g.fmdsp, &g.font98);
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
@@ -502,7 +515,7 @@ int main(int argc, char **argv) {
   g_signal_connect(w, "drag-data-received", G_CALLBACK(drag_data_recv_cb), 0);
   gtk_widget_add_events(w, GDK_KEY_PRESS_MASK);
   gtk_widget_show_all(w);
-  gtk_widget_add_tick_callback(w, tick_cb, drawarea, destroynothing);
+  gtk_widget_add_tick_callback(w, tick_cb, g.fmdsp_widget, destroynothing);
   gtk_main();
   return 0;
 }
