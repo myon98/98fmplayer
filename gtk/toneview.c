@@ -60,10 +60,17 @@ static void on_copy_clicked(GtkButton *button, gpointer ptr) {
   (void)button;
   int c = (intptr_t)ptr;
   if (!g.clipboard) {
+#if GTK_MINOR_VERSION < 16
+    GdkAtom selection = gdk_atom_intern("CLIPBOARD", TRUE);
+    if (selection) {
+      g.clipboard = gtk_clipboard_get(selection);
+    }
+#else
     GdkDisplay *disp = gdk_display_get_default();
     if (disp) {
       g.clipboard = gtk_clipboard_get_default(disp);
     }
+#endif
   }
   if (g.clipboard) {
     tonedata_ch_string(g.format, g.strbuf, &g.tonedata_n.ch[c], 0);
