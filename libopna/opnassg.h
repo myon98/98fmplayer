@@ -8,6 +8,9 @@
 extern "C" {
 #endif
 
+#define OPNA_SSG_SINCTABLEBIT 7
+#define OPNA_SSG_SINCTABLELEN (1<<OPNA_SSG_SINCTABLEBIT)
+
 struct opna_ssg_ch {
   uint16_t tone_counter;
   bool out;
@@ -30,7 +33,7 @@ struct opna_ssg {
 };
 
 struct opna_ssg_resampler {
-  int16_t buf[(1<<7)*3];
+  int16_t buf[OPNA_SSG_SINCTABLELEN*3 * 2];
   unsigned index;
 };
 
@@ -57,6 +60,14 @@ unsigned opna_ssg_readreg(const struct opna_ssg *ssg, unsigned reg);
 // channel level (0 - 31)
 int opna_ssg_channel_level(const struct opna_ssg *ssg, int ch);
 unsigned opna_ssg_tone_period(const struct opna_ssg *ssg, int ch);
+
+typedef void (*opna_ssg_sinc_calc_func_type)(unsigned resampler_index,
+                                             const int16_t *inbuf, int32_t *outbuf);
+extern opna_ssg_sinc_calc_func_type opna_ssg_sinc_calc_func;
+void opna_ssg_sinc_calc_c(unsigned resampler_index,
+                          const int16_t *inbuf, int32_t *outbuf);
+
+extern const int16_t opna_ssg_sinctable[OPNA_SSG_SINCTABLELEN*2];
 
 #ifdef __cplusplus
 }

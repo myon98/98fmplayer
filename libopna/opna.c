@@ -37,8 +37,9 @@ void opna_mix_oscillo(struct opna *opna, int16_t *buf, unsigned samples, struct 
     }
   }
   unsigned offset = OSCILLO_SAMPLE_COUNT - samples;
-  opna_fm_mix(&opna->fm, buf, samples, &oscillo[0], offset);
-  opna_ssg_mix_55466(&opna->ssg, &opna->resampler, buf, samples, &oscillo[6], offset);
+  opna_fm_mix(&opna->fm, buf, samples, oscillo ? &oscillo[0] : 0, offset);
+  opna_ssg_mix_55466(&opna->ssg, &opna->resampler, buf, samples,
+                     oscillo ? &oscillo[6] : 0, offset);
   opna_drum_mix(&opna->drum, buf, samples);
   opna_adpcm_mix(&opna->adpcm, buf, samples);
 }

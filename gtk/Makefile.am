@@ -1,11 +1,12 @@
 bin_PROGRAMS=fmplayer
 
 LIBOPNA_SRC=../libopna/opnaadpcm.c \
-                ../libopna/opnadrum.c \
-                ../libopna/opnafm.c \
-                ../libopna/opnassg.c \
-                ../libopna/opnatimer.c \
-                ../libopna/opna.c
+            ../libopna/opnadrum.c \
+            ../libopna/opnafm.c \
+            ../libopna/opnassg.c \
+            ../libopna/opnassg-sinc-c.c \
+            ../libopna/opnatimer.c \
+            ../libopna/opna.c
 
 FMDRIVER_SRC=../fmdriver/fmdriver_fmp.c \
              ../fmdriver/fmdriver_pmd.c \
@@ -13,8 +14,15 @@ FMDRIVER_SRC=../fmdriver/fmdriver_fmp.c \
              ../fmdriver/ppz8.c
 
 FMDSP_SRC=../fmdsp/fmdsp.c \
+          ../fmdsp/fmdsp-vramlookup-c.c \
           ../fmdsp/font_rom.c \
           ../fmdsp/font_fmdsp_small.c
+
+if ENABLE_NEON
+LIBOPNA_SRC+=../libopna/opnassg-sinc-neon.s
+FMDSP_SRC+=../fmdsp/fmdsp-vramlookup-neon.s
+fmplayer_CCASFLAGS=-march=armv8-a -mfpu=crypto-neon-fp-armv8
+endif
 
 fmplayer_SOURCES=main.c \
                  toneview.c \

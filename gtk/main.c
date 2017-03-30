@@ -53,6 +53,7 @@ static struct {
   void *vram32;
   int vram32_stride;
   const char *current_uri;
+  bool oscillo_should_update;
   struct oscillodata oscillodata_audiothread[LIBOPNA_OSCILLO_TRACK_COUNT];
 } g;
 
@@ -97,17 +98,21 @@ static int pastream_cb(const void *inptr, void *outptr, unsigned long frames,
   struct opna_timer *timer = (struct opna_timer *)userdata;
   int16_t *buf = (int16_t *)outptr;
   memset(outptr, 0, sizeof(int16_t)*frames*2);
-  opna_timer_mix_oscillo(timer, buf, frames, g.oscillodata_audiothread);
+  opna_timer_mix_oscillo(timer, buf, frames,
+                         g.oscillo_should_update ?
+                         g.oscillodata_audiothread : 0);
 
   if (!atomic_flag_test_and_set_explicit(
       &toneview_g.flag, memory_order_acquire)) {
     tonedata_from_opna(&toneview_g.tonedata, &g.opna);
     atomic_flag_clear_explicit(&toneview_g.flag, memory_order_release);
   }
-  if (!atomic_flag_test_and_set_explicit(
-    &oscilloview_g.flag, memory_order_acquire)) {
-    memcpy(oscilloview_g.oscillodata, g.oscillodata_audiothread, sizeof(oscilloview_g.oscillodata));
-    atomic_flag_clear_explicit(&oscilloview_g.flag, memory_order_release);
+  if (g.oscillo_should_update) {
+    if (!atomic_flag_test_and_set_explicit(
+      &oscilloview_g.flag, memory_order_acquire)) {
+      memcpy(oscilloview_g.oscillodata, g.oscillodata_audiothread, sizeof(oscilloview_g.oscillodata));
+      atomic_flag_clear_explicit(&oscilloview_g.flag, memory_order_release);
+    }
   }
   return paContinue;
 }
@@ -479,7 +484,14 @@ static void drag_data_recv_cb(
   gtk_drag_finish(ctx, TRUE, FALSE, time);
 }
 
+void opna_ssg_sinc_calc_neon(unsigned, const int16_t *, int32_t *);
+void fmdsp_vramlookup_neon(uint8_t *, const uint8_t *, const uint8_t *, int);
+
 int main(int argc, char **argv) {
+#ifdef ENABLE_NEON
+  opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_neon;
+  fmdsp_vramlookup_func = fmdsp_vramlookup_neon;
+#endif
   load_fontrom();
   gtk_init(&argc, &argv);
   GtkWidget *w = gtk_window_new(GTK_WINDOW_TOPLEVEL);

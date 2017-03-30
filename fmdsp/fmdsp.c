@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include "libopna/opna.h"
 
+fmdsp_vramlookup_type fmdsp_vramlookup_func = fmdsp_vramlookup_c;
+
 static void vramblit(uint8_t *vram, int x, int y,
                      const uint8_t *data, int w, int h) {
   for (int yi = 0; yi < h; yi++) {
@@ -727,17 +729,9 @@ void fmdsp_update(struct fmdsp *fmdsp,
   }
   fmdsp_palette_fade(fmdsp);
 }
+
 void fmdsp_vrampalette(struct fmdsp *fmdsp, const uint8_t *vram, uint8_t *vram32, int stride) {
-  for (int y = 0; y < PC98_H; y++) {
-    for (int x = 0; x < PC98_W; x++) {
-      uint8_t r = fmdsp->palette[vram[y*PC98_W+x]*3+0];
-      uint8_t g = fmdsp->palette[vram[y*PC98_W+x]*3+1];
-      uint8_t b = fmdsp->palette[vram[y*PC98_W+x]*3+2];
-      uint32_t data = (((uint32_t)r)<<16) | (((uint32_t)g)<<8) | ((uint32_t)b);
-      uint32_t *row = (uint32_t *)(vram32 + y*stride);
-      row[x] = data;
-    }
-  }
+  fmdsp_vramlookup_func(vram32, vram, fmdsp->palette, stride);
 }
 
 void fmdsp_dispstyle_set(struct fmdsp *fmdsp, enum FMDSP_DISPSTYLE style) {

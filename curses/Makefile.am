@@ -9,6 +9,7 @@ LIBOPNA_SOURCES=../libopna/opnaadpcm.c \
                 ../libopna/opna.c
 
 FMDRIVER_SOURCES=../fmdriver/fmdriver_fmp.c \
+                 ../fmdriver/fmdriver_common.c \
                  ../fmdriver/ppz8.c
 fmpc_SOURCES=main.c \
              $(LIBOPNA_SOURCES) \

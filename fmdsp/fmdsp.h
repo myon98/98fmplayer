@@ -49,6 +49,16 @@ void fmdsp_vrampalette(struct fmdsp *fmdsp, const uint8_t *vram, uint8_t *vram32
 void fmdsp_font_from_fontrom(uint8_t *font, const uint8_t *fontrom);
 void fmdsp_palette_set(struct fmdsp *fmdsp, int p);
 void fmdsp_dispstyle_set(struct fmdsp *fmdsp, enum FMDSP_DISPSTYLE style);
+
+typedef void (*fmdsp_vramlookup_type)(uint8_t *vram32,
+                                      const uint8_t *vram,
+                                      const uint8_t *palette,
+                                      int stride);
+extern fmdsp_vramlookup_type fmdsp_vramlookup_func;
+void fmdsp_vramlookup_c(uint8_t *vram32,
+                        const uint8_t *vram,
+                        const uint8_t *palette,
+                        int stride);
 #ifdef __cplusplus
 }
 #endif
