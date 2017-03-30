@@ -79,7 +79,8 @@ void *fmplayer_fileread(const void *pathptr, const char *pcmname, const char *ex
     goto err;
   }
   direnum = g_file_enumerate_children(dir,
-                                      G_FILE_ATTRIBUTE_STANDARD_NAME,
+                                      G_FILE_ATTRIBUTE_STANDARD_NAME ","
+                                      G_FILE_ATTRIBUTE_STANDARD_TARGET_URI,
                                       G_FILE_QUERY_INFO_NONE,
                                       0, 0);
   if (!direnum) {
@@ -87,24 +88,24 @@ void *fmplayer_fileread(const void *pathptr, const char *pcmname, const char *ex
     goto err;
   }
   for (;;) {
-    GFileInfo *info;
-    GFile *pcmfile;
-    if (!g_file_enumerator_iterate(direnum, &info, &pcmfile, 0, 0)) {
+    GFileInfo *info = g_file_enumerator_next_file(direnum, 0, 0);
+    if (!info) {
       if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
       goto err;
     }
-    if (!info || !pcmfile) {
-      if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
-      goto err;
-    }
+    GFile *pcmfile = g_file_enumerator_get_child(direnum, info);
     if (!strcasecmp(g_file_info_get_name(info), pcmname)) {
       void *buf = fileread(pcmfile, maxsize, filesize, error);
+      g_object_unref(G_OBJECT(pcmfile));
+      g_object_unref(G_OBJECT(info));
       g_object_unref(G_OBJECT(direnum));
       g_object_unref(G_OBJECT(dir));
       g_object_unref(G_OBJECT(file));
       free(pcmnamebuf);
       return buf;
     }
+    g_object_unref(G_OBJECT(pcmfile));
+    g_object_unref(G_OBJECT(info));
   }
   if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
 err:
