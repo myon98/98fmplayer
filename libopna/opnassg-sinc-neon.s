@@ -22,8 +22,7 @@ opna_ssg_sinc_calc_neon:
 
 @ add offset to ssg input buffer address
   bic r0, #1
-  add r0, r0, lsl #1
-  add r1, r0
+  add r1, r0, lsl #2
 
 @ initialize output register
   vmov.i64 q12, #0
@@ -39,12 +38,12 @@ opna_ssg_sinc_calc_neon:
   blo .end
 
 @ load SSG channel data
-  vld3.16 {d0-d2}, [r1]!
-  vld3.16 {d3-d5}, [r1]!
-  vld3.16 {d6-d8}, [r1]!
-  vld3.16 {d9-d11}, [r1]!
-  vld3.16 {d12-d14}, [r1]!
-  vld3.16 {d15-d17}, [r1]!
+  vld4.16 {d0-d3}, [r1]!
+  vld4.16 {d3-d6}, [r1]!
+  vld4.16 {d6-d9}, [r1]!
+  vld4.16 {d9-d12}, [r1]!
+  vld4.16 {d12-d15}, [r1]!
+  vld4.16 {d15-d18}, [r1]!
 
 @ load sinc data
   vld1.16 {d18-d21}, [r3]!
@@ -73,7 +72,7 @@ opna_ssg_sinc_calc_neon:
 
 .end:
 @ 8 samples left
-  vld3.16 {d0-d2}, [r1]!
+  vld4.16 {d0-d3}, [r1]!
   vld3.16 {d3-d5}, [r1]
   vld1.16 {d18-d19}, [r3]
 

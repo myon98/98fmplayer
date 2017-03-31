@@ -33,7 +33,7 @@ struct opna_ssg {
 };
 
 struct opna_ssg_resampler {
-  int16_t buf[OPNA_SSG_SINCTABLELEN*3 * 2];
+  int16_t buf[OPNA_SSG_SINCTABLELEN*4 * 2];
   unsigned index;
 };
 

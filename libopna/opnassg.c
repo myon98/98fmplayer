@@ -208,6 +208,7 @@ int opna_ssg_channel_level(const struct opna_ssg *ssg, int ch) {
 #define COEFFSH 14
 
 // 3 samples per frame
+// output buf: 0 1 2 x 0 1 2 x ...
 void opna_ssg_generate_raw(struct opna_ssg *ssg, int16_t *buf, int samples) {
   for (int i = 0; i < samples; i++) {
     if (((++ssg->noise_counter) >> 1) >= opna_ssg_noise_period(ssg)) {
@@ -234,7 +235,7 @@ void opna_ssg_generate_raw(struct opna_ssg *ssg, int16_t *buf, int samples) {
 
     //int16_t out = 0;
     for (int ch = 0; ch < 3; ch++) {
-      buf[i*3+ch] = 0;
+      buf[i*4+ch] = 0;
       if (++ssg->ch[ch].tone_counter >= opna_ssg_tone_period(ssg, ch)) {
         ssg->ch[ch].tone_counter = 0;
         ssg->ch[ch].out = !ssg->ch[ch].out;
@@ -252,13 +253,13 @@ void opna_ssg_generate_raw(struct opna_ssg *ssg, int16_t *buf, int samples) {
       previntmp *= COEFF;
       ssg->prevout[ch] = previntmp - ssg->previn[ch] + ((((int64_t)COEFF)*ssg->prevout[ch]) >> COEFFSH);
       ssg->previn[ch] = previntmp;
-      buf[i*3+ch] = ssg->prevout[ch] >> COEFFSH;
-      //buf[i*3+ch] = voltable[level]/2;
+      buf[i*4+ch] = ssg->prevout[ch] >> COEFFSH;
+      //buf[i*4+ch] = voltable[level]/2;
 #else
       if (!opna_ssg_tone_silent(ssg, ch)) {
         int level = opna_ssg_channel_level(ssg, ch);
         //out += (opna_ssg_tone_out(ssg, ch) ? voltable[level] : -voltable[level]) / 2;
-        buf[i*3+ch] = (opna_ssg_tone_out(ssg, ch) ? voltable[level] : -voltable[level]) / 4;
+        buf[i*4+ch] = (opna_ssg_tone_out(ssg, ch) ? voltable[level] : -voltable[level]) / 4;
       }
 #endif
       
@@ -288,18 +289,18 @@ void opna_ssg_mix_55466(
   for (int i = 0; i < samples; i++) {
     {
       int ssg_samples = ((resampler->index + 9)>>1) - ((resampler->index)>>1);
-      int16_t ssgbuf[15];
+      int16_t ssgbuf[20];
       opna_ssg_generate_raw(ssg, ssgbuf, ssg_samples);
       for (int j = 0; j < ssg_samples; j++) {
-        resampler->buf[BUFINDEX(j)*3+0] = ssgbuf[j*3+0];
-        resampler->buf[BUFINDEX(j)*3+1] = ssgbuf[j*3+1];
-        resampler->buf[BUFINDEX(j)*3+2] = ssgbuf[j*3+2];
+        resampler->buf[BUFINDEX(j)*4+0] = ssgbuf[j*4+0];
+        resampler->buf[BUFINDEX(j)*4+1] = ssgbuf[j*4+1];
+        resampler->buf[BUFINDEX(j)*4+2] = ssgbuf[j*4+2];
       }
       resampler->index += 9;
     }
     int32_t sample = 0;
     resampler->index &= (1u<<(OPNA_SSG_SINCTABLEBIT+1))-1;
-    memcpy(resampler->buf + OPNA_SSG_SINCTABLELEN*3, resampler->buf, OPNA_SSG_SINCTABLELEN*3*sizeof(*resampler->buf));
+    memcpy(resampler->buf + OPNA_SSG_SINCTABLELEN*4, resampler->buf, OPNA_SSG_SINCTABLELEN*4*sizeof(*resampler->buf));
     int32_t outbuf[3];
     opna_ssg_sinc_calc_func(resampler->index, resampler->buf, outbuf);
     for (int ch = 0; ch < 3; ch++) {
