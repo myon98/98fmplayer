@@ -23,11 +23,13 @@ static struct {
   ATOM oscilloview_class;
   struct oscillodata oscillodata[LIBOPNA_OSCILLO_TRACK_COUNT];
   UINT mmtimer;
+  HPEN whitepen;
 } g;
 
 static void on_destroy(HWND hwnd) {
   g.oscilloview = 0;
   timeKillEvent(g.mmtimer);
+  DeleteObject(g.whitepen);
 }
 
 static void CALLBACK mmtimer_cb(UINT timerid, UINT msg,
@@ -37,6 +39,7 @@ static void CALLBACK mmtimer_cb(UINT timerid, UINT msg,
 }
 
 static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
+  g.whitepen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
   ShowWindow(hwnd, SW_SHOW);
   //SetTimer(hwnd, TIMER_UPDATE, 16, 0);
   g.mmtimer = timeSetEvent(16, 16, mmtimer_cb, 0, TIME_PERIODIC);
@@ -66,7 +69,7 @@ static void on_paint(HWND hwnd) {
   SelectObject(mdc, bitmap);
 
   FillRect(mdc, &cr, GetStockObject(BLACK_BRUSH));
-  SelectObject(mdc, GetStockObject(WHITE_PEN));
+  SelectObject(mdc, g.whitepen);
   int width = cr.right / 3;
   int height = cr.bottom / 3;
   for (int x = 0; x < 3; x++) {
