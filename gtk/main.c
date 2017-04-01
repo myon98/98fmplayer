@@ -55,7 +55,9 @@ static struct {
   const char *current_uri;
   bool oscillo_should_update;
   struct oscillodata oscillodata_audiothread[LIBOPNA_OSCILLO_TRACK_COUNT];
-} g;
+} g = {
+  .oscillo_should_update = true
+};
 
 static void quit(void) {
   if (g.pastream) {
@@ -67,18 +69,26 @@ static void quit(void) {
 }
 
 static void on_destroy(GtkWidget *w, gpointer ptr) {
+  (void)w;
+  (void)ptr;
   quit();
 }
 
 static void on_menu_quit(GtkMenuItem *menuitem, gpointer ptr) {
+  (void)menuitem;
+  (void)ptr;
   quit();
 }
 
 static void on_tone_view(GtkMenuItem *menuitem, gpointer ptr) {
+  (void)menuitem;
+  (void)ptr;
   show_toneview();
 }
 
 static void on_oscillo_view(GtkMenuItem *menuitem, gpointer ptr) {
+  (void)menuitem;
+  (void)ptr;
   show_oscilloview();
 }
 
@@ -95,6 +105,9 @@ static int pastream_cb(const void *inptr, void *outptr, unsigned long frames,
                        const PaStreamCallbackTimeInfo *timeinfo,
                        PaStreamCallbackFlags statusFlags,
                        void *userdata) {
+  (void)inptr;
+  (void)timeinfo;
+  (void)statusFlags;
   struct opna_timer *timer = (struct opna_timer *)userdata;
   int16_t *buf = (int16_t *)outptr;
   memset(outptr, 0, sizeof(int16_t)*frames*2);
@@ -133,7 +146,8 @@ static void opna_writereg_libopna(struct fmdriver_work *work, unsigned addr, uns
 }
 
 static unsigned opna_readreg_libopna(struct fmdriver_work *work, unsigned addr) {
-  struct opna_timer *timer = (struct opna_timer *)work->opna;
+  (void)work;
+  //struct opna_timer *timer = (struct opna_timer *)work->opna;
   return opna_readreg(&g.opna, addr);
 }
 
@@ -280,7 +294,7 @@ static bool openfile(const char *uri) {
   g.pa_paused = false;
   {
     const char *turi = strdup(uri);
-    free(g.current_uri);
+    free((void *)g.current_uri);
     g.current_uri = turi;
   }
   return true;
@@ -290,6 +304,7 @@ err:
 }
 
 static void on_file_activated(GtkFileChooser *chooser, gpointer ptr) {
+  (void)ptr;
   gchar *filename = gtk_file_chooser_get_uri(chooser);
   if (filename) {
     openfile(filename);
@@ -326,6 +341,8 @@ static GtkWidget *create_menubar() {
 static gboolean draw_cb(GtkWidget *w,
                  cairo_t *cr,
                  gpointer p) {
+  (void)w;
+  (void)p;
   fmdsp_update(&g.fmdsp, &g.work, &g.opna, g.vram);
   fmdsp_vrampalette(&g.fmdsp, g.vram, g.vram32, g.vram32_stride);
   cairo_surface_t *s = cairo_image_surface_create_for_data(
@@ -341,6 +358,7 @@ static gboolean draw_cb(GtkWidget *w,
 static gboolean tick_cb(GtkWidget *w,
                         GdkFrameClock *frame_clock,
                         gpointer p) {
+  (void)w;
   (void)frame_clock;
   gtk_widget_queue_draw(GTK_WIDGET(p));
   return G_SOURCE_CONTINUE;
@@ -472,6 +490,7 @@ static void drag_data_recv_cb(
   gint x, gint y,
   GtkSelectionData *data,
   guint info, guint time, gpointer ptr) {
+  (void)w;
   (void)x;
   (void)y;
   (void)info;
@@ -484,13 +503,14 @@ static void drag_data_recv_cb(
   gtk_drag_finish(ctx, TRUE, FALSE, time);
 }
 
-void opna_ssg_sinc_calc_neon(unsigned, const int16_t *, int32_t *);
-void fmdsp_vramlookup_neon(uint8_t *, const uint8_t *, const uint8_t *, int);
-
 int main(int argc, char **argv) {
 #ifdef ENABLE_NEON
   opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_neon;
   fmdsp_vramlookup_func = fmdsp_vramlookup_neon;
+#endif
+#ifdef ENABLE_SSE
+  if (__builtin_cpu_supports("sse2")) opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_sse2;
+  if (__builtin_cpu_supports("ssse3")) fmdsp_vramlookup_func = fmdsp_vramlookup_ssse3;
 #endif
   load_fontrom();
   gtk_init(&argc, &argv);

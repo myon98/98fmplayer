@@ -52,6 +52,7 @@ static struct {
   struct fmplayer_file *fmfile;
   struct fmdsp fmdsp;
   uint8_t vram[PC98_W*PC98_H];
+  //uint8_t *vram;
   struct fmdsp_font font;
   uint8_t fontrom[FONT_ROM_FILESIZE];
   bool font_loaded;
@@ -66,6 +67,8 @@ static struct {
   bool fmdsp_2x;
   struct oscillodata oscillodata_audiothread[LIBOPNA_OSCILLO_TRACK_COUNT];
   UINT mmtimer;
+  HBITMAP bitmap_vram;
+  uint8_t *vram32;
 } g;
 
 HWND g_currentdlg;
@@ -445,6 +448,20 @@ static void CALLBACK mmtimer_cb(UINT timerid, UINT msg,
 
 static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   (void)cs;
+  struct bitmap_info_fmdsp {
+    BITMAPINFOHEADER head;
+    RGBQUAD colors[FMDSP_PALETTE_COLORS];
+  } bmi = {0};
+  bmi.head.biSize = sizeof(bmi.head);
+  bmi.head.biWidth = PC98_W;
+  bmi.head.biHeight = -PC98_H;
+  bmi.head.biPlanes = 1;
+  bmi.head.biBitCount = 32;
+  bmi.head.biCompression = BI_RGB;
+  //bmi.head.biClrUsed = FMDSP_PALETTE_COLORS;
+  g.bitmap_vram = CreateDIBSection(
+    0, (BITMAPINFO *)&bmi, DIB_RGB_COLORS, (void **)&g.vram32, 0, 0
+  );
   HWND button = CreateWindowEx(
     0,
     L"BUTTON",
@@ -563,40 +580,26 @@ static void on_destroy(HWND hwnd) {
 
 static void on_paint(HWND hwnd) {
   fmdsp_update(&g.fmdsp, &g.work, &g.opna, g.vram);
+  fmdsp_vrampalette(&g.fmdsp, g.vram, g.vram32, PC98_W*4);
   PAINTSTRUCT ps;
-  static BITMAPINFO *bi = 0;
-  if (!bi) {
-    bi = HeapAlloc(g.heap, HEAP_ZERO_MEMORY,
-              sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD)*FMDSP_PALETTE_COLORS);
-    if (!bi) return;
-    bi->bmiHeader.biSize = sizeof(bi->bmiHeader);
-    bi->bmiHeader.biWidth = PC98_W;
-    bi->bmiHeader.biHeight = -PC98_H;
-    bi->bmiHeader.biPlanes = 1;
-    bi->bmiHeader.biBitCount = 8;
-    bi->bmiHeader.biCompression = BI_RGB;
-    bi->bmiHeader.biClrUsed = FMDSP_PALETTE_COLORS;
-  }
-  for (int p = 0; p < FMDSP_PALETTE_COLORS; p++) {
-    bi->bmiColors[p].rgbRed = g.fmdsp.palette[p*3+0];
-    bi->bmiColors[p].rgbGreen = g.fmdsp.palette[p*3+1];
-    bi->bmiColors[p].rgbBlue = g.fmdsp.palette[p*3+2];
-  }
   HDC dc = BeginPaint(hwnd, &ps);
   HDC mdc = CreateCompatibleDC(dc);
-  HBITMAP bitmap = CreateDIBitmap(
-    dc,
-    &bi->bmiHeader, CBM_INIT,
-    g.vram,
-    bi, DIB_RGB_COLORS);
-  SelectObject(mdc, bitmap);
+  SelectObject(mdc, g.bitmap_vram);
+  /*
+  RGBQUAD palette[FMDSP_PALETTE_COLORS];
+  for (int p = 0; p < FMDSP_PALETTE_COLORS; p++) {
+    palette[p].rgbRed = g.fmdsp.palette[p*3+0];
+    palette[p].rgbGreen = g.fmdsp.palette[p*3+1];
+    palette[p].rgbBlue = g.fmdsp.palette[p*3+2];
+  }
+  SetDIBColorTable(mdc, 0, FMDSP_PALETTE_COLORS, palette);
+  */
   if (g.fmdsp_2x) {
     StretchBlt(dc, 0, 80, 1280, 800, mdc, 0, 0, 640, 400, SRCCOPY);
   } else {
     BitBlt(dc, 0, 80, 640, 400, mdc, 0, 0, SRCCOPY);
   }
   DeleteDC(mdc);
-  DeleteObject(bitmap);
   EndPaint(hwnd, &ps);
 }
 
@@ -665,8 +668,20 @@ static LRESULT CALLBACK wndproc(
   HANDLE_MSG(hwnd, WM_SYSKEYUP, on_syskey);
   HANDLE_MSG(hwnd, WM_ACTIVATE, on_activate);
   case WM_USER:
-    InvalidateRect(hwnd, 0, FALSE);
-    return 0;
+    {
+      RECT r = {
+        .left = 0,
+        .top = 80,
+        .right = 640,
+        .bottom = 480,
+      };
+      if (g.fmdsp_2x) {
+        r.right = 1280;
+        r.bottom = 880;
+      }
+      InvalidateRect(hwnd, &r, FALSE);
+      return 0;
+    }
   }
   return DefWindowProc(hwnd, msg, wParam, lParam);
 }
@@ -687,6 +702,9 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
                       wchar_t *cmdline_, int cmdshow) {
   (void)hpinst;
   (void)cmdline_;
+
+  if (__builtin_cpu_supports("sse2")) opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_sse2;
+  if (__builtin_cpu_supports("ssse3")) fmdsp_vramlookup_func = fmdsp_vramlookup_ssse3;
 
   const wchar_t *argfile = 0;
   {
@@ -725,9 +743,14 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
   wr.top = 0;
   wr.bottom = 480;
   AdjustWindowRectEx(&wr, style, 0, exStyle);
+#ifdef _WIN64
+#define WIN64STR "(amd64)"
+#else
+#define WIN64STR ""
+#endif
   g.mainwnd = CreateWindowEx(
     exStyle,
-    (wchar_t*)((uintptr_t)wcatom), L"FMPlayer/Win32 v" FMPLAYER_VERSION_STR,
+    (wchar_t*)((uintptr_t)wcatom), L"FMPlayer/Win32 " WIN64STR " v" FMPLAYER_VERSION_STR,
     style,
     CW_USEDEFAULT, CW_USEDEFAULT,
     wr.right-wr.left, wr.bottom-wr.top,

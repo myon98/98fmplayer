@@ -15,12 +15,16 @@ LIBOPNA_OBJS=opna \
              opnatimer \
              opnafm \
              opnassg \
+             opnassg-sinc-c \
              opnadrum \
              opnaadpcm
 FMDSP_OBJS=fmdsp \
+           fmdsp-vramlookup-c \
            font_rom \
            font_fmdsp_small
 TONEDATA_OBJS=tonedata
+SSEOBJBASE=opnassg-sinc-sse2 \
+           fmdsp-vramlookup-ssse3
 OBJBASE=main \
         toneview \
         oscilloview \

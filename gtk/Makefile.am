@@ -18,10 +18,27 @@ FMDSP_SRC=../fmdsp/fmdsp.c \
           ../fmdsp/font_rom.c \
           ../fmdsp/font_fmdsp_small.c
 
+#fmplayer_CFLAGS=$(CFLAGS)
+#CFLAGS=
+fmplayer_CPPFLAGS=-Wall -Wextra -pedantic \
+                  -I.. \
+                  $(GTK3_CFLAGS) $(PORTAUDIO_CFLAGS)
+fmplayer_LDADD=$(GTK3_LIBS) $(PORTAUDIO_LIBS)
+
 if ENABLE_NEON
 LIBOPNA_SRC+=../libopna/opnassg-sinc-neon.s
 FMDSP_SRC+=../fmdsp/fmdsp-vramlookup-neon.s
 fmplayer_CCASFLAGS=-march=armv8-a -mfpu=crypto-neon-fp-armv8
+endif
+
+if ENABLE_SSE
+noinst_LIBRARIES=libsse.a
+fmplayer_LDADD+=libsse.a
+libsse_a_SOURCES=../libopna/opnassg-sinc-sse2.c \
+                 ../fmdsp/fmdsp-vramlookup-ssse3.c
+libsse_a_CPPFLAGS=$(fmplayer_CPPFLAGS)
+#no way to add -O3?? (always overridden by CFLAGS)
+libsse_a_CFLAGS=-mssse3
 endif
 
 fmplayer_SOURCES=main.c \
@@ -34,7 +51,3 @@ fmplayer_SOURCES=main.c \
                  $(FMDRIVER_SRC) \
                  $(FMDSP_SRC)
 
-fmplayer_CPPFLAGS=-Wall -Wextra -pedantic \
-                  -I.. \
-                  $(GTK3_CFLAGS) $(PORTAUDIO_CFLAGS)
-fmplayer_LDADD=$(GTK3_LIBS) $(PORTAUDIO_LIBS)
