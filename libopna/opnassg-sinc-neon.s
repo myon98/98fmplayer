@@ -13,7 +13,6 @@
 @ r2: int32_t *outbuf
 
 opna_ssg_sinc_calc_neon:
-  push {r4-r10,lr}
 @ sinc table to r3
   movw r3, #:lower16:opna_ssg_sinctable
   movt r3, #:upper16:opna_ssg_sinctable
@@ -73,7 +72,7 @@ opna_ssg_sinc_calc_neon:
 .end:
 @ 8 samples left
   vld4.16 {d0-d3}, [r1]!
-  vld3.16 {d3-d5}, [r1]
+  vld4.16 {d3-d6}, [r1]
   vld1.16 {d18-d19}, [r3]
 
   vmlal.s16 q12, d0, d18
@@ -84,34 +83,13 @@ opna_ssg_sinc_calc_neon:
   vmlal.s16 q14, d5, d19
 
 @ extract data from result SIMD registers
+  vpadd.i32 d0, d24, d25
+  vpadd.i32 d1, d26, d27
+  vpadd.i32 d2, d28, d29
+  vpaddl.u32 d3, d0
+  vpaddl.u32 d4, d1
+  vpaddl.u32 d5, d2
 
-  vmov.32 r0,  d24[0]
-  vmov.32 r1,  d24[1]
-  vmov.32 r3,  d25[0]
-  vmov.32 r12, d25[1]
+  vst3.32 {d3[0]-d5[0]}, [r2]
 
-  vmov.32 r14, d26[0]
-  vmov.32 r4,  d26[1]
-  vmov.32 r5,  d27[0]
-  vmov.32 r6,  d27[1]
-
-  vmov.32 r7,  d28[0]
-  vmov.32 r8,  d28[1]
-  vmov.32 r9,  d29[0]
-  vmov.32 r10, d29[1]
-
-  add r0, r1
-  add r3, r12
-
-  add r14, r4
-  add r5, r6
-
-  add r7, r8
-  add r9, r10
-
-  add r4, r0, r3
-  add r5, r14
-  add r6, r7, r9
-
-  stmia r2, {r4-r6}
-  pop {r4-r10,pc}
+  bx lr
