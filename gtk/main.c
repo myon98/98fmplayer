@@ -368,11 +368,38 @@ static void destroynothing(gpointer p) {
   (void)p;
 }
 
-static void mask_set(unsigned mask, bool shift) {
-  if (shift) {
-    opna_set_mask(&g.opna, ~mask);
+static void mask_set(int p, bool shift, bool control) {
+  if (!control) {
+    if (p >= 11) return;
+    static const unsigned masktbl[11] = {
+      LIBOPNA_CHAN_FM_1,
+      LIBOPNA_CHAN_FM_2,
+      LIBOPNA_CHAN_FM_3,
+      LIBOPNA_CHAN_FM_4,
+      LIBOPNA_CHAN_FM_5,
+      LIBOPNA_CHAN_FM_6,
+      LIBOPNA_CHAN_SSG_1,
+      LIBOPNA_CHAN_SSG_2,
+      LIBOPNA_CHAN_SSG_3,
+      LIBOPNA_CHAN_DRUM_ALL,
+      LIBOPNA_CHAN_ADPCM,
+    };
+    unsigned mask = masktbl[p];
+    if (shift) {
+      opna_set_mask(&g.opna, ~mask);
+      ppz8_set_mask(&g.ppz8, -1);
+    } else {
+      opna_set_mask(&g.opna, opna_get_mask(&g.opna) ^ mask);
+    }
   } else {
-    opna_set_mask(&g.opna, opna_get_mask(&g.opna) ^ mask);
+    if (p >= 8) return;
+    unsigned mask = 1u<<p;
+    if (shift) {
+      ppz8_set_mask(&g.ppz8, ~mask);
+      opna_set_mask(&g.opna, -1);
+    } else {
+      ppz8_set_mask(&g.ppz8, ppz8_get_mask(&g.ppz8) ^ mask);
+    }
   }
 }
 
@@ -413,7 +440,8 @@ static gboolean key_press_cb(GtkWidget *w,
                                       0,
                                       e->key.group,
                                       &keyval, 0, 0, 0);
-  bool shift = (e->key.state & ALLACCELS) == GDK_SHIFT_MASK;
+  bool shift = e->key.state & GDK_SHIFT_MASK;
+  bool ctrl = e->key.state & GDK_CONTROL_MASK;
   switch (keyval) {
   case GDK_KEY_F6:
     if (g.current_uri) {
@@ -437,46 +465,48 @@ static gboolean key_press_cb(GtkWidget *w,
     create_box();
     break;
   case GDK_KEY_1:
-    mask_set(LIBOPNA_CHAN_FM_1, shift);
+    mask_set(0, shift, ctrl);
     break;
   case GDK_KEY_2:
-    mask_set(LIBOPNA_CHAN_FM_2, shift);
+    mask_set(1, shift, ctrl);
     break;
   case GDK_KEY_3:
-    mask_set(LIBOPNA_CHAN_FM_3, shift);
+    mask_set(2, shift, ctrl);
     break;
   case GDK_KEY_4:
-    mask_set(LIBOPNA_CHAN_FM_4, shift);
+    mask_set(3, shift, ctrl);
     break;
   case GDK_KEY_5:
-    mask_set(LIBOPNA_CHAN_FM_5, shift);
+    mask_set(4, shift, ctrl);
     break;
   case GDK_KEY_6:
-    mask_set(LIBOPNA_CHAN_FM_6, shift);
+    mask_set(5, shift, ctrl);
     break;
   case GDK_KEY_7:
-    mask_set(LIBOPNA_CHAN_SSG_1, shift);
+    mask_set(6, shift, ctrl);
     break;
   case GDK_KEY_8:
-    mask_set(LIBOPNA_CHAN_SSG_2, shift);
+    mask_set(7, shift, ctrl);
     break;
   case GDK_KEY_9:
-    mask_set(LIBOPNA_CHAN_SSG_3, shift);
+    mask_set(8, shift, ctrl);
     break;
   case GDK_KEY_0:
-    mask_set(LIBOPNA_CHAN_DRUM_ALL, shift);
+    mask_set(9, shift, ctrl);
     break;
   case GDK_KEY_minus:
-    mask_set(LIBOPNA_CHAN_ADPCM, shift);
+    mask_set(10, shift, ctrl);
     break;
   // jp106 / pc98
   case GDK_KEY_asciicircum:
   // us
   case GDK_KEY_equal:
     opna_set_mask(&g.opna, ~opna_get_mask(&g.opna));
+    ppz8_set_mask(&g.ppz8, ~ppz8_get_mask(&g.ppz8));
     break;
   case GDK_KEY_backslash:
     opna_set_mask(&g.opna, 0);
+    ppz8_set_mask(&g.ppz8, 0);
     break;
   default:
     return FALSE;
