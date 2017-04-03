@@ -17,7 +17,7 @@ static struct {
   void *cbptr;
   HWND about;
   ATOM about_class;
-  HFONT font, font_large;
+  HFONT font, font_large, font_small;
   HWND static_main, static_icon, static_help, static_info, button_ok;
   wchar_t *soundapiname;
   bool adpcm_rom, font_rom;
@@ -56,7 +56,7 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
     .left = 0,
     .top = 0,
     .right = 480,
-    .bottom = 300
+    .bottom = 400
   };
   DWORD style = GetWindowLongPtr(hwnd, GWL_STYLE);
   DWORD exstyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
@@ -67,6 +67,7 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
     NONCLIENTMETRICS ncm;
     ncm.cbSize = sizeof(ncm);
     SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
+    g.font_small = CreateFontIndirect(&ncm.lfMessageFont);
     LONG height = ncm.lfMessageFont.lfHeight;
     ncm.lfMessageFont.lfHeight = height * 1.2;
     ncm.lfMessageFont.lfWidth = 0;
@@ -76,7 +77,7 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
     g.font_large = CreateFontIndirect(&ncm.lfMessageFont);
   }
   g.static_icon = CreateWindowEx(0, L"static",
-                                 MAKEINTRESOURCE(1),
+                                 L"#1",
                                  WS_CHILD | WS_VISIBLE | SS_ICON,
                                  100, 10, 32, 32,
                                  hwnd, 0, g.hinst, 0);
@@ -88,7 +89,7 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
   g.static_info = CreateWindowEx(0, L"static",
                                  L"",
                                  WS_CHILD | WS_VISIBLE,
-                                 75, 50, 400, 90,
+                                 75, 50, 400, 110,
                                  hwnd, 0, g.hinst, 0);
   SetWindowFont(g.static_info, g.font, TRUE);
   update_status();
@@ -101,7 +102,7 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
                                  "=: invert all mask\r\n"
                                  "\\: all tracks on",
                                  WS_CHILD | WS_VISIBLE,
-                                 75, 140, 400, 400,
+                                 75, 165, 400, 200,
                                  hwnd, 0, g.hinst, 0);
   SetWindowFont(g.static_help, g.font, TRUE);
   g.static_main = CreateWindowEx(0, L"static",
@@ -113,9 +114,9 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
   g.button_ok = CreateWindowEx(0, L"button",
                                L"&OK",
                                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-                               200, 270, 80, 25,
+                               200, 370, 80, 25,
                                hwnd, (HMENU)ID_OK, g.hinst, 0);
-  SetWindowFont(g.button_ok, g.font, TRUE);
+  SetWindowFont(g.button_ok, g.font_small, TRUE);
   ShowWindow(hwnd, SW_SHOW);
   return true;
 }
