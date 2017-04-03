@@ -37,7 +37,6 @@ fmplayer_LDADD+=libsse.a
 libsse_a_SOURCES=../libopna/opnassg-sinc-sse2.c \
                  ../fmdsp/fmdsp-vramlookup-ssse3.c
 libsse_a_CPPFLAGS=$(fmplayer_CPPFLAGS)
-#no way to add -O3?? (always overridden by CFLAGS)
 libsse_a_CFLAGS=-mssse3
 endif
 

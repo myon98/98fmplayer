@@ -65,9 +65,9 @@ typedef void (*opna_ssg_sinc_calc_func_type)(unsigned resampler_index,
                                              const int16_t *inbuf, int32_t *outbuf);
 extern opna_ssg_sinc_calc_func_type opna_ssg_sinc_calc_func;
 void opna_ssg_sinc_calc_c(unsigned resampler_index,
-                          const int16_t *inbuf, int32_t *outbuf);
+                          const int16_t *inbuf, int32_t *outbuf) __attribute__((hot, optimize(3)));
 void opna_ssg_sinc_calc_neon(unsigned, const int16_t *, int32_t *);
-void opna_ssg_sinc_calc_sse2(unsigned, const int16_t *, int32_t *);
+void opna_ssg_sinc_calc_sse2(unsigned, const int16_t *, int32_t *) __attribute__((hot, optimize(3)));
 
 extern const int16_t opna_ssg_sinctable[OPNA_SSG_SINCTABLELEN*2];
 

@@ -58,10 +58,10 @@ extern fmdsp_vramlookup_type fmdsp_vramlookup_func;
 void fmdsp_vramlookup_c(uint8_t *vram32,
                         const uint8_t *vram,
                         const uint8_t *palette,
-                        int stride);
+                        int stride) __attribute__((hot,optimize(3)));
 
 void fmdsp_vramlookup_neon(uint8_t *, const uint8_t *, const uint8_t *, int);
-void fmdsp_vramlookup_ssse3(uint8_t *, const uint8_t *, const uint8_t *, int);
+void fmdsp_vramlookup_ssse3(uint8_t *, const uint8_t *, const uint8_t *, int) __attribute__((hot,optimize(3)));
 #ifdef __cplusplus
 }
 #endif
