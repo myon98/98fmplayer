@@ -19,6 +19,7 @@
 #include "toneview.h"
 #include "oscillo/oscillo.h"
 #include "oscilloview.h"
+#include "about.h"
 
 enum {
   ID_OPENFILE = 0x10,
@@ -26,6 +27,7 @@ enum {
   ID_2X,
   ID_TONEVIEW,
   ID_OSCILLOVIEW,
+  ID_ABOUT,
 };
 
 #define FMPLAYER_CLASSNAME L"myon_fmplayer_ym2608_win32"
@@ -62,7 +64,8 @@ static struct {
   HWND mainwnd;
   WNDPROC btn_defproc;
   HWND driverinfo;
-  HWND button_2x;
+  HWND button_2x, button_toneview, button_oscilloview, button_about;
+  bool toneview_on, oscilloview_on, about_on;
   const wchar_t *lastopenpath;
   bool fmdsp_2x;
   struct oscillodata oscillodata_audiothread[LIBOPNA_OSCILLO_TRACK_COUNT];
@@ -140,6 +143,7 @@ static bool loadfontrom(void) {
   CloseHandle(file);
   fmdsp_font_from_font_rom(&g.font, g.fontrom);
   g.font_loaded = true;
+  about_set_fontrom_loaded(true);
   return true;
 err_file:
   CloseHandle(file);
@@ -178,6 +182,7 @@ static void loadrom(void) {
       || readbytes != OPNA_ROM_SIZE) goto err_buf;
   CloseHandle(file);
   g.drum_rom = buf;
+  about_set_adpcmrom_loaded(true);
   return;
 err_buf:
   HeapFree(g.heap, 0, buf);
@@ -229,6 +234,7 @@ static void openfile(HWND hwnd, const wchar_t *path) {
     g.sound = sound_init(hwnd, SRATE, SECTLEN,
                          sound_cb, &g.opna_timer);
     SetWindowText(g.driverinfo, g.sound->apiname);
+    about_setsoundapiname(g.sound->apiname);
   }
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   if (!g.sound) goto err;
@@ -327,11 +333,38 @@ static void on_dropfiles(HWND hwnd, HDROP hdrop) {
 }
 #endif // ENABLE_WM_DROPFILES
 
-static void mask_set(unsigned mask, bool shift) {
-  if (shift) {
-    opna_set_mask(&g.opna, ~mask);
+static void mask_set(int p, bool shift, bool control) {
+  if (!control) {
+    if (p >= 11) return;
+    static const unsigned masktbl[11] = {
+      LIBOPNA_CHAN_FM_1,
+      LIBOPNA_CHAN_FM_2,
+      LIBOPNA_CHAN_FM_3,
+      LIBOPNA_CHAN_FM_4,
+      LIBOPNA_CHAN_FM_5,
+      LIBOPNA_CHAN_FM_6,
+      LIBOPNA_CHAN_SSG_1,
+      LIBOPNA_CHAN_SSG_2,
+      LIBOPNA_CHAN_SSG_3,
+      LIBOPNA_CHAN_DRUM_ALL,
+      LIBOPNA_CHAN_ADPCM,
+    };
+    unsigned mask = masktbl[p];
+    if (shift) {
+      opna_set_mask(&g.opna, ~mask);
+      ppz8_set_mask(&g.ppz8, -1);
+    } else {
+      opna_set_mask(&g.opna, opna_get_mask(&g.opna) ^ mask);
+    }
   } else {
-    opna_set_mask(&g.opna, opna_get_mask(&g.opna) ^ mask);
+    if (p >= 8) return;
+    unsigned mask = 1u<<p;
+    if (shift) {
+      ppz8_set_mask(&g.ppz8, ~mask);
+      opna_set_mask(&g.opna, -1);
+    } else {
+      ppz8_set_mask(&g.ppz8, ppz8_get_mask(&g.ppz8) ^ mask);
+    }
   }
 }
 
@@ -382,45 +415,48 @@ static bool proc_key(UINT vk, bool down, int repeat) {
       }
     } else {
       bool shift = GetKeyState(VK_SHIFT) & 0x8000U;
+      bool ctrl = GetKeyState(VK_CONTROL) & 0x8000U;
       switch (vk) {
       case '1':
-        mask_set(LIBOPNA_CHAN_FM_1, shift);
+        mask_set(0, shift, ctrl);
         return true;
       case '2':
-        mask_set(LIBOPNA_CHAN_FM_2, shift);
+        mask_set(1, shift, ctrl);
         return true;
       case '3':
-        mask_set(LIBOPNA_CHAN_FM_3, shift);
+        mask_set(2, shift, ctrl);
         return true;
       case '4':
-        mask_set(LIBOPNA_CHAN_FM_4, shift);
+        mask_set(3, shift, ctrl);
         return true;
       case '5':
-        mask_set(LIBOPNA_CHAN_FM_5, shift);
+        mask_set(4, shift, ctrl);
         return true;
       case '6':
-        mask_set(LIBOPNA_CHAN_FM_6, shift);
+        mask_set(5, shift, ctrl);
         return true;
       case '7':
-        mask_set(LIBOPNA_CHAN_SSG_1, shift);
+        mask_set(6, shift, ctrl);
         return true;
       case '8':
-        mask_set(LIBOPNA_CHAN_SSG_2, shift);
+        mask_set(7, shift, ctrl);
         return true;
       case '9':
-        mask_set(LIBOPNA_CHAN_SSG_3, shift);
+        mask_set(8, shift, ctrl);
         return true;
       case '0':
-        mask_set(LIBOPNA_CHAN_DRUM_ALL, shift);
+        mask_set(9, shift, ctrl);
         return true;
       case VK_OEM_MINUS:
-        mask_set(LIBOPNA_CHAN_ADPCM, shift);
+        mask_set(10, shift, ctrl);
         return true;
       case VK_OEM_PLUS:
         opna_set_mask(&g.opna, ~opna_get_mask(&g.opna));
+        ppz8_set_mask(&g.ppz8, ~ppz8_get_mask(&g.ppz8));
         return true;
       case VK_OEM_5:
         opna_set_mask(&g.opna, 0);
+        ppz8_set_mask(&g.ppz8, 0);
         return true;
       }
     }
@@ -498,30 +534,40 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
     30, 25,
     hwnd, (HMENU)ID_2X, g.hinst, 0
   );
-  HWND button_toneview = CreateWindowEx(
+  g.button_toneview = CreateWindowEx(
     0,
     L"BUTTON",
     L"&Tone viewer",
-    WS_TABSTOP | WS_VISIBLE | WS_CHILD,
+    WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_CHECKBOX | BS_PUSHLIKE,
     250, 10,
     100, 25,
     hwnd, (HMENU)ID_TONEVIEW, g.hinst, 0
   );
-  HWND button_oscilloview = CreateWindowEx(
+  g.button_oscilloview = CreateWindowEx(
     0,
     L"BUTTON",
     L"Oscillo&view",
-    WS_TABSTOP | WS_VISIBLE | WS_CHILD,
+    WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_CHECKBOX | BS_PUSHLIKE,
     355, 10,
     100, 25,
     hwnd, (HMENU)ID_OSCILLOVIEW, g.hinst, 0
+  );
+  g.button_about = CreateWindowEx(
+    0,
+    L"BUTTON",
+    L"&About",
+    WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_CHECKBOX | BS_PUSHLIKE,
+    580, 10,
+    50, 25,
+    hwnd, (HMENU)ID_ABOUT, g.hinst, 0
   );
   g.btn_defproc = (WNDPROC)GetWindowLongPtr(button, GWLP_WNDPROC);
   SetWindowLongPtr(button, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   SetWindowLongPtr(pbutton, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   SetWindowLongPtr(g.button_2x, GWLP_WNDPROC, (intptr_t)btn_wndproc);
-  SetWindowLongPtr(button_toneview, GWLP_WNDPROC, (intptr_t)btn_wndproc);
-  SetWindowLongPtr(button_oscilloview, GWLP_WNDPROC, (intptr_t)btn_wndproc);
+  SetWindowLongPtr(g.button_toneview, GWLP_WNDPROC, (intptr_t)btn_wndproc);
+  SetWindowLongPtr(g.button_oscilloview, GWLP_WNDPROC, (intptr_t)btn_wndproc);
+  SetWindowLongPtr(g.button_about, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   NONCLIENTMETRICS ncm;
   ncm.cbSize = sizeof(ncm);
   SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
@@ -530,8 +576,9 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   SetWindowFont(pbutton, font, TRUE);
   SetWindowFont(g.driverinfo, font, TRUE);
   SetWindowFont(g.button_2x, font, TRUE);
-  SetWindowFont(button_toneview, font, TRUE);
-  SetWindowFont(button_oscilloview, font, TRUE);
+  SetWindowFont(g.button_toneview, font, TRUE);
+  SetWindowFont(g.button_oscilloview, font, TRUE);
+  SetWindowFont(g.button_about, font, TRUE);
   loadrom();
   loadfont();
   fmdsp_init(&g.fmdsp, g.font_loaded ? &g.font : 0);
@@ -542,6 +589,24 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   DragAcceptFiles(hwnd, TRUE);
 #endif
   return true;
+}
+
+static void toneview_close_cb(void *ptr) {
+  (void)ptr;
+  g.toneview_on = false;
+  Button_SetCheck(g.button_toneview, false);
+}
+
+static void oscilloview_close_cb(void *ptr) {
+  (void)ptr;
+  g.oscilloview_on = false;
+  Button_SetCheck(g.button_oscilloview, false);
+}
+
+static void about_close_cb(void *ptr) {
+  (void)ptr;
+  g.about_on = false;
+  Button_SetCheck(g.button_about, false);
 }
 
 static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
@@ -561,10 +626,37 @@ static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
     toggle_2x(hwnd);
     break;
   case ID_TONEVIEW:
-    show_toneview(g.hinst, hwnd);
+    if (!g.toneview_on) {
+      g.toneview_on = true;
+      toneview_open(g.hinst, hwnd, toneview_close_cb, 0);
+      Button_SetCheck(g.button_toneview, true);
+    } else {
+      g.toneview_on = false;
+      toneview_close();
+      Button_SetCheck(g.button_toneview, false);
+    }
     break;
   case ID_OSCILLOVIEW:
-    show_oscilloview(g.hinst, hwnd);
+    if (!g.oscilloview_on) {
+      g.oscilloview_on = true;
+      oscilloview_open(g.hinst, hwnd, oscilloview_close_cb, 0);
+      Button_SetCheck(g.button_oscilloview, true);
+    } else {
+      g.oscilloview_on = false;
+      oscilloview_close();
+      Button_SetCheck(g.button_oscilloview, false);
+    }
+    break;
+  case ID_ABOUT:
+    if (!g.about_on) {
+      g.about_on = true;
+      about_open(g.hinst, hwnd, about_close_cb, 0);
+      Button_SetCheck(g.button_about, true);
+    } else {
+      g.about_on = false;
+      about_close();
+      Button_SetCheck(g.button_about, false);
+    }
     break;
   }
 }
@@ -744,13 +836,13 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
   wr.bottom = 480;
   AdjustWindowRectEx(&wr, style, 0, exStyle);
 #ifdef _WIN64
-#define WIN64STR "(amd64)"
+#define WIN64STR "(amd64) "
 #else
 #define WIN64STR ""
 #endif
   g.mainwnd = CreateWindowEx(
     exStyle,
-    (wchar_t*)((uintptr_t)wcatom), L"FMPlayer/Win32 " WIN64STR " v" FMPLAYER_VERSION_STR,
+    (wchar_t*)((uintptr_t)wcatom), L"FMPlayer/Win32 " WIN64STR "v" FMPLAYER_VERSION_STR,
     style,
     CW_USEDEFAULT, CW_USEDEFAULT,
     wr.right-wr.left, wr.bottom-wr.top,

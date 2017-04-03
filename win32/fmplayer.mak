@@ -35,6 +35,7 @@ OBJBASE=main \
         guid \
         fmplayer_file \
         fmplayer_file_win \
+        about \
         $(FMDRIVER_OBJS) \
         $(LIBOPNA_OBJS) \
         $(TONEDATA_OBJS) \

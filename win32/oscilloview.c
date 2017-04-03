@@ -24,12 +24,15 @@ static struct {
   struct oscillodata oscillodata[LIBOPNA_OSCILLO_TRACK_COUNT];
   UINT mmtimer;
   HPEN whitepen;
+  void (*closecb)(void *ptr);
+  void *cbptr;
 } g;
 
 static void on_destroy(HWND hwnd) {
   g.oscilloview = 0;
   timeKillEvent(g.mmtimer);
   DeleteObject(g.whitepen);
+  if (g.closecb) g.closecb(g.cbptr);
 }
 
 static void CALLBACK mmtimer_cb(UINT timerid, UINT msg,
@@ -111,7 +114,9 @@ static LRESULT CALLBACK wndproc(
   return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-void show_oscilloview(HINSTANCE hinst, HWND parent) {
+void oscilloview_open(HINSTANCE hinst, HWND parent, void (*closecb)(void *ptr), void *cbptr) {
+  g.closecb = closecb;
+  g.cbptr = cbptr;
   g.hinst = hinst;
   g.parent = parent;
   if (!g.oscilloview) {
@@ -138,5 +143,12 @@ void show_oscilloview(HINSTANCE hinst, HWND parent) {
                                      parent, 0, g.hinst, 0);
   } else {
     SetForegroundWindow(g.oscilloview);
+  }
+}
+
+void oscilloview_close(void) {
+  if (g.oscilloview) {
+    g.closecb = 0;
+    DestroyWindow(g.oscilloview);
   }
 }

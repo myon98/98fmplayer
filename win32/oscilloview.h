@@ -13,7 +13,8 @@ extern struct oscilloview {
   struct oscillodata oscillodata[LIBOPNA_OSCILLO_TRACK_COUNT];
 } oscilloview_g;
 
-void show_oscilloview(HINSTANCE hinst, HWND parent);
+void oscilloview_open(HINSTANCE hinst, HWND parent, void (*closecb)(void *ptr), void *cbptr);
+void oscilloview_close(void);
 
 #endif // MYON_FMPLAYER_WIN32_OSCILLOVIEW_H_INCLUDED
 
