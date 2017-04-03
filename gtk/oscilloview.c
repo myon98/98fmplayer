@@ -42,6 +42,8 @@ static gboolean draw_cb(GtkWidget *w,
                         gpointer ptr) {
   (void)w;
   (void)ptr;
+  guint width = gtk_widget_get_allocated_width(w) / 3u;
+  guint height = gtk_widget_get_allocated_height(w) / 3u;
   cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
   if (!atomic_flag_test_and_set_explicit(
     &oscilloview_g.flag, memory_order_acquire)) {
@@ -55,7 +57,7 @@ static gboolean draw_cb(GtkWidget *w,
   cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
   for (int x = 0; x < 3; x++) {
     for (int y = 0; y < 3; y++) {
-      draw_track(cr, x*WIDTH, y*HEIGHT, WIDTH, HEIGHT, &g.oscillodata[x*3+y]);
+      draw_track(cr, x*width, y*height, width, height, &g.oscillodata[x*3+y]);
     }
   }
   return FALSE;
@@ -76,7 +78,7 @@ void show_oscilloview(void) {
   }
   GtkWidget *drawarea = gtk_drawing_area_new();
   gtk_container_add(GTK_CONTAINER(g.win), drawarea);
-  gtk_widget_set_size_request(drawarea, WIDTH*3, HEIGHT*3);
+  //gtk_widget_set_size_request(drawarea, WIDTH*3, HEIGHT*3);
   g_signal_connect(drawarea, "draw", G_CALLBACK(draw_cb), 0);
   gtk_widget_add_tick_callback(drawarea, tick_cb, 0, 0);
   gtk_widget_show_all(g.win);
