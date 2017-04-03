@@ -149,7 +149,7 @@ enum {
   FMDSP_TRACK_DISP_CNT_DEFAULT = 10
 };
 
-static uint8_t track_disp_table_default[FMDSP_TRACK_DISP_CNT_DEFAULT] = {
+static int8_t track_disp_table_default[FMDSP_TRACK_DISP_CNT_DEFAULT] = {
   FMDRIVER_TRACK_FM_1,
   FMDRIVER_TRACK_FM_2,
   FMDRIVER_TRACK_FM_3,
@@ -161,7 +161,7 @@ static uint8_t track_disp_table_default[FMDSP_TRACK_DISP_CNT_DEFAULT] = {
   FMDRIVER_TRACK_SSG_3,
   FMDRIVER_TRACK_ADPCM,
 };
-static uint8_t track_disp_table_opn[FMDSP_TRACK_DISP_CNT_DEFAULT] = {
+static int8_t track_disp_table_opn[FMDSP_TRACK_DISP_CNT_DEFAULT] = {
   FMDRIVER_TRACK_FM_1,
   FMDRIVER_TRACK_FM_2,
   FMDRIVER_TRACK_FM_3,
@@ -173,7 +173,7 @@ static uint8_t track_disp_table_opn[FMDSP_TRACK_DISP_CNT_DEFAULT] = {
   FMDRIVER_TRACK_SSG_3,
   FMDRIVER_TRACK_ADPCM,
 };
-static uint8_t track_disp_table_ppz8[FMDSP_TRACK_DISP_CNT_DEFAULT] = {
+static int8_t track_disp_table_ppz8[FMDSP_TRACK_DISP_CNT_DEFAULT] = {
   FMDRIVER_TRACK_PPZ8_1,
   FMDRIVER_TRACK_PPZ8_2,
   FMDRIVER_TRACK_PPZ8_3,
@@ -182,8 +182,8 @@ static uint8_t track_disp_table_ppz8[FMDSP_TRACK_DISP_CNT_DEFAULT] = {
   FMDRIVER_TRACK_PPZ8_6,
   FMDRIVER_TRACK_PPZ8_7,
   FMDRIVER_TRACK_PPZ8_8,
-  FMDRIVER_TRACK_SSG_3,
   FMDRIVER_TRACK_ADPCM,
+  -1
 };
 
 static void fmdsp_track_init_13(struct fmdsp *fmdsp,
@@ -237,6 +237,7 @@ static void fmdsp_track_init_10(struct fmdsp *fmdsp,
     if (fmdsp->style == FMDSP_DISPSTYLE_DEFAULT) t = track_disp_table_default[i];
     else if (fmdsp->style == FMDSP_DISPSTYLE_OPN) t = track_disp_table_opn[i];
     else t = track_disp_table_ppz8[i];
+    if (t < 0) continue;
     const char *track_type = "     ";
     switch (track_type_table[t].type) {
     case FMDRIVER_TRACKTYPE_FM:
@@ -593,6 +594,7 @@ static void fmdsp_update_10(struct fmdsp *fmdsp,
     if (fmdsp->style == FMDSP_DISPSTYLE_DEFAULT) t = track_disp_table_default[it];
     else if (fmdsp->style == FMDSP_DISPSTYLE_OPN) t = track_disp_table_opn[it];
     else t = track_disp_table_ppz8[it];
+    if (t < 0) continue;
     const struct fmdriver_track_status *track = &work->track_status[t];
 
     if (((track->info == FMDRIVER_TRACK_INFO_PPZ8)
@@ -721,6 +723,18 @@ void fmdsp_update(struct fmdsp *fmdsp,
   fmdsp->masked[FMDRIVER_TRACK_SSG_2] = mask & LIBOPNA_CHAN_SSG_2;
   fmdsp->masked[FMDRIVER_TRACK_SSG_3] = mask & LIBOPNA_CHAN_SSG_3;
   fmdsp->masked[FMDRIVER_TRACK_ADPCM] = mask & LIBOPNA_CHAN_ADPCM;
+  unsigned ppz8mask = 0;
+  if (work->ppz8) {
+    ppz8mask = ppz8_get_mask(work->ppz8);
+  }
+  fmdsp->masked[FMDRIVER_TRACK_PPZ8_1] = ppz8mask & (1u<<0);
+  fmdsp->masked[FMDRIVER_TRACK_PPZ8_2] = ppz8mask & (1u<<1);
+  fmdsp->masked[FMDRIVER_TRACK_PPZ8_3] = ppz8mask & (1u<<2);
+  fmdsp->masked[FMDRIVER_TRACK_PPZ8_4] = ppz8mask & (1u<<3);
+  fmdsp->masked[FMDRIVER_TRACK_PPZ8_5] = ppz8mask & (1u<<4);
+  fmdsp->masked[FMDRIVER_TRACK_PPZ8_6] = ppz8mask & (1u<<5);
+  fmdsp->masked[FMDRIVER_TRACK_PPZ8_7] = ppz8mask & (1u<<6);
+  fmdsp->masked[FMDRIVER_TRACK_PPZ8_8] = ppz8mask & (1u<<7);
   fmdsp->style_updated = false;
   if (fmdsp->style == FMDSP_DISPSTYLE_13) {
     fmdsp_update_13(fmdsp, work, opna, vram);
