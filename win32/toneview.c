@@ -24,21 +24,25 @@ struct toneview_g toneview_g = {
 static struct {
   HINSTANCE hinst;
   HWND toneviewer;
-  HWND tonelabel[6];
+  HWND tonelabel[6], copybutton[6];
   ATOM toneviewer_class;
   struct fmplayer_tonedata tonedata;
   struct fmplayer_tonedata tonedata_n;
+  struct fmplayer_tonedata tonedata_n_disp;
   char strbuf[FMPLAYER_TONEDATA_STR_SIZE];
   wchar_t strbuf_w[FMPLAYER_TONEDATA_STR_SIZE];
-  enum fmplayer_tonedata_format format;
+  enum fmplayer_tonedata_format format, format_disp;
   bool normalize;
   HFONT font;
   HFONT font_mono;
   HWND checkbox;
   HWND formatlist;
   WNDPROC static_defproc;
+  void (*closecb)(void *ptr);
+  void *cbptr;
 } g = {
-  .normalize = true
+  .normalize = true,
+  .format_disp = -1
 };
 
 extern HWND g_currentdlg;
@@ -46,10 +50,14 @@ extern HWND g_currentdlg;
 static void on_destroy(HWND hwnd) {
   for (int i = 0; i < 6; i++) {
     DestroyWindow(g.tonelabel[i]);
+    DestroyWindow(g.copybutton[i]);
   }
   DestroyWindow(g.checkbox);
   DestroyWindow(g.formatlist);
   g.toneviewer = 0;
+  if (g.closecb) {
+    g.closecb(g.cbptr);
+  }
 }
 
 enum {
@@ -58,8 +66,8 @@ enum {
   NORMALIZE_W = 200,
   TOP_H = 25,
   TONELABEL_X = 10,
-  TONELABEL_H = 100,
-  TONELABEL_W = 300,
+  TONELABEL_H = 120,
+  TONELABEL_W = 390,
   COPY_X = TONELABEL_X + TONELABEL_W + 5,
   COPY_W = 100,
   WIN_H = 10 + TOP_H + 5 + TONELABEL_H*6 + 5*5 + 10,
@@ -125,6 +133,7 @@ static LRESULT static_wndproc(
 }
 
 static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
+  g.format_disp = -1;
   RECT wr;
   wr.left = 0;
   wr.right = WIN_W;
@@ -157,7 +166,8 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
   SetWindowFont(g.formatlist, g.font, TRUE);
   ComboBox_AddString(g.formatlist, L"PMD");
   ComboBox_AddString(g.formatlist, L"FMP");
-  ComboBox_SetCurSel(g.formatlist, 0);
+  ComboBox_AddString(g.formatlist, L"VOPM");
+  ComboBox_SetCurSel(g.formatlist, g.format);
   g.checkbox = CreateWindowEx(0, L"button",
                                  L"&Normalize",
                                  WS_CHILD | WS_VISIBLE | BS_CHECKBOX | WS_TABSTOP,
@@ -177,12 +187,12 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
     SetWindowFont(g.tonelabel[i], g.font_mono, TRUE);
     wchar_t text[] = L"Copy (& )";
     text[7] = L'1' + i;
-    HWND copybutton = CreateWindowEx(0, L"button",
+    g.copybutton[i] = CreateWindowEx(0, L"button",
                                      text,
                                      WS_VISIBLE | WS_CHILD | WS_TABSTOP,
                                      COPY_X, 40 + (TONELABEL_H+5)*i, 100, TONELABEL_H,
                                      hwnd, (HMENU)((intptr_t)(ID_COPY0+i)), g.hinst, 0);
-    SetWindowFont(copybutton, g.font, TRUE);
+    SetWindowFont(g.copybutton[i], g.font, TRUE);
   }
   ShowWindow(hwnd, SW_SHOW);
   SetTimer(hwnd, TIMER_UPDATE, 16, 0);
@@ -201,15 +211,18 @@ static void on_timer(HWND hwnd, UINT id) {
       if (g.normalize) {
         tonedata_ch_normalize_tl(&g.tonedata_n.ch[c]);
       }
-      tonedata_ch_string(g.format, g.strbuf, &g.tonedata_n.ch[c], 0);
-      for (int i = 0; i < FMPLAYER_TONEDATA_STR_SIZE; i++) {
-        g.strbuf_w[i] = g.strbuf[i];
+      if (g.format != g.format_disp ||
+          !fmplayer_tonedata_channel_isequal(&g.tonedata_n.ch[c], &g.tonedata_n_disp.ch[c])) {
+        g.tonedata_n_disp.ch[c] = g.tonedata_n.ch[c];
+        tonedata_ch_string(g.format, g.strbuf, &g.tonedata_n_disp.ch[c], 0);
+        for (int i = 0; i < FMPLAYER_TONEDATA_STR_SIZE; i++) {
+          g.strbuf_w[i] = g.strbuf[i];
+        }
+        DefWindowProc(g.tonelabel[c], WM_SETTEXT, 0, (LPARAM)g.strbuf_w);
+        InvalidateRect(g.tonelabel[c], 0, FALSE);
       }
-      DefWindowProc(g.tonelabel[c], WM_SETTEXT, 0, (LPARAM)g.strbuf_w);
-      RedrawWindow(g.tonelabel[c], 0, 0, RDW_ERASE | RDW_INVALIDATE);
     }
-//     RedrawWindow(hwnd, 0, 0, RDW_ERASE | RDW_INVALIDATE | RDW_ALLCHILDREN);
-    InvalidateRect(hwnd, 0, FALSE);
+    g.format_disp = g.format;
   }
 }
 
@@ -231,7 +244,9 @@ static LRESULT CALLBACK wndproc(
   return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-void show_toneview(HINSTANCE hinst, HWND parent) {
+void toneview_open(HINSTANCE hinst, HWND parent, void (*closecb)(void *ptr), void *cbptr) {
+  g.closecb = closecb;
+  g.cbptr = cbptr;
   g.hinst = hinst;
   if (!g.toneviewer) {
     if (!g.toneviewer_class) {
@@ -257,5 +272,12 @@ void show_toneview(HINSTANCE hinst, HWND parent) {
                                   parent, 0, g.hinst, 0);
   } else {
     SetForegroundWindow(g.toneviewer);
+  }
+}
+
+void toneview_close(void) {
+  if (g.toneviewer) {
+    g.closecb = 0;
+    DestroyWindow(g.toneviewer);
   }
 }

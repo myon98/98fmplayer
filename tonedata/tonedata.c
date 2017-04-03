@@ -100,6 +100,31 @@ void tonedata_ch_string(
             ch->alg, ch->fb
     );
     break;
+  case FMPLAYER_TONEDATA_FMT_VOPM:
+    snprintf(buf, FMPLAYER_TONEDATA_STR_SIZE,
+            "@:%d\n"
+            "LFO:  0   0   0   0   0\n"
+            "CH: 64 %3d %3d   0   0 120   0\n"
+            "M1:%3d %3d %3d %3d %3d %3d %3d %3d %3d   0   0\n"
+            "C1:%3d %3d %3d %3d %3d %3d %3d %3d %3d   0   0\n"
+            "M2:%3d %3d %3d %3d %3d %3d %3d %3d %3d   0   0\n"
+            "C2:%3d %3d %3d %3d %3d %3d %3d %3d %3d   0   0",
+            tonenum,
+            ch->fb, ch->alg, 
+            ch->slot[0].ar, ch->slot[0].dr, ch->slot[0].sr, ch->slot[0].rr,
+            ch->slot[0].sl, ch->slot[0].tl, ch->slot[0].ks, ch->slot[0].ml,
+            ch->slot[0].dt,
+            ch->slot[1].ar, ch->slot[1].dr, ch->slot[1].sr, ch->slot[1].rr,
+            ch->slot[1].sl, ch->slot[1].tl, ch->slot[1].ks, ch->slot[1].ml,
+            ch->slot[1].dt,
+            ch->slot[2].ar, ch->slot[2].dr, ch->slot[2].sr, ch->slot[2].rr,
+            ch->slot[2].sl, ch->slot[2].tl, ch->slot[2].ks, ch->slot[2].ml,
+            ch->slot[2].dt,
+            ch->slot[3].ar, ch->slot[3].dr, ch->slot[3].sr, ch->slot[3].rr,
+            ch->slot[3].sl, ch->slot[3].tl, ch->slot[3].ks, ch->slot[3].ml,
+            ch->slot[3].dt
+    );
+    break;
   default:
     buf[0] = 0;
     break;

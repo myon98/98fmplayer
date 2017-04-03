@@ -11,6 +11,7 @@ extern struct toneview_g {
   atomic_flag flag;
 } toneview_g;
 
-void show_toneview(HINSTANCE hinst, HWND parent);
+void toneview_open(HINSTANCE hinst, HWND parent, void (*closecb)(void *ptr), void *cbptr);
+void toneview_close(void);
 
 #endif // MYON_FMPLAYER_WIN32_TONEVIEW_H_INCLUDED

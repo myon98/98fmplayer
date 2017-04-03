@@ -12,8 +12,9 @@ static struct {
   GtkWidget *label[6];
   struct fmplayer_tonedata tonedata;
   struct fmplayer_tonedata tonedata_n;
+  struct fmplayer_tonedata tonedata_n_disp;
   char strbuf[FMPLAYER_TONEDATA_STR_SIZE];
-  enum fmplayer_tonedata_format format;
+  enum fmplayer_tonedata_format format, format_disp;
   bool normalize;
   GtkClipboard *clipboard;
 } g = {
@@ -40,9 +41,14 @@ gboolean tick_cb(GtkWidget *widget, GdkFrameClock *clock, gpointer ptr) {
     if (g.normalize) {
       tonedata_ch_normalize_tl(&g.tonedata_n.ch[c]);
     }
-    tonedata_ch_string(g.format, g.strbuf, &g.tonedata_n.ch[c], 0);
-    gtk_label_set_text(GTK_LABEL(g.label[c]), g.strbuf);
+    if (g.format != g.format_disp ||
+        fmplayer_tonedata_channel_isequal(&g.tonedata_n.ch[c], &g.tonedata_n_disp.ch[c])) {
+      g.tonedata_n_disp.ch[c] = g.tonedata_n.ch[c];
+      tonedata_ch_string(g.format, g.strbuf, &g.tonedata_n.ch[c], 0);
+      gtk_label_set_text(GTK_LABEL(g.label[c]), g.strbuf);
+    }
   }
+  g.format_disp = g.format;
   return G_SOURCE_CONTINUE;
 }
 
@@ -80,6 +86,7 @@ static void on_copy_clicked(GtkButton *button, gpointer ptr) {
 
 void show_toneview(void) {
   if (!g.tonewin) {
+    g.format_disp = -1;
     g.tonewin = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(g.tonewin), "FM Tone Viewer");
     g_signal_connect(g.tonewin, "destroy", G_CALLBACK(on_destroy), 0);
@@ -91,6 +98,7 @@ void show_toneview(void) {
     gtk_box_pack_start(GTK_BOX(ctrlbox), format, FALSE, TRUE, 0);
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(format), "PMD");
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(format), "FMP");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(format), "VOPM");
     gtk_combo_box_set_active(GTK_COMBO_BOX(format), g.format);
     g_signal_connect(format, "changed", G_CALLBACK(on_format_changed), 0);
     GtkWidget *normalizecheck = gtk_check_button_new_with_label("Normalize");
