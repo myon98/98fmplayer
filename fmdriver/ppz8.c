@@ -1,7 +1,13 @@
 #include "ppz8.h"
 #include "fmdriver_common.h"
-//#include <stdio.h>
 #include <string.h>
+
+unsigned ppz8_get_mask(const struct ppz8 *ppz8) {
+  return ppz8->mask;
+}
+void ppz8_set_mask(struct ppz8 *ppz8, unsigned mask) {
+  ppz8->mask = mask & 0xffu;
+}
 
 void ppz8_init(struct ppz8 *ppz8, uint16_t srate, uint16_t mix_volume) {
   for (int i = 0; i < 2; i++) {
@@ -143,6 +149,7 @@ void ppz8_mix(struct ppz8 *ppz8, int16_t *buf, unsigned samples) {
       struct ppz8_channel *channel = &ppz8->channel[p];
       if (!channel->playing) continue;
       int32_t out = ppz8_channel_calc(ppz8, channel);
+      if ((1u << p) & (ppz8->mask)) continue;
       out *= ppz8->mix_volume;
       out >>= 15;
       lo += (out * pan_vol[channel->pan][0]) >> 2;
@@ -317,8 +324,8 @@ static void ppz8_channel_loop_voice(struct ppz8 *ppz8, uint8_t ch, uint8_t v) {
   struct ppz8_channel *channel = &ppz8->channel[ch];
   struct ppz8_pcmbuf *buf = &ppz8->buf[v>>7];
   struct ppz8_pcmvoice *voice = &buf->voice[v & 0x7f];
-  channel->loopstartptr = ((uint64_t)(voice->loopstart)>>1)<<16;
-  channel->loopendptr = ((uint64_t)(voice->loopend)>>1)<<16;
+  channel->loopstartoff = voice->loopstart;
+  channel->loopendoff = voice->loopend;
 }
 
 static uint32_t ppz8_voice_length(struct ppz8 *ppz8, uint8_t v) {

@@ -238,7 +238,7 @@ struct pmd_part {
   bool proc_masked;
   // for display
   uint8_t len;
-  uint16_t output_freq;
+  uint32_t output_freq;
 };
 
 struct pmd_ssgeff_data {

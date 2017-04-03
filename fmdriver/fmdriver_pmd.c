@@ -45,6 +45,41 @@ enum {
 // 0790: PPZ8
 
 
+static uint8_t pmd_adpcm_freq2key(uint16_t freq) {
+  if (!freq) return 0x00;
+  static const uint16_t freqtab[12] = {
+    0x8738, // e upper limit
+    0x8f42,
+    0x97c7,
+    0xa0cd,
+    0xaa5d,
+    0xb47e,
+    0xbf3a,
+    0xca99,
+    0xd6a5,
+    0xe369,
+    0xf0ee,
+    0xff42,
+  };
+  int octave = 5;
+  while (!(freq & 0x8000u)) {
+    freq <<= 1;
+    octave -= 1;
+  }
+  int key = 0;
+  for (; key < 12; key++) {
+    if (freq < freqtab[key]) break;
+  }
+  key += 5;
+  if (key >= 12) {
+    key -= 12;
+    octave++;
+  }
+  if (octave < 0) return 0x00;
+  if (octave > 8) return 0x8b;
+  return (octave << 4) | key;
+}
+
 // 33f7: write standard
 // 341f: write extended
 // 3447
@@ -1299,6 +1334,7 @@ static void pmd_note_freq_adpcm(
   static const uint16_t adpcm_tonetable[0x10] = {
     // 0788
     // ???
+    // different from round((16000*2*0x10000/(8000000/144))*(2**((i-7)/12)))
     0x6264,
     0x6840,
     0x6e74,
@@ -1306,7 +1342,7 @@ static void pmd_note_freq_adpcm(
     0x7bfc,
     0x835e,
     0x8b2e,
-    0x9376,
+    0x9376,// g
     0x9c3c,
     0xa588,
     0xaf62,
@@ -1783,6 +1819,7 @@ static void pmd_adpcm_freq_out(
   if (newfreq > 0xffff) newfreq = 0xffff;
   if (newfreq < 0) newfreq = 0;
   freq = newfreq;
+  part->output_freq = freq;
   work->opna_writereg(work, 0x109, freq);
   work->opna_writereg(work, 0x10a, freq >> 8);
 }
@@ -1809,6 +1846,7 @@ static void pmd_ppz8_freq_out(
   int64_t outfreq = freq + det;
   if (outfreq < 0) outfreq = 0;
   if (outfreq > INT32_MAX) outfreq = INT32_MAX;
+  part->output_freq = outfreq;
   if (work->ppz8) {
     work->ppz8_functbl->channel_freq(work->ppz8, pmd->proc_ch, outfreq);
   }
@@ -5680,9 +5718,12 @@ static void pmd_work_status_update(
       }
       break;
     case PART_TYPE_ADPCM:
-      //track->playing = false;
+      track->actual_key = ((track->key & 0xf) == 0xf) ?
+        0xff : pmd_adpcm_freq2key(part->output_freq);
       break;
     case PART_TYPE_PPZ8:
+      track->actual_key = ((track->key & 0xf) == 0xf) ?
+        0xff : fmdriver_ppz8_freq2key(part->output_freq);
       break;
     }
   }

@@ -43,6 +43,7 @@ struct ppz8 {
   uint16_t srate;
   uint8_t totalvol;
   uint16_t mix_volume;
+  unsigned mask;
 };
 
 void ppz8_init(struct ppz8 *ppz8, uint16_t srate, uint16_t mix_volume);
@@ -62,6 +63,9 @@ static inline uint32_t ppz8_pzi_decodebuf_samples(uint32_t pzidatalen) {
   if (pzidatalen < 0x920) return 0;
   return (pzidatalen - 0x920) * 2;
 }
+
+unsigned ppz8_get_mask(const struct ppz8 *ppz8);
+void ppz8_set_mask(struct ppz8 *ppz8, unsigned mask);
 
 struct ppz8_functbl {
   void (*channel_play)(struct ppz8 *ppz8, uint8_t channel, uint8_t voice);

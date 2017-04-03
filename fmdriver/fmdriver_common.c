@@ -69,3 +69,35 @@ uint8_t fmdriver_ssg_freq2key(uint16_t freq) {
   if (octave > 8) return 0x8b;
   return (octave << 4) | note;
 }
+
+uint8_t fmdriver_ppz8_freq2key(uint32_t freq) {
+  if (!freq) return 0x00;
+  int octave = 16+4;
+  while (!(freq & 0x80000000u)) {
+    freq <<= 1;
+    octave--;
+  }
+  if (octave < 0) return 0x00;
+  if (octave > 8) return 0x8b;
+  // round(0x8000*(2**((i+0.5)/12)))
+  static const uint16_t freqtab[0xc] = {
+    0x83c0,
+    0x8b96,
+    0x93e3,
+    0x9cae,
+    0xa5ff,
+    0xafde,
+    0xba53,
+    0xc567,
+    0xd124,
+    0xdd94,
+    0xeac1,
+    0xf8b6
+  };
+  uint16_t freqhigh = freq >> 16;
+  int note = 0;
+  for (; note < 12; note++) {
+    if (freqhigh < freqtab[note]) break;
+  }
+  return (octave << 4) | note;
+}

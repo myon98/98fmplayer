@@ -35,6 +35,7 @@ static inline void fmdriver_fillpcmname(char *dest, const char *src) {
 
 uint8_t fmdriver_fm_freq2key(uint16_t freq);
 uint8_t fmdriver_ssg_freq2key(uint16_t freq);
+uint8_t fmdriver_ppz8_freq2key(uint32_t freq);
 
 #if 0
 #include <stdio.h>
