@@ -42,7 +42,7 @@ static void CALLBACK mmtimer_cb(UINT timerid, UINT msg,
 }
 
 static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
-  g.whitepen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
+  g.whitepen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
   ShowWindow(hwnd, SW_SHOW);
   //SetTimer(hwnd, TIMER_UPDATE, 16, 0);
   g.mmtimer = timeSetEvent(16, 16, mmtimer_cb, 0, TIME_PERIODIC);
