@@ -22,5 +22,18 @@ AS_IF([test "x$emmintrin_found" = "xyes"], [
   AC_DEFINE([ENABLE_SSE])
 ])
 
+AC_ARG_ENABLE([opengl], AS_HELP_STRING([--enable-opengl], [Enable OpenGL rendering for Oscilloscope view (default: enable if found)]))
+AS_IF([test "x$enable_opengl" != "xno"], [
+  AC_CHECK_LIB([GL], [glGetString], [opengl_found=yes])
+  AC_CHECK_HEADER([GL/glcorearb.h], , [opengl_found=])
+  AS_IF([test "x$enable_opengl" = "x" -a "x$opengl_found" = "xyes"], [
+    enable_opengl=yes
+  ])
+  AS_IF([test "x$enable_opengl" = "xyes" -a "x$opengl_found" != "xyes"], [
+    AC_MSG_ERROR([OpenGL header/library not found (-lGL, GL/glcorearb.h)], [1])
+  ])
+])
+AM_CONDITIONAL([ENABLE_OPENGL], [test "x$enable_opengl" = "xyes"])
+
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

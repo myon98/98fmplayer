@@ -42,7 +42,6 @@ endif
 
 fmplayer_SOURCES=main.c \
                  toneview.c \
-                 oscilloview.c \
                  ../tonedata/tonedata.c \
                  ../common/fmplayer_file.c \
                  ../common/fmplayer_file_gio.c \
@@ -50,3 +49,9 @@ fmplayer_SOURCES=main.c \
                  $(FMDRIVER_SRC) \
                  $(FMDSP_SRC)
 
+if ENABLE_OPENGL
+fmplayer_SOURCES+=oscilloview-gl.c
+fmplayer_LDADD+=-lGL
+else
+fmplayer_SOURCES+=oscilloview.c
+endif

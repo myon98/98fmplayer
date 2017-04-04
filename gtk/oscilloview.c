@@ -10,8 +10,6 @@ struct oscilloview oscilloview_g = {
 enum {
   VIEW_SAMPLES = 1024,
   VIEW_SKIP = 2,
-  WIDTH = 600,
-  HEIGHT = 300,
 };
 
 static struct {
@@ -75,11 +73,10 @@ void show_oscilloview(void) {
     g.win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(g.win), "Oscilloscope view");
     g_signal_connect(g.win, "destroy", G_CALLBACK(on_destroy), 0);
+    GtkWidget *drawarea = gtk_drawing_area_new();
+    gtk_container_add(GTK_CONTAINER(g.win), drawarea);
+    g_signal_connect(drawarea, "draw", G_CALLBACK(draw_cb), 0);
+    gtk_widget_add_tick_callback(drawarea, tick_cb, 0, 0);
   }
-  GtkWidget *drawarea = gtk_drawing_area_new();
-  gtk_container_add(GTK_CONTAINER(g.win), drawarea);
-  //gtk_widget_set_size_request(drawarea, WIDTH*3, HEIGHT*3);
-  g_signal_connect(drawarea, "draw", G_CALLBACK(draw_cb), 0);
-  gtk_widget_add_tick_callback(drawarea, tick_cb, 0, 0);
   gtk_widget_show_all(g.win);
 }
