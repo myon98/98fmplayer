@@ -100,6 +100,11 @@ struct fmdriver_work {
   bool pcmerror[2];
   uint8_t ssg_noise_freq;
   struct fmdriver_track_status track_status[FMDRIVER_TRACK_NUM];
+  uint8_t loop_cnt;
+  // current timerb count
+  uint32_t timerb_cnt;
+  // loop length
+  uint32_t loop_timerb_cnt;
   // fm3ex part map
 };
 

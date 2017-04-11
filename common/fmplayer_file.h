@@ -5,6 +5,7 @@
 #include "fmdriver/fmdriver.h"
 #include "fmdriver/fmdriver_pmd.h"
 #include "fmdriver/fmdriver_fmp.h"
+#include "libopna/opnadrum.h"
 
 enum fmplayer_file_type {
   FMPLAYER_FILE_TYPE_PMD,
@@ -17,6 +18,7 @@ enum fmplayer_file_error {
   FMPLAYER_FILE_ERR_FILEIO,
   FMPLAYER_FILE_ERR_BADFILE_SIZE,
   FMPLAYER_FILE_ERR_BADFILE,
+  FMPLAYER_FILE_ERR_NOTFOUND,
   FMPLAYER_FILE_ERR_COUNT
 };
 
@@ -36,7 +38,7 @@ struct fmplayer_file {
 };
 struct fmplayer_file *fmplayer_file_alloc(const void *path, enum fmplayer_file_error *error);
 void fmplayer_file_free(const struct fmplayer_file *fmfile);
-void fmplayer_file_load(struct fmdriver_work *work, struct fmplayer_file *fmfile);
+void fmplayer_file_load(struct fmdriver_work *work, struct fmplayer_file *fmfile, int loopcnt);
 
 const char *fmplayer_file_strerror(enum fmplayer_file_error error);
 const wchar_t *fmplayer_file_strerror_w(enum fmplayer_file_error error);

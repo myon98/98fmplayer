@@ -6,9 +6,9 @@ AC_PROG_RANLIB
 AM_PROG_AR
 AM_PROG_AS
 
-dnl AM_PATH_SDL2([2.0.5])
 PKG_CHECK_MODULES([PORTAUDIO], [portaudio-2.0])
 PKG_CHECK_MODULES([GTK3], [gtk+-3.0 cairo])
+PKG_CHECK_MODULES([SNDFILE], [sndfile])
 
 AC_ARG_ENABLE([neon], AS_HELP_STRING([--enable-neon], [Enable NEON optimized functions for SSG sinc filtering and fmdsp palette lookup. Tested on Cortex-A53 (Raspberry PI 3)]))
 AM_CONDITIONAL([ENABLE_NEON], [test "x$enable_neon" = "xyes"])

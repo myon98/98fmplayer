@@ -5486,6 +5486,9 @@ static void pmd_proc_parts(
   struct fmdriver_work *work,
   struct driver_pmd *pmd
 ) {
+  pmd->loop.looped = true;
+  pmd->loop.ended = true;
+  pmd->loop.env = false;
   if (!pmd->opm_flag) {
     for (int c = 0; c < 3; c++) {
       pmd->proc_ch = c+1;
@@ -5538,6 +5541,7 @@ static void pmd_proc_parts(
   } else {
     pmd->status2 = 0xff;
   }
+  work->loop_cnt = pmd->status2;
 }
 
 // 3e2e
@@ -5623,6 +5627,7 @@ static void pmd_timer(
   }
   if (status & 2) {
     pmd_timerb(work, pmd);
+    work->timerb_cnt++;
   }
 }
 

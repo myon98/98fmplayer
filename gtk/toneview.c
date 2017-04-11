@@ -42,7 +42,7 @@ gboolean tick_cb(GtkWidget *widget, GdkFrameClock *clock, gpointer ptr) {
       tonedata_ch_normalize_tl(&g.tonedata_n.ch[c]);
     }
     if (g.format != g.format_disp ||
-        fmplayer_tonedata_channel_isequal(&g.tonedata_n.ch[c], &g.tonedata_n_disp.ch[c])) {
+        !fmplayer_tonedata_channel_isequal(&g.tonedata_n.ch[c], &g.tonedata_n_disp.ch[c])) {
       g.tonedata_n_disp.ch[c] = g.tonedata_n.ch[c];
       tonedata_ch_string(g.format, g.strbuf, &g.tonedata_n.ch[c], 0);
       gtk_label_set_text(GTK_LABEL(g.label[c]), g.strbuf);

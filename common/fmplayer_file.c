@@ -12,6 +12,92 @@ void fmplayer_file_free(const struct fmplayer_file *fmfileptr) {
   free(fmfile);
 }
 
+static void opna_writereg_dummy(struct fmdriver_work *work, unsigned addr, unsigned data) {
+}
+
+static unsigned opna_readreg_dummy(struct fmdriver_work *work, unsigned addr) {
+  return 0xff;
+}
+
+struct dummy_opna {
+  uint32_t timerb_loop;
+  uint8_t loopcnt;
+};
+
+static uint8_t opna_status_dummy(struct fmdriver_work *work, bool a1) {
+  struct dummy_opna *opna = work->opna;
+  if (!opna->timerb_loop) {
+    if (work->loop_cnt >= opna->loopcnt) {
+      opna->timerb_loop = work->timerb_cnt;
+    } else if (work->timerb_cnt > 0xfffff) {
+      opna->timerb_loop = -1;
+    }
+  }
+  return opna->timerb_loop ? 0 : 2;
+}
+
+static void dummy_work_init(struct fmdriver_work *work, struct dummy_opna *dopna) {
+  work->opna_writereg = opna_writereg_dummy;
+  work->opna_readreg = opna_readreg_dummy;
+  work->opna_status = opna_status_dummy;
+  work->opna = dopna;
+}
+
+static struct driver_pmd *pmd_dup(const struct driver_pmd *pmd) {
+  struct driver_pmd *pmddup = malloc(sizeof(*pmddup));
+  if (!pmddup) return 0;
+  memcpy(pmddup, pmd, sizeof(*pmd));
+  size_t datalen = pmddup->datalen+1;
+  const uint8_t *data = pmddup->data-1;
+  uint8_t *datadup = malloc(datalen);
+  if (!datadup) {
+    free(pmddup);
+    return 0;
+  }
+  memcpy(datadup, data, datalen);
+  pmddup->data = datadup+1;
+  pmddup->datalen = datalen-1;
+  return pmddup;
+}
+
+static void pmd_free(struct driver_pmd *pmd) {
+  if (pmd) {
+    free(pmd->data-1);
+    free(pmd);
+  }
+}
+
+static struct driver_fmp *fmp_dup(const struct driver_fmp *fmp) {
+  struct driver_fmp *fmpdup = malloc(sizeof(*fmpdup));
+  if (!fmpdup) return 0;
+  memcpy(fmpdup, fmp, sizeof(*fmp));
+  fmpdup->data = malloc(fmp->datalen);
+  if (!fmpdup->data) {
+    free(fmpdup);
+    return 0;
+  }
+  memcpy((void*)fmpdup->data, fmp->data, fmp->datalen);
+  return fmpdup;
+}
+
+static void fmp_free(struct driver_fmp *fmp) {
+  if (fmp) {
+    free((void*)fmp->data);
+    free(fmp);
+  }
+}
+
+static void calc_loop(struct fmdriver_work *work, int loopcnt) {
+  if ((loopcnt < 1) || (0xff < loopcnt)) {
+    work->loop_timerb_cnt = -1;
+    return;
+  }
+  struct dummy_opna *opna = work->opna;
+  opna->loopcnt = loopcnt;
+  while (!opna->timerb_loop) work->driver_opna_interrupt(work);
+  work->loop_timerb_cnt = opna->timerb_loop;
+}
+
 struct fmplayer_file *fmplayer_file_alloc(const void *path, enum fmplayer_file_error *error) {
   struct fmplayer_file *fmfile = calloc(1, sizeof(*fmfile));
   if (!fmfile) {
@@ -116,9 +202,21 @@ static void loadfmpppz(struct fmdriver_work *work, struct fmplayer_file *fmfile)
   fmfile->fmp_ppz_err = !loadppzpvi(work, fmfile, pvifile);
 }
 
-void fmplayer_file_load(struct fmdriver_work *work, struct fmplayer_file *fmfile) {
+void fmplayer_file_load(struct fmdriver_work *work, struct fmplayer_file *fmfile, int loopcnt) {
+  struct dummy_opna dopna = {0};
+  struct fmdriver_work dwork = {0};
   switch (fmfile->type) {
   case FMPLAYER_FILE_TYPE_PMD:
+    {
+      struct driver_pmd *pmddup = pmd_dup(&fmfile->driver.pmd);
+      if (pmddup) {
+        dummy_work_init(&dwork, &dopna);
+        pmd_init(&dwork, pmddup);
+        calc_loop(&dwork, loopcnt);
+        pmd_free(pmddup);
+        work->loop_timerb_cnt = dwork.loop_timerb_cnt;
+      }
+    }
     pmd_init(work, &fmfile->driver.pmd);
     loadppc(work, fmfile);
     loadpmdppz(work, fmfile);
@@ -126,6 +224,16 @@ void fmplayer_file_load(struct fmdriver_work *work, struct fmplayer_file *fmfile
     work->pcmerror[1] = fmfile->pmd_ppz_err;
     break;
   case FMPLAYER_FILE_TYPE_FMP:
+    {
+      struct driver_fmp *fmpdup = fmp_dup(&fmfile->driver.fmp);
+      if (fmpdup) {
+        dummy_work_init(&dwork, &dopna);
+        fmp_init(&dwork, fmpdup);
+        calc_loop(&dwork, loopcnt);
+        fmp_free(fmpdup);
+        work->loop_timerb_cnt = dwork.loop_timerb_cnt;
+      }
+    }
     fmp_init(work, &fmfile->driver.fmp);
     loadpvi(work, fmfile);
     loadfmpppz(work, fmfile);
@@ -139,6 +247,7 @@ void fmplayer_file_load(struct fmdriver_work *work, struct fmplayer_file *fmfile
 #define MSG_FILE_ERR_FILEIO "File I/O error"
 #define MSG_FILE_ERR_BADFILE_SIZE "Invalid file size"
 #define MSG_FILE_ERR_BADFILE "Invalid file format"
+#define MSG_FILE_ERR_NOTFOUND "File not found"
 
 #define XWIDE(x) L ## x
 #define WIDE(x) XWIDE(x)
@@ -151,6 +260,7 @@ const char *fmplayer_file_strerror(enum fmplayer_file_error error) {
     MSG_FILE_ERR_FILEIO,
     MSG_FILE_ERR_BADFILE_SIZE,
     MSG_FILE_ERR_BADFILE,
+    MSG_FILE_ERR_NOTFOUND,
   };
   return errtable[error];
 }
@@ -163,6 +273,7 @@ const wchar_t *fmplayer_file_strerror_w(enum fmplayer_file_error error) {
     WIDE(MSG_FILE_ERR_FILEIO),
     WIDE(MSG_FILE_ERR_BADFILE_SIZE),
     WIDE(MSG_FILE_ERR_BADFILE),
+    WIDE(MSG_FILE_ERR_NOTFOUND),
   };
   return errtable[error];
 }

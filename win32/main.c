@@ -20,6 +20,8 @@
 #include "oscillo/oscillo.h"
 #include "oscilloview.h"
 #include "about.h"
+#include "common/fmplayer_common.h"
+#include "wavesave.h"
 
 enum {
   ID_OPENFILE = 0x10,
@@ -28,6 +30,7 @@ enum {
   ID_TONEVIEW,
   ID_OSCILLOVIEW,
   ID_ABOUT,
+  ID_WAVESAVE,
 };
 
 #define FMPLAYER_CLASSNAME L"myon_fmplayer_ym2608_win32"
@@ -58,12 +61,10 @@ static struct {
   struct fmdsp_font font;
   uint8_t fontrom[FONT_ROM_FILESIZE];
   bool font_loaded;
-  void *drum_rom;
   uint8_t opna_adpcm_ram[OPNA_ADPCM_RAM_SIZE];
   bool paused;
   HWND mainwnd;
   WNDPROC btn_defproc;
-  HWND driverinfo;
   HWND button_2x, button_toneview, button_oscilloview, button_about;
   bool toneview_on, oscilloview_on, about_on;
   const wchar_t *lastopenpath;
@@ -72,38 +73,10 @@ static struct {
   UINT mmtimer;
   HBITMAP bitmap_vram;
   uint8_t *vram32;
+  bool drum_loaded;
 } g;
 
 HWND g_currentdlg;
-
-static void opna_int_cb(void *userptr) {
-  struct fmdriver_work *work = (struct fmdriver_work *)userptr;
-  work->driver_opna_interrupt(work);
-}
-
-static void opna_mix_cb(void *userptr, int16_t *buf, unsigned samples) {
-  struct ppz8 *ppz8 = (struct ppz8 *)userptr;
-  ppz8_mix(ppz8, buf, samples);
-}
-
-static void opna_writereg_libopna(struct fmdriver_work *work, unsigned addr, unsigned data) {
-  struct opna_timer *timer = (struct opna_timer *)work->opna;
-  opna_timer_writereg(timer, addr, data);
-}
-
-static unsigned opna_readreg_libopna(struct fmdriver_work *work, unsigned addr) {
-//  struct opna_timer *timer = (struct opna_timer *)work->opna;
-  return opna_readreg(&g.opna, addr);
-}
-
-static uint8_t opna_status_libopna(struct fmdriver_work *work, bool a1) {
-  struct opna_timer *timer = (struct opna_timer *)work->opna;
-  uint8_t status = opna_timer_status(timer);
-  if (!a1) {
-    status &= 0x83;
-  }
-  return status;
-}
 
 static void sound_cb(void *p, int16_t *buf, unsigned frames) {
   struct opna_timer *timer = (struct opna_timer *)p;
@@ -159,39 +132,6 @@ static void loadfont(void) {
   }
 }
 
-static void loadrom(void) {
-  const wchar_t *path = L"ym2608_adpcm_rom.bin";
-  wchar_t exepath[MAX_PATH];
-  if (GetModuleFileName(0, exepath, MAX_PATH)) {
-    PathRemoveFileSpec(exepath);
-    if ((lstrlen(exepath) + lstrlen(path) + 1) < MAX_PATH) {
-      lstrcat(exepath, L"\\");
-      lstrcat(exepath, path);
-      path = exepath;
-    }
-  }
-  HANDLE file = CreateFile(path, GENERIC_READ,
-                            0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-  if (file == INVALID_HANDLE_VALUE) goto err;
-  DWORD filesize = GetFileSize(file, 0);
-  if (filesize != OPNA_ROM_SIZE) goto err_file;
-  void *buf = HeapAlloc(g.heap, 0, OPNA_ROM_SIZE);
-  if (!buf) goto err_file;
-  DWORD readbytes;
-  if (!ReadFile(file, buf, OPNA_ROM_SIZE, &readbytes, 0)
-      || readbytes != OPNA_ROM_SIZE) goto err_buf;
-  CloseHandle(file);
-  g.drum_rom = buf;
-  about_set_adpcmrom_loaded(true);
-  return;
-err_buf:
-  HeapFree(g.heap, 0, buf);
-err_file:
-  CloseHandle(file);
-err:
-  return;
-}
-
 static void openfile(HWND hwnd, const wchar_t *path) {
   enum fmplayer_file_error error;
   struct fmplayer_file *fmfile = fmplayer_file_alloc(path, &error);
@@ -213,27 +153,17 @@ static void openfile(HWND hwnd, const wchar_t *path) {
   fmplayer_file_free(g.fmfile);
   g.fmfile = fmfile;
   unsigned mask = opna_get_mask(&g.opna);
-  opna_reset(&g.opna);
+  fmplayer_init_work_opna(&g.work, &g.ppz8, &g.opna, &g.opna_timer, g.opna_adpcm_ram);
+  if (!g.drum_loaded && fmplayer_drum_loaded()) {
+    g.drum_loaded = true;
+    about_set_adpcmrom_loaded(true);
+  }
   opna_set_mask(&g.opna, mask);
-  if (g.drum_rom) opna_drum_set_rom(&g.opna.drum, g.drum_rom);
-  opna_adpcm_set_ram_256k(&g.opna.adpcm, g.opna_adpcm_ram);
-  opna_timer_reset(&g.opna_timer, &g.opna);
-  ppz8_init(&g.ppz8, SRATE, PPZ8MIX);
-  ZeroMemory(&g.work, sizeof(g.work));
-  g.work.opna_writereg = opna_writereg_libopna;
-  g.work.opna_readreg = opna_readreg_libopna;
-  g.work.opna_status = opna_status_libopna;
-  g.work.opna = &g.opna_timer;
-  g.work.ppz8 = &g.ppz8;
-  g.work.ppz8_functbl = &ppz8_functbl;
   WideCharToMultiByte(932, WC_NO_BEST_FIT_CHARS, path, -1, g.work.filename, sizeof(g.work.filename), 0, 0);
-  opna_timer_set_int_callback(&g.opna_timer, opna_int_cb, &g.work);
-  opna_timer_set_mix_callback(&g.opna_timer, opna_mix_cb, &g.ppz8);
-  fmplayer_file_load(&g.work, g.fmfile);
+  fmplayer_file_load(&g.work, g.fmfile, 1);
   if (!g.sound) {
     g.sound = sound_init(hwnd, SRATE, SECTLEN,
                          sound_cb, &g.opna_timer);
-    SetWindowText(g.driverinfo, g.sound->apiname);
     about_setsoundapiname(g.sound->apiname);
   }
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
@@ -516,14 +446,14 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
     50, 25,
     hwnd, (HMENU)ID_PAUSE, g.hinst, 0
   );
-  g.driverinfo = CreateWindowEx(
+  HWND wavesavebutton = CreateWindowEx(
     0,
-    L"STATIC",
-    L"",
-    WS_VISIBLE | WS_CHILD,
-    110, 15,
+    L"BUTTON",
+    L"&Wave output",
+    WS_TABSTOP | WS_VISIBLE | WS_CHILD,
+    110, 10,
     100, 25,
-    hwnd, 0, g.hinst, 0
+    hwnd, (HMENU)ID_WAVESAVE, g.hinst, 0
   );
   g.button_2x = CreateWindowEx(
     0,
@@ -564,6 +494,7 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   g.btn_defproc = (WNDPROC)GetWindowLongPtr(button, GWLP_WNDPROC);
   SetWindowLongPtr(button, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   SetWindowLongPtr(pbutton, GWLP_WNDPROC, (intptr_t)btn_wndproc);
+  SetWindowLongPtr(wavesavebutton, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   SetWindowLongPtr(g.button_2x, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   SetWindowLongPtr(g.button_toneview, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   SetWindowLongPtr(g.button_oscilloview, GWLP_WNDPROC, (intptr_t)btn_wndproc);
@@ -574,12 +505,11 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   HFONT font = CreateFontIndirect(&ncm.lfMessageFont);
   SetWindowFont(button, font, TRUE);
   SetWindowFont(pbutton, font, TRUE);
-  SetWindowFont(g.driverinfo, font, TRUE);
+  SetWindowFont(wavesavebutton, font, TRUE);
   SetWindowFont(g.button_2x, font, TRUE);
   SetWindowFont(g.button_toneview, font, TRUE);
   SetWindowFont(g.button_oscilloview, font, TRUE);
   SetWindowFont(g.button_about, font, TRUE);
-  loadrom();
   loadfont();
   fmdsp_init(&g.fmdsp, g.font_loaded ? &g.font : 0);
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
@@ -658,6 +588,17 @@ static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
       Button_SetCheck(g.button_about, false);
     }
     break;
+  case ID_WAVESAVE:
+    {
+      if (g.lastopenpath) {
+        wchar_t *path = wcsdup(g.lastopenpath);
+        if (path) {
+          wavesave_dialog(hwnd, path);
+          free(path);
+        }
+      }
+    }
+    break;
   }
 }
 
@@ -666,7 +607,6 @@ static void on_destroy(HWND hwnd) {
   timeKillEvent(g.mmtimer);
   if (g.sound) g.sound->free(g.sound);
   fmplayer_file_free(g.fmfile);
-  if (g.drum_rom) HeapFree(g.heap, 0, g.drum_rom);
   PostQuitMessage(0);
 }
 

@@ -12,7 +12,7 @@ static void *fileread(const wchar_t *path,
   void *buf = 0;
   file = CreateFile(path, GENERIC_READ, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
   if (file == INVALID_HANDLE_VALUE) {
-    if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
+    if (error) *error = FMPLAYER_FILE_ERR_NOTFOUND;
     goto err;
   }
   LARGE_INTEGER li;

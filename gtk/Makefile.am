@@ -22,8 +22,8 @@ FMDSP_SRC=../fmdsp/fmdsp.c \
 #CFLAGS=
 fmplayer_CPPFLAGS=-Wall -Wextra -pedantic \
                   -I.. \
-                  $(GTK3_CFLAGS) $(PORTAUDIO_CFLAGS)
-fmplayer_LDADD=$(GTK3_LIBS) $(PORTAUDIO_LIBS)
+                  $(GTK3_CFLAGS) $(PORTAUDIO_CFLAGS) $(SNDFILE_CFLAGS)
+fmplayer_LDADD=$(GTK3_LIBS) $(PORTAUDIO_LIBS) $(SNDFILE_LIBS)
 
 if ENABLE_NEON
 LIBOPNA_SRC+=../libopna/opnassg-sinc-neon.s
@@ -42,9 +42,12 @@ endif
 
 fmplayer_SOURCES=main.c \
                  toneview.c \
+                 wavesave.c \
                  ../tonedata/tonedata.c \
                  ../common/fmplayer_file.c \
                  ../common/fmplayer_file_gio.c \
+                 ../common/fmplayer_work_opna.c \
+                 ../common/fmplayer_drumrom_unix.c \
                  $(LIBOPNA_SRC) \
                  $(FMDRIVER_SRC) \
                  $(FMDSP_SRC)

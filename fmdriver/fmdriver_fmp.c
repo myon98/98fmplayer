@@ -875,6 +875,7 @@ static bool fmp_cmd74_loop(struct fmdriver_work *work,
     }
     // 248c
     fmp->loop_cnt++;
+    work->loop_cnt = fmp->loop_cnt;
     fmp->part_loop_bit = fmp->part_playing_bit;
     // al=2; 1b64();
   }
@@ -891,6 +892,7 @@ static bool fmp_cmd74_loop(struct fmdriver_work *work,
       // 3e16();
       fmp->status.stopped = true;
       fmp->status.looped = true;
+      work->loop_cnt = -1;
     }
     // 24f0
     if (!part->type.rhythm) {
@@ -3148,6 +3150,7 @@ static void fmp_opna_interrupt(struct fmdriver_work *work) {
   struct driver_fmp *fmp = (struct driver_fmp *)work->driver;
   if (work->opna_status(work, 0) & 0x02) {
     fmp_timerb(work, fmp);
+    work->timerb_cnt++;
   }
 }
 

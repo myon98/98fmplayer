@@ -28,6 +28,8 @@ SSEOBJBASE=opnassg-sinc-sse2 \
 OBJBASE=main \
         toneview \
         oscilloview \
+        wavesave \
+        wavewrite \
         soundout \
         dsoundout \
         waveout \
@@ -35,6 +37,8 @@ OBJBASE=main \
         guid \
         fmplayer_file \
         fmplayer_file_win \
+        fmplayer_drumrom_win \
+        fmplayer_work_opna \
         about \
         $(FMDRIVER_OBJS) \
         $(LIBOPNA_OBJS) \

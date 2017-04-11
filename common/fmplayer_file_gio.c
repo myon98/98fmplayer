@@ -27,7 +27,7 @@ static void *fileread(GFile *f, size_t maxsize, size_t *filesize, enum fmplayer_
   }
   fstream = g_file_read(f, 0, 0);
   if (!fstream) {
-    if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
+    if (error) *error = FMPLAYER_FILE_ERR_NOTFOUND;
     goto err;
   }
   buf = malloc(filelen);
@@ -107,7 +107,7 @@ void *fmplayer_fileread(const void *pathptr, const char *pcmname, const char *ex
     g_object_unref(G_OBJECT(pcmfile));
     g_object_unref(G_OBJECT(info));
   }
-  if (error) *error = FMPLAYER_FILE_ERR_FILEIO;
+  if (error) *error = FMPLAYER_FILE_ERR_NOTFOUND;
 err:
   if (direnum) g_object_unref(G_OBJECT(direnum));
   if (dir) g_object_unref(G_OBJECT(dir));

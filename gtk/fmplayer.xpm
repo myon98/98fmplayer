@@ -1,0 +1,26 @@
+/* XPM */
+static char *fmplayer_xpm_16[] = {
+/* columns rows colors chars-per-pixel */
+"16 16 4 1 ",
+"  c #40A040",
+". c #C0C0C0",
+"X c gray25",
+"o c white",
+/* pixels */
+"                ",
+" .. .. .. .. .. ",
+" .. .. .. .. .. ",
+"XXXXXXXXXXXXXXXX",
+"oXoXoXoXXXXXXXXX",
+"oXoXoooXXXXXXXXX",
+"XoXXoXoXXXXXXXXX",
+"XoXXoXoXXXXXXXXX",
+"XoXXoXoXXXXXXXXX",
+"XXXXXXXXXXXXXXXX",
+"XoXXXooXXoXXXoXX",
+"oXoXoXXXoXoXoXoX",
+"XXoXooXXoXoXXoXX",
+"XoXXoXoXoXoXoXoX",
+"oooXXoXXXoXXXoXX",
+"XXXXXXXXXXXXXXXX"
+};

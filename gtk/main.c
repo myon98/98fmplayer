@@ -17,6 +17,11 @@
 #include "toneview.h"
 #include "oscillo/oscillo.h"
 #include "oscilloview.h"
+#include "wavesave.h"
+#include "common/fmplayer_common.h"
+
+#include "fmplayer.xpm"
+#include "fmplayer32.xpm"
 
 #define DATADIR "/.local/share/fmplayer/"
 //#define FMDSP_2X
@@ -42,8 +47,6 @@ static struct {
   struct ppz8 ppz8;
   struct fmdriver_work work;
   struct fmdsp fmdsp;
-  char drum_rom[OPNA_ROM_SIZE];
-  bool drum_rom_loaded;
   char adpcm_ram[OPNA_ADPCM_RAM_SIZE];
   struct fmplayer_file *fmfile;
   void *data;
@@ -78,6 +81,16 @@ static void on_menu_quit(GtkMenuItem *menuitem, gpointer ptr) {
   (void)menuitem;
   (void)ptr;
   quit();
+}
+
+static void on_menu_save(GtkMenuItem *menuitem, gpointer ptr) {
+  (void)menuitem;
+  (void)ptr;
+  if (g.current_uri) {
+    char *uri = g_strdup(g.current_uri);
+    wavesave_dialog(GTK_WINDOW(g.mainwin), uri);
+    g_free(uri);
+  }
 }
 
 static void on_tone_view(GtkMenuItem *menuitem, gpointer ptr) {
@@ -128,67 +141,6 @@ static int pastream_cb(const void *inptr, void *outptr, unsigned long frames,
     }
   }
   return paContinue;
-}
-
-static void opna_int_cb(void *userptr) {
-  struct fmdriver_work *work = (struct fmdriver_work *)userptr;
-  work->driver_opna_interrupt(work);
-}
-
-static void opna_mix_cb(void *userptr, int16_t *buf, unsigned samples) {
-  struct ppz8 *ppz8 = (struct ppz8 *)userptr;
-  ppz8_mix(ppz8, buf, samples);
-}
-
-static void opna_writereg_libopna(struct fmdriver_work *work, unsigned addr, unsigned data) {
-  struct opna_timer *timer = (struct opna_timer *)work->opna;
-  opna_timer_writereg(timer, addr, data);
-}
-
-static unsigned opna_readreg_libopna(struct fmdriver_work *work, unsigned addr) {
-  (void)work;
-  //struct opna_timer *timer = (struct opna_timer *)work->opna;
-  return opna_readreg(&g.opna, addr);
-}
-
-static uint8_t opna_status_libopna(struct fmdriver_work *work, bool a1) {
-  struct opna_timer *timer = (struct opna_timer *)work->opna;
-  uint8_t status = opna_timer_status(timer);
-  if (!a1) {
-    status &= 0x83;
-  }
-  return status;
-}
-
-static void load_drumrom(void) {
-  const char *path = "ym2608_adpcm_rom.bin";
-  const char *home = getenv("HOME");
-  char *dpath = 0;
-  if (home) {
-    const char *datadir = DATADIR;
-    dpath = malloc(strlen(home)+strlen(datadir)+strlen(path) + 1);
-    if (dpath) {
-      strcpy(dpath, home);
-      strcat(dpath, datadir);
-      strcat(dpath, path);
-      path = dpath;
-    }
-  }
-  FILE *rhythm = fopen(path, "r");
-  free(dpath);
-  if (!rhythm) goto err;
-  if (fseek(rhythm, 0, SEEK_END) != 0) goto err_file;
-  long size = ftell(rhythm);
-  if (size != OPNA_ROM_SIZE) goto err_file;
-  if (fseek(rhythm, 0, SEEK_SET) != 0) goto err_file;
-  if (fread(g.drum_rom, 1, OPNA_ROM_SIZE, rhythm) != OPNA_ROM_SIZE) goto err_file;
-  fclose(rhythm);
-  g.drum_rom_loaded = true;
-  return;
-err_file:
-  fclose(rhythm);
-err:
-  return;
 }
 
 static void load_fontrom(void) {
@@ -261,24 +213,10 @@ static bool openfile(const char *uri) {
   fmplayer_file_free(g.fmfile);
   g.fmfile = fmfile;
   unsigned mask = opna_get_mask(&g.opna);
-  opna_reset(&g.opna);
+  g.work = (struct fmdriver_work){0};
+  memset(g.adpcm_ram, 0, sizeof(g.adpcm_ram));
+  fmplayer_init_work_opna(&g.work, &g.ppz8, &g.opna, &g.opna_timer, g.adpcm_ram);
   opna_set_mask(&g.opna, mask);
-  if (!g.drum_rom_loaded) {
-    load_drumrom();
-  }
-  if (g.drum_rom_loaded) {
-    opna_drum_set_rom(&g.opna.drum, g.drum_rom);
-  }
-  opna_adpcm_set_ram_256k(&g.opna.adpcm, g.adpcm_ram);
-  ppz8_init(&g.ppz8, SRATE, PPZ8MIX);
-  opna_timer_reset(&g.opna_timer, &g.opna);
-  memset(&g.work, 0, sizeof(g.work));
-  g.work.opna_writereg = opna_writereg_libopna;
-  g.work.opna_readreg = opna_readreg_libopna;
-  g.work.opna_status = opna_status_libopna;
-  g.work.opna = &g.opna_timer;
-  g.work.ppz8 = &g.ppz8;
-  g.work.ppz8_functbl = &ppz8_functbl;
   char *disppath = g_filename_from_uri(uri, 0, 0);
   if (disppath) {
     strncpy(g.work.filename, disppath, sizeof(g.work.filename)-1);
@@ -286,9 +224,7 @@ static bool openfile(const char *uri) {
   } else {
     strncpy(g.work.filename, uri, sizeof(g.work.filename)-1);
   }
-  opna_timer_set_int_callback(&g.opna_timer, opna_int_cb, &g.work);
-  opna_timer_set_mix_callback(&g.opna_timer, opna_mix_cb, &g.ppz8);
-  fmplayer_file_load(&g.work, g.fmfile);
+  fmplayer_file_load(&g.work, g.fmfile, 1);
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   Pa_StartStream(g.pastream);
   g.pa_paused = false;
@@ -321,6 +257,9 @@ static GtkWidget *create_menubar() {
   GtkWidget *open = gtk_menu_item_new_with_label("Open");
   //g_signal_connect(open, "activate", G_CALLBACK(on_menu_open), 0);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), open);
+  GtkWidget *save = gtk_menu_item_new_with_label("Save wavefile");
+  g_signal_connect(save, "activate", G_CALLBACK(on_menu_save), 0);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), save);
   GtkWidget *quit = gtk_menu_item_new_with_label("Quit");
   g_signal_connect(quit, "activate", G_CALLBACK(on_menu_quit), 0);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit);
@@ -544,6 +483,13 @@ int main(int argc, char **argv) {
 #endif
   load_fontrom();
   gtk_init(&argc, &argv);
+  {
+    GList *iconlist = 0;
+    iconlist = g_list_append(iconlist, gdk_pixbuf_new_from_xpm_data(fmplayer_xpm_16));
+    iconlist = g_list_append(iconlist, gdk_pixbuf_new_from_xpm_data(fmplayer_xpm_32));
+    gtk_window_set_default_icon_list(iconlist);
+    g_list_free(iconlist);
+  }
   GtkWidget *w = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   g.mainwin = w;
   gtk_window_set_resizable(GTK_WINDOW(w), FALSE);
