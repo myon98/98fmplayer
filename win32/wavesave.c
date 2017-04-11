@@ -76,13 +76,6 @@ static DWORD CALLBACK thread_write(void *ptr) {
       inst->ppos = newpos;
       PostMessage(inst->pbar, PBM_SETPOS, newpos, 0);
     }
-    /*
-    double newfrac = (double)data->work.timerb_cnt / data->work.loop_timerb_cnt;
-    if ((newfrac - data->fraction) > 0.005) {
-      data->fraction = newfrac;
-      g_idle_add(idle_progress_fraction, ptr);
-    }
-    */
     if (end) break;
   }
   PostMessage(inst->wnd, WM_USER, 0, 0);
