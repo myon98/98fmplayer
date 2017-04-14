@@ -1,5 +1,5 @@
 /* XPM */
-static char *fmplayer_xpm_32[] = {
+static const char *fmplayer_xpm_32[] = {
 /* columns rows colors chars-per-pixel */
 "32 32 8 1 ",
 "  c gray25",

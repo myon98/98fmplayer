@@ -22,9 +22,8 @@ fmdsp_vramlookup_neon:
   push {lr}
 @ load palette
   vld3.8 {d26, d28, d30}, [r2]!
-  vld1.8 {d27}, [r2]!
-  vld1.8 {d29}, [r2]!
-  vld1.8 {d31}, [r2]!
+  vld3.8 {d27[0], d29[0], d31[0]}, [r2]!
+  vld3.8 {d27[1], d29[1], d31[1]}, [r2]!
 
   mov r14, #400
 .loopcol:

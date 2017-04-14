@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include "font.h"
 #include "fmdriver/fmdriver.h"
+#include "fft/fft.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,10 +19,11 @@ enum {
 };
 
 enum {
-  FMDSP_PALETTE_COLORS = 9
+  FMDSP_PALETTE_COLORS = 10
 };
 
 enum FMDSP_DISPSTYLE {
+  FMDSP_DISPSTYLE_ORIGINAL,
   FMDSP_DISPSTYLE_DEFAULT,
   FMDSP_DISPSTYLE_OPN,
   FMDSP_DISPSTYLE_PPZ8,
@@ -36,6 +38,12 @@ struct fmdsp {
   enum FMDSP_DISPSTYLE style;
   bool style_updated;
   bool masked[FMDRIVER_TRACK_NUM];
+  uint8_t fftdata[FFTDISPLEN];
+  uint8_t fftcnt[FFTDISPLEN];
+  uint8_t fftdropdiv[FFTDISPLEN];
+  uint64_t framecnt;
+  int cpuusage;
+  int fps;
 };
 
 struct fmdriver_work;
@@ -44,7 +52,9 @@ void fmdsp_vram_init(struct fmdsp *fmdsp,
                      struct fmdriver_work *work,
                      uint8_t *vram);
 void fmdsp_update(struct fmdsp *fmdsp, const struct fmdriver_work *work,
-                  const struct opna *opna, uint8_t *vram);
+                  const struct opna *opna, uint8_t *vram,
+                  struct fmplayer_fft_input_data *idata
+                 );
 void fmdsp_vrampalette(struct fmdsp *fmdsp, const uint8_t *vram, uint8_t *vram32, int stride);
 void fmdsp_font_from_fontrom(uint8_t *font, const uint8_t *fontrom);
 void fmdsp_palette_set(struct fmdsp *fmdsp, int p);

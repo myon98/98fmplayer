@@ -4,6 +4,7 @@ vpath %.c ../../libopna
 vpath %.c ../../fmdsp
 vpath %.c ../../tonedata
 vpath %.c ../../common
+vpath %.c ../../fft
 vpath %.rc ..
 
 include ../fmplayer.mak

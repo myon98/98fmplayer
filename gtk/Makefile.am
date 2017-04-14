@@ -16,7 +16,8 @@ FMDRIVER_SRC=../fmdriver/fmdriver_fmp.c \
 FMDSP_SRC=../fmdsp/fmdsp.c \
           ../fmdsp/fmdsp-vramlookup-c.c \
           ../fmdsp/font_rom.c \
-          ../fmdsp/font_fmdsp_small.c
+          ../fmdsp/font_fmdsp_small.c \
+          ../fmdsp/fmdsp_platform_unix.c
 
 #fmplayer_CFLAGS=$(CFLAGS)
 #CFLAGS=
@@ -48,6 +49,7 @@ fmplayer_SOURCES=main.c \
                  ../common/fmplayer_file_gio.c \
                  ../common/fmplayer_work_opna.c \
                  ../common/fmplayer_drumrom_unix.c \
+                 ../fft/fft.c \
                  $(LIBOPNA_SRC) \
                  $(FMDRIVER_SRC) \
                  $(FMDSP_SRC)

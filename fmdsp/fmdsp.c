@@ -4,6 +4,8 @@
 #include "fmdriver/fmdriver.h"
 #include <stdio.h>
 #include "libopna/opna.h"
+#include "fmdsp_platform_info.h"
+#include "version.h"
 
 fmdsp_vramlookup_type fmdsp_vramlookup_func = fmdsp_vramlookup_c;
 
@@ -45,7 +47,7 @@ void fmdsp_init(struct fmdsp *fmdsp, const struct fmdsp_font *font98) {
     fmdsp->target_palette[i] = s_palettes[0][i];
   }
   fmdsp->font98 = font98;
-  fmdsp->style = FMDSP_DISPSTYLE_DEFAULT;
+  fmdsp->style = FMDSP_DISPSTYLE_ORIGINAL;
   fmdsp->style_updated = true;
 }
 
@@ -225,6 +227,7 @@ static void fmdsp_track_init_13(struct fmdsp *fmdsp,
     }
   }
 }
+
 static void fmdsp_track_init_10(struct fmdsp *fmdsp,
                                 uint8_t *vram) {
   for (int y = 0; y < TRACK_H*FMDSP_TRACK_DISP_CNT_DEFAULT; y++) {
@@ -234,7 +237,7 @@ static void fmdsp_track_init_10(struct fmdsp *fmdsp,
   }
   for (int i = 0; i < FMDSP_TRACK_DISP_CNT_DEFAULT; i++) {
     int t;
-    if (fmdsp->style == FMDSP_DISPSTYLE_DEFAULT) t = track_disp_table_default[i];
+    if (fmdsp->style == FMDSP_DISPSTYLE_DEFAULT || fmdsp->style == FMDSP_DISPSTYLE_ORIGINAL) t = track_disp_table_default[i];
     else if (fmdsp->style == FMDSP_DISPSTYLE_OPN) t = track_disp_table_opn[i];
     else t = track_disp_table_ppz8[i];
     if (t < 0) continue;
@@ -269,6 +272,133 @@ static void fmdsp_track_init_10(struct fmdsp *fmdsp,
       vramblit_color(vram, BAR_X+BAR_W*j, TRACK_H*i+BAR_Y,
                 s_bar, BAR_W, BAR_H, 3);
     }
+  }
+  if (fmdsp->style == FMDSP_DISPSTYLE_ORIGINAL) {
+    vramblit(vram, LOGO_FM_X, LOGO_Y, s_logo_fm, LOGO_FM_W, LOGO_H);
+    vramblit(vram, LOGO_DS_X, LOGO_Y, s_logo_ds, LOGO_DS_W, LOGO_H);
+    vramblit(vram, LOGO_P_X, LOGO_Y, s_logo_p, LOGO_P_W, LOGO_H);
+    fmdsp_putline("MUS", vram, &font_fmdsp_small, TOP_MUS_X, TOP_MUSIC_Y, 2, true);
+    fmdsp_putline("IC", vram, &font_fmdsp_small, TOP_IC_X, TOP_MUSIC_Y, 2, true);
+    fmdsp_putline("F", vram, &font_fmdsp_small, TOP_F_X, TOP_MUSIC_Y, 2, true);
+    fmdsp_putline("ILE", vram, &font_fmdsp_small, TOP_ILE_X, TOP_MUSIC_Y, 2, true);
+    fmdsp_putline("SELECTOR", vram, &font_fmdsp_small, TOP_SELECTOR_X, TOP_MUSIC_Y, 2, true);
+    fmdsp_putline("&", vram, &font_fmdsp_small, TOP_AND_X, TOP_MUSIC_Y, 2, true);
+    fmdsp_putline("STATUS", vram, &font_fmdsp_small, TOP_STATUS_X, TOP_MUSIC_Y, 2, true);
+    fmdsp_putline("D", vram, &font_fmdsp_small, TOP_D_X, TOP_MUSIC_Y, 2, true);
+    fmdsp_putline("ISPLAY", vram, &font_fmdsp_small, TOP_ISPLAY_X, TOP_MUSIC_Y, 2, true);
+    vramblit(vram, TOP_VER_X, VER_Y, s_ver, VER_W, VER_H);
+    fmdsp_putline(FMPLAYER_VERSION_0 ".", vram, &font_fmdsp_small, VER_0_X, TOP_MUSIC_Y, 2, true);
+    fmdsp_putline(FMPLAYER_VERSION_1 ".", vram, &font_fmdsp_small, VER_1_X, TOP_MUSIC_Y, 2, true);
+    fmdsp_putline(FMPLAYER_VERSION_2, vram, &font_fmdsp_small, VER_2_X, TOP_MUSIC_Y, 2, true);
+    
+    vramblit(vram, TOP_MUS_X, TOP_TEXT_Y, s_text, TOP_TEXT_W, TOP_TEXT_H);
+
+    fmdsp_putline("DR", vram, &font_fmdsp_small, DRIVER_TEXT_X, DRIVER_TEXT_Y, 7, true);
+    fmdsp_putline("IVER", vram, &font_fmdsp_small, DRIVER_TEXT_2_X, DRIVER_TEXT_Y, 7, true);
+    vramblit_color(vram, DRIVER_TRI_X, DRIVER_TRI_Y, s_filebar_tri, FILEBAR_TRI_W, FILEBAR_TRI_H, 7);
+    vramblit(vram, CURL_LEFT_X, CURL_Y, s_curl_left, CURL_W, CURL_H);
+    vramblit(vram, CURL_RIGHT_X, CURL_Y, s_curl_right, CURL_W, CURL_H);
+
+    for (int x = 0; x < 82; x++) {
+      vram[14*PC98_W+312+x] = 2;
+    }
+    for (int x = 0; x < 239; x++) {
+      vram[14*PC98_W+395+x] = 7;
+    }
+    for (int x = 0; x < TIME_BAR_W; x++) {
+      for (int y = 0; y < TIME_BAR_H; y++) {
+        vram[(TIME_Y-2+y)*PC98_W+TIME_BAR_X+x] = 2;
+        vram[(CLOCK_Y-2+y)*PC98_W+TIME_BAR_X+x] = 2;
+        vram[(TIMERB_Y-2+y)*PC98_W+TIME_BAR_X+x] = 2;
+        vram[(LOOPCNT_Y-2+y)*PC98_W+TIME_BAR_X+x] = 2;
+        vram[(VOLDOWN_Y-2+y)*PC98_W+TIME_BAR_X+x] = 2;
+        vram[(PGMNUM_Y-2+y)*PC98_W+TIME_BAR_X+x] = 2;
+      }
+    }
+    for (int i = 0; i < 6; i++) {
+      vramblit(vram, TIME_TRI_X, TIME_Y+8+19*i, s_filebar_tri, FILEBAR_TRI_W, FILEBAR_TRI_H);
+    }
+    fmdsp_putline("PASSED", vram, &font_fmdsp_small, TIME_TEXT_X, TIME_Y-2, 2, true);
+    fmdsp_putline("T", vram, &font_fmdsp_small, TIME_TEXT_X+11, TIME_Y+5, 2, true);
+    fmdsp_putline("IME", vram, &font_fmdsp_small, TIME_TEXT_X+15, TIME_Y+5, 2, true);
+    fmdsp_putline("CLOCK", vram, &font_fmdsp_small, TIME_TEXT_X, CLOCK_Y-2, 2, true);
+    fmdsp_putline(" COUNT", vram, &font_fmdsp_small, TIME_TEXT_X, CLOCK_Y+5, 2, true);
+    fmdsp_putline("T", vram, &font_fmdsp_small, TIME_TEXT_X, TIMERB_Y-2, 2, true);
+    fmdsp_putline("IMER", vram, &font_fmdsp_small, TIME_TEXT_X+4, TIMERB_Y-2, 2, true);
+    fmdsp_putline(" CYCLE", vram, &font_fmdsp_small, TIME_TEXT_X, TIMERB_Y+5, 2, true);
+    fmdsp_putline("LOOP", vram, &font_fmdsp_small, TIME_TEXT_X, LOOPCNT_Y-2, 2, true);
+    fmdsp_putline(" COUNT", vram, &font_fmdsp_small, TIME_TEXT_X, LOOPCNT_Y+5, 2, true);
+    fmdsp_putline("VOLUME", vram, &font_fmdsp_small, TIME_TEXT_X, VOLDOWN_Y-2, 2, true);
+    fmdsp_putline("  DOWN", vram, &font_fmdsp_small, TIME_TEXT_X, VOLDOWN_Y+5, 2, true);
+    fmdsp_putline("PGM", vram, &font_fmdsp_small, TIME_TEXT_X, PGMNUM_Y-2, 2, true);
+    fmdsp_putline("NUMBER", vram, &font_fmdsp_small, TIME_TEXT_X, PGMNUM_Y+5, 2, true);
+
+    for (int x = 0; x < TIME_BAR_W; x++) {
+      for (int y = 0; y < TIME_BAR_H; y++) {
+        vram[(CPU_Y+y)*PC98_W+CPU_BAR_X+x] = 2;
+      }
+    }
+    fmdsp_putline("CPU", vram, &font_fmdsp_small, CPU_X, CPU_Y, 2, true);
+    fmdsp_putline("POWER", vram, &font_fmdsp_small, CPU_X+17, CPU_Y, 2, true);
+    fmdsp_putline("COUNT", vram, &font_fmdsp_small, CPU_X+17, CPU_Y+7, 2, true);
+    vramblit(vram, CPU_TRI_X, CPU_TRI_Y, s_filebar_tri, FILEBAR_TRI_W, FILEBAR_TRI_H);
+    for (int x = 0; x < TIME_BAR_W; x++) {
+      for (int y = 0; y < TIME_BAR_H; y++) {
+        vram[(CPU_Y+y)*PC98_W+FPS_BAR_X+x] = 2;
+      }
+    }
+    fmdsp_putline("FRAMES", vram, &font_fmdsp_small, FPS_X, CPU_Y, 2, true);
+    fmdsp_putline("PER", vram, &font_fmdsp_small, FPS_X+32, CPU_Y, 2, true);
+    fmdsp_putline("SECOND", vram, &font_fmdsp_small, FPS_X+17, CPU_Y+7, 2, true);
+    vramblit(vram, FPS_TRI_X, CPU_TRI_Y, s_filebar_tri, FILEBAR_TRI_W, FILEBAR_TRI_H);
+    for (int x = 0; x < 322; x++) {
+      vram[132*PC98_W+312+x] = 7;
+    }
+    fmdsp_putline("SENS", vram, &font_fmdsp_small, SPECTRUM_X-40, SPECTRUM_Y-6, 7, true);
+    fmdsp_putline("-48", vram, &font_fmdsp_small, SPECTRUM_X-19, SPECTRUM_Y-6, 7, true);
+    fmdsp_putline("0", vram, &font_fmdsp_small, SPECTRUM_X-9, SPECTRUM_Y-63, 7, true);
+    fmdsp_putline("dB", vram, &font_fmdsp_small, SPECTRUM_X-14, SPECTRUM_Y-71, 7, true);
+    fmdsp_putline("SPECTRUM", vram, &font_fmdsp_small, SPECTRUM_X+197, SPECTRUM_Y-71, 7, true);
+    fmdsp_putline("ANAL", vram, &font_fmdsp_small, SPECTRUM_X+241, SPECTRUM_Y-71, 7, true);
+    fmdsp_putline("YzER", vram, &font_fmdsp_small, SPECTRUM_X+260, SPECTRUM_Y-71, 7, true);
+    for (int y = 0; y < 63; y++) {
+      vram[(SPECTRUM_Y-y)*PC98_W+SPECTRUM_X-2] = 2;
+      if (!(y % 2)) {
+        vram[(SPECTRUM_Y-y)*PC98_W+SPECTRUM_X-3] = 2;
+      }
+      if (!(y % 8)) {
+        vram[(SPECTRUM_Y-y)*PC98_W+SPECTRUM_X-4] = 2;
+      }
+    }
+    fmdsp_putline("FREQ", vram, &font_fmdsp_small, SPECTRUM_X-24, SPECTRUM_Y+1, 1, true);
+    for (int x = 0; x < 17; x++) {
+      vram[(SPECTRUM_Y+4)*PC98_W+SPECTRUM_X+1+2*x] = 1;
+    }
+    fmdsp_putline("250", vram, &font_fmdsp_small, SPECTRUM_X+36, SPECTRUM_Y+1, 1, true);
+    for (int x = 0; x < 15; x++) {
+      vram[(SPECTRUM_Y+4)*PC98_W+SPECTRUM_X+52+2*x] = 1;
+    }
+    fmdsp_putline("500", vram, &font_fmdsp_small, SPECTRUM_X+83, SPECTRUM_Y+1, 1, true);
+    for (int x = 0; x < 17; x++) {
+      vram[(SPECTRUM_Y+4)*PC98_W+SPECTRUM_X+99+2*x] = 1;
+    }
+    fmdsp_putline("1", vram, &font_fmdsp_small, SPECTRUM_X+133, SPECTRUM_Y+1, 1, true);
+    fmdsp_putline("k", vram, &font_fmdsp_small, SPECTRUM_X+133+6, SPECTRUM_Y+1, 1, true);
+    for (int x = 0; x < 19; x++) {
+      vram[(SPECTRUM_Y+4)*PC98_W+SPECTRUM_X+144+2*x] = 1;
+    }
+    fmdsp_putline("2k", vram, &font_fmdsp_small, SPECTRUM_X+183, SPECTRUM_Y+1, 1, true);
+    for (int x = 0; x < 18; x++) {
+      vram[(SPECTRUM_Y+4)*PC98_W+SPECTRUM_X+193+2*x] = 1;
+    }
+    fmdsp_putline("4k", vram, &font_fmdsp_small, SPECTRUM_X+230, SPECTRUM_Y+1, 1, true);
+    for (int x = 0; x < 20; x++) {
+      vram[(SPECTRUM_Y+4)*PC98_W+SPECTRUM_X+240+2*x] = 1;
+    }
+    fmdsp_putline("ON/OFF", vram, &font_fmdsp_small, LEVEL_TEXT_X, LEVEL_TEXT_Y, 1, true);
+    fmdsp_putline("PANPOT", vram, &font_fmdsp_small, LEVEL_TEXT_X, LEVEL_TEXT_Y+8, 1, true);
+    fmdsp_putline("PROGRAM", vram, &font_fmdsp_small, LEVEL_TEXT_X-5, LEVEL_TEXT_Y+16, 1, true);
+    fmdsp_putline("KEYCODE", vram, &font_fmdsp_small, LEVEL_TEXT_X-5, LEVEL_TEXT_Y+23, 1, true);
   }
 }
 
@@ -551,7 +681,8 @@ static void fmdsp_track_without_key(
   fmdsp_putline("TN:", vram, &font_fmdsp_small, TDETAIL_TN_X, y+6, 1, true);
   snprintf(numbuf, sizeof(numbuf), "%03d", track->tonenum);
   fmdsp_putline(numbuf, vram, &font_fmdsp_small, TDETAIL_TN_V_X, y+6, 1, true);
-  fmdsp_putline("VL:", vram, &font_fmdsp_small, TDETAIL_VL_X, y+6, 1, true);
+  fmdsp_putline("Vl", vram, &font_fmdsp_small, TDETAIL_VL_X, y+6, 1, true);
+  fmdsp_putline(":", vram, &font_fmdsp_small, TDETAIL_VL_C_X, y+6, 1, true);
   snprintf(numbuf, sizeof(numbuf), "%03d", track->volume);
   fmdsp_putline(numbuf, vram, &font_fmdsp_small, TDETAIL_VL_V_X, y+6, 1, true);
   fmdsp_putline("GT:", vram, &font_fmdsp_small, TDETAIL_GT_X, y+6, 1, true);
@@ -583,45 +714,50 @@ static void fmdsp_track_without_key(
 static void fmdsp_update_10(struct fmdsp *fmdsp,
                   const struct fmdriver_work *work,
                   const struct opna *opna,
-                  uint8_t *vram) {
-  for (int y = 0; y < 320; y++) {
-    for (int x = 320; x < PC98_W; x++) {
-      vram[y*PC98_W+x] = 0;
+                  uint8_t *vram,
+                  struct fmplayer_fft_input_data *idata) {
+  if (fmdsp->style != FMDSP_DISPSTYLE_ORIGINAL) {
+    for (int y = 0; y < 320; y++) {
+      for (int x = 320; x < PC98_W; x++) {
+        vram[y*PC98_W+x] = 0;
+      }
     }
   }
   for (int it = 0; it < FMDSP_TRACK_DISP_CNT_DEFAULT; it++) {
     int t;
-    if (fmdsp->style == FMDSP_DISPSTYLE_DEFAULT) t = track_disp_table_default[it];
+    if (fmdsp->style == FMDSP_DISPSTYLE_DEFAULT || fmdsp->style == FMDSP_DISPSTYLE_ORIGINAL) t = track_disp_table_default[it];
     else if (fmdsp->style == FMDSP_DISPSTYLE_OPN) t = track_disp_table_opn[it];
     else t = track_disp_table_ppz8[it];
     if (t < 0) continue;
     const struct fmdriver_track_status *track = &work->track_status[t];
 
-    if (((track->info == FMDRIVER_TRACK_INFO_PPZ8)
-         || (track->info == FMDRIVER_TRACK_INFO_PDZF))
-        && track->ppz8_ch) {
-      fmdsp_track_info_ppz8(work->ppz8, track->ppz8_ch-1,
-                            320, TRACK_H*it+6, vram);
-    } else {
-      switch (track_type_table[t].type) {
-      case FMDRIVER_TRACKTYPE_FM:
-        fmdsp_track_info_fm(opna,
-                            track_type_table[t].num-1,
-                            track->info == FMDRIVER_TRACK_INFO_FM3EX ? track->fmslotmask : 0,
-                            320, TRACK_H*it+6, vram);
-        break;
-      case FMDRIVER_TRACKTYPE_SSG:
-        fmdsp_track_info_ssg(opna,
-                            track_type_table[t].num-1,
-                            320, TRACK_H*it+6, vram);
-        break;
-      case FMDRIVER_TRACKTYPE_ADPCM:
-        fmdsp_track_info_adpcm(opna, 320, TRACK_H*it+6, vram);
-        break;
-      case FMDRIVER_TRACKTYPE_PPZ8:
-        fmdsp_track_info_ppz8(work->ppz8, track_type_table[t].num-1,
+    if (fmdsp->style != FMDSP_DISPSTYLE_ORIGINAL) {
+      if (((track->info == FMDRIVER_TRACK_INFO_PPZ8)
+          || (track->info == FMDRIVER_TRACK_INFO_PDZF))
+          && track->ppz8_ch) {
+        fmdsp_track_info_ppz8(work->ppz8, track->ppz8_ch-1,
                               320, TRACK_H*it+6, vram);
-        break;
+      } else {
+        switch (track_type_table[t].type) {
+        case FMDRIVER_TRACKTYPE_FM:
+          fmdsp_track_info_fm(opna,
+                              track_type_table[t].num-1,
+                              track->info == FMDRIVER_TRACK_INFO_FM3EX ? track->fmslotmask : 0,
+                              320, TRACK_H*it+6, vram);
+          break;
+        case FMDRIVER_TRACKTYPE_SSG:
+          fmdsp_track_info_ssg(opna,
+                              track_type_table[t].num-1,
+                              320, TRACK_H*it+6, vram);
+          break;
+        case FMDRIVER_TRACKTYPE_ADPCM:
+          fmdsp_track_info_adpcm(opna, 320, TRACK_H*it+6, vram);
+          break;
+        case FMDRIVER_TRACKTYPE_PPZ8:
+          fmdsp_track_info_ppz8(work->ppz8, track_type_table[t].num-1,
+                                320, TRACK_H*it+6, vram);
+          break;
+        }
       }
     }
     fmdsp_track_without_key(fmdsp, work, track, t, TRACK_H*it, vram);
@@ -640,6 +776,167 @@ static void fmdsp_update_10(struct fmdsp *fmdsp,
                       track->key & 0xf, fmdsp->masked[t] ? 8 : 6);
         }
       }
+    }
+  }
+  if (fmdsp->style == FMDSP_DISPSTYLE_ORIGINAL) {
+    // control status
+    bool playing = work->playing && !work->paused;
+    bool stopped = !work->playing;
+    bool paused = work->paused;
+    vramblit_color(vram, PLAY_X, PLAY_Y, s_play, PLAY_W, PLAY_H, playing ? 2 : 3);
+    vramblit_color(vram, STOP_X, STOP_Y, s_stop, STOP_W, STOP_H, stopped ? 2 : 3);
+    vramblit_color(vram, PAUSE_X, PAUSE_Y, s_pause, PAUSE_W, PAUSE_H, paused ? 2 : 3);
+    vramblit(vram, FADE_X, FADE_Y, s_fade, FADE_W, FADE_H);
+    vramblit(vram, FF_X, FF_Y, s_ff, FF_W, FF_H);
+    vramblit(vram, REW_X, REW_Y, s_rew, REW_W, REW_H);
+    vramblit(vram, FLOPPY_X, FLOPPY_Y, s_floppy, FLOPPY_W, FLOPPY_H);
+    const uint8_t *num[8];
+    // passed time
+    {
+      uint64_t frames = opna->generated_frames;
+      int ssec = (int)(frames % 55467u) * 100 / 55467;
+      uint64_t sec = frames / 55467u;
+      uint64_t min = sec / 60u;
+      sec %= 60u;
+      num[0] = s_num[(min/10)%10];
+      num[1] = s_num[min%10];
+      vramblit(vram, TIME_X+NUM_W*0, TIME_Y, num[0], NUM_W, NUM_H);
+      vramblit(vram, TIME_X+NUM_W*1, TIME_Y, num[1], NUM_W, NUM_H);
+      vramblit(vram, TIME_X+NUM_W*2, TIME_Y, s_num_colon[sec%2u], NUM_W, NUM_H);
+      num[0] = s_num[(sec/10)%10];
+      num[1] = s_num[sec%10];
+      vramblit(vram, TIME_X+NUM_W*3, TIME_Y, num[0], NUM_W, NUM_H);
+      vramblit(vram, TIME_X+NUM_W*4, TIME_Y, num[1], NUM_W, NUM_H);
+      vramblit(vram, TIME_X+NUM_W*5, TIME_Y, s_num_bar, NUM_W, NUM_H);
+      num[0] = s_num[(ssec/10)%10];
+      num[1] = s_num[ssec%10];
+      vramblit(vram, TIME_X+NUM_W*6, TIME_Y, num[0], NUM_W, NUM_H);
+      vramblit(vram, TIME_X+NUM_W*7, TIME_Y, num[1], NUM_W, NUM_H);
+    }
+    // clock count
+    {
+      uint64_t clock = work->timerb_cnt;
+      for (int i = 0; i < 8; i++) {
+        num[7-i] = s_num[clock%10u];
+        clock /= 10u;
+      }
+      for (int i = 0; i < 8; i++) {
+        vramblit(vram, TIME_X+NUM_W*i, CLOCK_Y, num[i], NUM_W, NUM_H);
+      }
+    }
+    // timerb
+    {
+      uint8_t timerb = work->timerb;
+      for (int i = 0; i < 3; i++) {
+        num[2-i] = s_num[timerb%10];
+        timerb /= 10;
+      }
+      for (int i = 0; i < 3; i++) {
+        vramblit(vram, TIME_X+NUM_W*(5+i), TIMERB_Y, num[i], NUM_W, NUM_H);
+      }
+    }
+    // loop count
+    {
+      uint8_t loop = work->loop_cnt;
+      for (int i = 0; i < 4; i++) {
+        num[3-i] = s_num[loop%10];
+        loop /= 10;
+      }
+      for (int i = 0; i < 4; i++) {
+        vramblit(vram, TIME_X+NUM_W*(4+i), LOOPCNT_Y, num[i], NUM_W, NUM_H);
+      }
+    }
+    //
+    int pos = 0;
+    if (work->loop_timerb_cnt) pos = work->timerb_cnt_loop * (72+1-4) / work->loop_timerb_cnt;
+    for (int x = 0; x < 72; x++) {
+      if (x == 0 || x == 36 || x == 71) {
+        vram[(70-2)*PC98_W+352+x*2] = 7;
+      } else if (!(x % 9)) {
+        vram[(70-2)*PC98_W+352+x*2] = 3;
+      }
+      uint8_t c = 3;
+      if (work->playing && ((pos <= x) && (x < (pos+4)))) c = 2;
+      for (int y = 0; y < 4; y++) {
+        vram[(70+y)*PC98_W+352+x*2] = c;
+      }
+    }
+    for (int x = 0; x < 16; x++) {
+      for (int y = 0; y < 4; y++) {
+        vram[(70+y)*PC98_W+496+x] = work->loop_cnt ? 7 : 3;
+      }
+    }
+    // cpu
+    int cpuusage = fmdsp->cpuusage;
+    for (int i = 0; i < 3; i++) {
+      num[2-i] = s_num[cpuusage % 10];
+      cpuusage /= 10;
+    }
+    for (int i = 0; i < 3; i++) {
+      vramblit(vram, CPU_NUM_X+NUM_W*i, CPU_NUM_Y, num[i], NUM_W, NUM_H);
+    }
+    // fps
+    int fps = fmdsp->fps;
+    for (int i = 0; i < 3; i++) {
+      num[2-i] = s_num[fps % 10];
+      fps /= 10;
+    }
+    for (int i = 0; i < 3; i++) {
+      vramblit(vram, FPS_NUM_X+NUM_W*i, CPU_NUM_Y, num[i], NUM_W, NUM_H);
+    }
+    // circle
+    for (int y = 0; y < CIRCLE_H; y++) {
+      for (int x = 0; x < CIRCLE_W; x++) {
+        int c = 0;
+        int clock = (work->timerb_cnt / 8) % 8;
+        int p;
+        if ((p = s_circle[y*CIRCLE_W+x])) {
+          c = (work->playing && (!work->paused || (fmdsp->framecnt % 60) < 30) && (p == (clock + 1))) ? 2 : 3;
+        }
+        vram[(CIRCLE_Y+y)*PC98_W+CIRCLE_X+x] = c;
+      }
+    }
+    // fft
+    struct fmplayer_fft_disp_data ddata;
+    fft_calc(&ddata, idata);
+    for (int x = 0; x < FFTDISPLEN; x++) {
+      for (int y = 0; y < 32; y++) {
+        int px = SPECTRUM_X+x*4;
+        int py = SPECTRUM_Y-y*2;
+        int c = y < ddata.buf[x] ? 2 : 3;
+        vram[py*PC98_W+px+0] = c;
+        vram[py*PC98_W+px+1] = c;
+        vram[py*PC98_W+px+2] = c;
+      }
+    }
+    for (int i = 0; i < FFTDISPLEN; i++) {
+      if (fmdsp->fftdata[i] <= ddata.buf[i]) {
+        fmdsp->fftdata[i] = ddata.buf[i];
+        fmdsp->fftcnt[i] = 30;
+      } else {
+        if (fmdsp->fftcnt[i]) {
+          fmdsp->fftcnt[i]--;
+        } else {
+          if (fmdsp->fftdata[i]) {
+            if (fmdsp->fftdropdiv[i]) {
+              fmdsp->fftdropdiv[i]--;
+            } else {
+              static const uint8_t divtab[16] = {
+                32, 16, 8, 8, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2,
+              };
+              fmdsp->fftdropdiv[i] = divtab[fmdsp->fftdata[i] / 2];
+              fmdsp->fftdata[i]--;
+            }
+          }
+        }
+      }
+    }
+    for (int x = 0; x < FFTDISPLEN; x++) {
+      int px = SPECTRUM_X+x*4;
+      int py = SPECTRUM_Y-fmdsp->fftdata[x]*2;
+      vram[py*PC98_W+px+0] = 7;
+      vram[py*PC98_W+px+1] = 7;
+      vram[py*PC98_W+px+2] = 7;
     }
   }
 }
@@ -701,7 +998,8 @@ static void fmdsp_update_13(struct fmdsp *fmdsp,
 void fmdsp_update(struct fmdsp *fmdsp,
                   const struct fmdriver_work *work,
                   const struct opna *opna,
-                  uint8_t *vram) {
+                  uint8_t *vram,
+                  struct fmplayer_fft_input_data *idata) {
   if (fmdsp->style_updated) {
     if (fmdsp->style == FMDSP_DISPSTYLE_13) {
       fmdsp_track_init_13(fmdsp, vram);
@@ -739,9 +1037,14 @@ void fmdsp_update(struct fmdsp *fmdsp,
   if (fmdsp->style == FMDSP_DISPSTYLE_13) {
     fmdsp_update_13(fmdsp, work, opna, vram);
   } else {
-    fmdsp_update_10(fmdsp, work, opna, vram);
+    fmdsp_update_10(fmdsp, work, opna, vram, idata);
   }
   fmdsp_palette_fade(fmdsp);
+  if (!(fmdsp->framecnt % 30)) {
+    fmdsp->cpuusage = fmdsp_cpu_usage();
+    fmdsp->fps = fmdsp_fps_30();
+  }
+  fmdsp->framecnt++;
 }
 
 void fmdsp_vrampalette(struct fmdsp *fmdsp, const uint8_t *vram, uint8_t *vram32, int stride) {

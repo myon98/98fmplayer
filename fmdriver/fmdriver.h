@@ -101,11 +101,17 @@ struct fmdriver_work {
   uint8_t ssg_noise_freq;
   struct fmdriver_track_status track_status[FMDRIVER_TRACK_NUM];
   uint8_t loop_cnt;
+  // timerb value
+  uint8_t timerb;
   // current timerb count
   uint32_t timerb_cnt;
-  // loop length
+  // current timerb count, reset on loop
+  uint32_t timerb_cnt_loop;
+  // loop length, calculated before playing
   uint32_t loop_timerb_cnt;
   // fm3ex part map
+  bool playing;
+  bool paused;
 };
 
 #endif // MYON_FMDRIVER_H_INCLUDED

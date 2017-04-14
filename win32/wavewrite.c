@@ -3,6 +3,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 struct wavefile {
   HANDLE file;
@@ -67,17 +68,16 @@ size_t wavewrite_write(struct wavefile *wavefile, const int16_t *buf, size_t fra
 }
 
 void wavewrite_close(struct wavefile *wavefile) {
-  LONG fp;
   uint32_t size;
   DWORD written;
-  if ((SetFilePointer(wavefile->file, 40, &fp, FILE_BEGIN) == INVALID_SET_FILE_POINTER) || (fp != 40)) {
+  if (SetFilePointer(wavefile->file, 40, 0, FILE_BEGIN) == INVALID_SET_FILE_POINTER) {
     goto cleanup;
   }
   size = wavefile->written_frames * 4;
   if (!WriteFile(wavefile->file, &size, sizeof(size), &written, 0) || (written != sizeof(size))) {
     goto cleanup;
   }
-  if ((SetFilePointer(wavefile->file, 4, &fp, FILE_BEGIN) == INVALID_SET_FILE_POINTER) || (fp != 4)) {
+  if (SetFilePointer(wavefile->file, 4, 0, FILE_BEGIN) == INVALID_SET_FILE_POINTER) {
     goto cleanup;
   }
   size += 4 + 8 + 16 + 8;

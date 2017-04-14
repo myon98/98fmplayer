@@ -22,6 +22,7 @@
 #include "about.h"
 #include "common/fmplayer_common.h"
 #include "wavesave.h"
+#include "fft/fft.h"
 
 enum {
   ID_OPENFILE = 0x10,
@@ -74,7 +75,12 @@ static struct {
   HBITMAP bitmap_vram;
   uint8_t *vram32;
   bool drum_loaded;
-} g;
+  atomic_flag at_fftdata_flag;
+  struct fmplayer_fft_data at_fftdata;
+  struct fmplayer_fft_input_data fftdata;
+} g = {
+  .at_fftdata_flag = ATOMIC_FLAG_INIT,
+};
 
 HWND g_currentdlg;
 
@@ -91,6 +97,11 @@ static void sound_cb(void *p, int16_t *buf, unsigned frames) {
     &oscilloview_g.flag, memory_order_acquire)) {
     memcpy(oscilloview_g.oscillodata, g.oscillodata_audiothread, sizeof(oscilloview_g.oscillodata));
     atomic_flag_clear_explicit(&oscilloview_g.flag, memory_order_release);
+  }
+  if (!atomic_flag_test_and_set_explicit(
+    &g.at_fftdata_flag, memory_order_acquire)) {
+    fft_write(&g.at_fftdata, buf, frames);
+    atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
   }
 }
 
@@ -170,6 +181,7 @@ static void openfile(HWND hwnd, const wchar_t *path) {
   if (!g.sound) goto err;
   g.sound->pause(g.sound, 0);
   g.paused = false;
+  g.work.paused = false;
   wchar_t *pathcpy = HeapAlloc(g.heap, 0, (lstrlen(path)+1)*sizeof(wchar_t));
   if (pathcpy) {
     lstrcpy(pathcpy, path);
@@ -333,6 +345,7 @@ static bool proc_key(UINT vk, bool down, int repeat) {
         case VK_F7:
           if (g.sound) {
             g.paused = !g.paused;
+            g.work.paused = g.paused;
             g.sound->pause(g.sound, g.paused);
           }
           return true;
@@ -549,6 +562,7 @@ static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
   case ID_PAUSE:
     if (g.sound) {
       g.paused = !g.paused;
+      g.work.paused = g.paused;
       g.sound->pause(g.sound, g.paused);
     }
     break;
@@ -611,7 +625,12 @@ static void on_destroy(HWND hwnd) {
 }
 
 static void on_paint(HWND hwnd) {
-  fmdsp_update(&g.fmdsp, &g.work, &g.opna, g.vram);
+  if (!atomic_flag_test_and_set_explicit(
+    &g.at_fftdata_flag, memory_order_acquire)) {
+    memcpy(&g.fftdata.fdata, &g.at_fftdata, sizeof(g.fftdata));
+    atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
+  }
+  fmdsp_update(&g.fmdsp, &g.work, &g.opna, g.vram, &g.fftdata);
   fmdsp_vrampalette(&g.fmdsp, g.vram, g.vram32, PC98_W*4);
   PAINTSTRUCT ps;
   HDC dc = BeginPaint(hwnd, &ps);
@@ -737,6 +756,8 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
 
   if (__builtin_cpu_supports("sse2")) opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_sse2;
   if (__builtin_cpu_supports("ssse3")) fmdsp_vramlookup_func = fmdsp_vramlookup_ssse3;
+
+  fft_init_table();
 
   const wchar_t *argfile = 0;
   {

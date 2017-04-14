@@ -353,8 +353,8 @@ static void pmd_calc_tempo_rev(
   int timerb = 0;
   if (tempo) {
     timerb = 0x112c / tempo;
-    if (0x112c % tempo) timerb++;
     timerb = 0x100 - timerb;
+    if ((0x112c % tempo) & 0x80) timerb--;
     if (timerb < 0) timerb = 0;
   }
   pmd->timerb = timerb;
@@ -377,6 +377,7 @@ static void pmd_reset_timer(
   struct driver_pmd *pmd
 ) {
   pmd->timerb = 200;
+  work->timerb = pmd->timerb;
   pmd->timerb_bak = pmd->timerb;
   pmd_calc_tempo(pmd);
   pmd_timerb_write(work, pmd);
@@ -2345,6 +2346,7 @@ static void pmd_cmdfc_tempo(
     pmd->tempo_bak = tempo;
     pmd_calc_tempo_rev(pmd);
   }
+  work->timerb = pmd->timerb;
 }
 
 // 236b
@@ -5537,9 +5539,12 @@ static void pmd_proc_parts(
   }
   // 130d
   if (!pmd->loop.looped || !pmd->loop.ended || pmd->loop.env) {
+    work->timerb_cnt_loop = 0;
     if (++pmd->status2 == 0xff) pmd->status2 = 1;
   } else {
     pmd->status2 = 0xff;
+    // stop
+    work->playing = false;
   }
   work->loop_cnt = pmd->status2;
 }
@@ -5627,7 +5632,10 @@ static void pmd_timer(
   }
   if (status & 2) {
     pmd_timerb(work, pmd);
-    work->timerb_cnt++;
+    if (work->playing) {
+      work->timerb_cnt++;
+      work->timerb_cnt_loop++;
+    }
   }
 }
 
@@ -5887,6 +5895,7 @@ void pmd_init(struct fmdriver_work *work,
   }
   fmdriver_fillpcmname(work->pcmname[0], pmd->ppcfile);
   fmdriver_fillpcmname(work->pcmname[1], pmd->ppzfile);
+  work->playing = true;
 }
 
 enum {

@@ -21,11 +21,13 @@ LIBOPNA_OBJS=opna \
 FMDSP_OBJS=fmdsp \
            fmdsp-vramlookup-c \
            font_rom \
-           font_fmdsp_small
+           font_fmdsp_small \
+           fmdsp_platform_win
 TONEDATA_OBJS=tonedata
 SSEOBJBASE=opnassg-sinc-sse2 \
            fmdsp-vramlookup-ssse3
 OBJBASE=main \
+        fft \
         toneview \
         oscilloview \
         wavesave \

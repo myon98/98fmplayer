@@ -19,6 +19,7 @@
 #include "oscilloview.h"
 #include "wavesave.h"
 #include "common/fmplayer_common.h"
+#include "fft/fft.h"
 
 #include "fmplayer.xpm"
 #include "fmplayer32.xpm"
@@ -58,8 +59,12 @@ static struct {
   const char *current_uri;
   bool oscillo_should_update;
   struct oscillodata oscillodata_audiothread[LIBOPNA_OSCILLO_TRACK_COUNT];
+  atomic_flag at_fftdata_flag;
+  struct fmplayer_fft_data at_fftdata;
+  struct fmplayer_fft_input_data fftdata;
 } g = {
-  .oscillo_should_update = true
+  .oscillo_should_update = true,
+  .at_fftdata_flag = ATOMIC_FLAG_INIT,
 };
 
 static void quit(void) {
@@ -139,6 +144,11 @@ static int pastream_cb(const void *inptr, void *outptr, unsigned long frames,
       memcpy(oscilloview_g.oscillodata, g.oscillodata_audiothread, sizeof(oscilloview_g.oscillodata));
       atomic_flag_clear_explicit(&oscilloview_g.flag, memory_order_release);
     }
+  }
+  if (!atomic_flag_test_and_set_explicit(
+    &g.at_fftdata_flag, memory_order_acquire)) {
+    fft_write(&g.at_fftdata, buf, frames);
+    atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
   }
   return paContinue;
 }
@@ -228,6 +238,7 @@ static bool openfile(const char *uri) {
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   Pa_StartStream(g.pastream);
   g.pa_paused = false;
+  g.work.paused = false;
   {
     const char *turi = strdup(uri);
     free((void *)g.current_uri);
@@ -282,7 +293,12 @@ static gboolean draw_cb(GtkWidget *w,
                  gpointer p) {
   (void)w;
   (void)p;
-  fmdsp_update(&g.fmdsp, &g.work, &g.opna, g.vram);
+  if (!atomic_flag_test_and_set_explicit(
+    &g.at_fftdata_flag, memory_order_acquire)) {
+    memcpy(&g.fftdata.fdata, &g.at_fftdata, sizeof(g.fftdata));
+    atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
+  }
+  fmdsp_update(&g.fmdsp, &g.work, &g.opna, g.vram, &g.fftdata);
   fmdsp_vrampalette(&g.fmdsp, g.vram, g.vram32, g.vram32_stride);
   cairo_surface_t *s = cairo_image_surface_create_for_data(
     g.vram32, CAIRO_FORMAT_RGB24, PC98_W, PC98_H, g.vram32_stride);
@@ -391,9 +407,11 @@ static gboolean key_press_cb(GtkWidget *w,
     if (g.pa_paused) {
       Pa_StartStream(g.pastream);
       g.pa_paused = false;
+      g.work.paused = false;
     } else {
       Pa_StopStream(g.pastream);
       g.pa_paused = true;
+      g.work.paused = true;
     }
     break;
   case GDK_KEY_F11:
@@ -481,6 +499,7 @@ int main(int argc, char **argv) {
   if (__builtin_cpu_supports("sse2")) opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_sse2;
   if (__builtin_cpu_supports("ssse3")) fmdsp_vramlookup_func = fmdsp_vramlookup_ssse3;
 #endif
+  fft_init_table();
   load_fontrom();
   gtk_init(&argc, &argv);
   {

@@ -9,6 +9,7 @@ void opna_reset(struct opna *opna) {
   opna_drum_reset(&opna->drum);
   opna_adpcm_reset(&opna->adpcm);
   opna->mask = 0;
+  opna->generated_frames = 0;
 }
 
 void opna_writereg(struct opna *opna, unsigned reg, unsigned val) {
@@ -42,6 +43,7 @@ void opna_mix_oscillo(struct opna *opna, int16_t *buf, unsigned samples, struct 
                      oscillo ? &oscillo[6] : 0, offset);
   opna_drum_mix(&opna->drum, buf, samples);
   opna_adpcm_mix(&opna->adpcm, buf, samples);
+  opna->generated_frames += samples;
 }
 
 unsigned opna_get_mask(const struct opna *opna) {

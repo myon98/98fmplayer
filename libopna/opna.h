@@ -41,6 +41,7 @@ struct opna {
   struct opna_adpcm adpcm;
   struct opna_ssg_resampler resampler;
   unsigned mask;
+  uint64_t generated_frames;
 };
 
 void opna_reset(struct opna *opna);

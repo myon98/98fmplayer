@@ -304,6 +304,7 @@ static bool fmp_cmd62_tempo(struct fmdriver_work *work,
   uint8_t tempo = fmp_part_cmdload(fmp, part);
   fmp->timerb_bak = tempo;
   fmp->timerb = tempo;
+  work->timerb = fmp->timerb;
   fmp_set_tempo(work, fmp);
   return true;
 }
@@ -876,6 +877,7 @@ static bool fmp_cmd74_loop(struct fmdriver_work *work,
     // 248c
     fmp->loop_cnt++;
     work->loop_cnt = fmp->loop_cnt;
+    work->timerb_cnt_loop = 0;
     fmp->part_loop_bit = fmp->part_playing_bit;
     // al=2; 1b64();
   }
@@ -2854,6 +2856,7 @@ static void fmp_timerb(struct fmdriver_work *work, struct driver_fmp *fmp) {
   if (fmp->status.stopped) {
     // TODO: stopped
     // jmp 18c7
+    work->playing = false;
   }
   // 1829
   if (!--fmp->clock_divider) {
@@ -2989,6 +2992,7 @@ static void fmp_init_parts(struct fmdriver_work *work,
   // work->opna_writereg(work, 0x110, 0x80);
   
   fmp->timerb = 0xca;
+  work->timerb = fmp->timerb;
   fmp->timerb_bak = 0xca;
 
   // 3c79
@@ -3150,7 +3154,10 @@ static void fmp_opna_interrupt(struct fmdriver_work *work) {
   struct driver_fmp *fmp = (struct driver_fmp *)work->driver;
   if (work->opna_status(work, 0) & 0x02) {
     fmp_timerb(work, fmp);
-    work->timerb_cnt++;
+    if (work->playing) {
+      work->timerb_cnt++;
+      work->timerb_cnt_loop++;
+    }
   }
 }
 
@@ -3495,6 +3502,7 @@ void fmp_init(struct fmdriver_work *work, struct driver_fmp *fmp) {
   fmp_work_status_init(work, fmp);
   fmdriver_fillpcmname(work->pcmname[0], fmp->pvi_name);
   fmdriver_fillpcmname(work->pcmname[1], fmp->ppz_name);
+  work->playing = true;
 }
 
 // 4235
