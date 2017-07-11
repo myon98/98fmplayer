@@ -19,12 +19,17 @@ FMDSP_SRC=../fmdsp/fmdsp.c \
           ../fmdsp/font_fmdsp_small.c \
           ../fmdsp/fmdsp_platform_unix.c
 
+SOUNDOUT_SRC=soundout/soundout.c \
+             soundout/pulseout.c \
+             soundout/jackout.c \
+             soundout/alsaout.c
+
 #fmplayer_CFLAGS=$(CFLAGS)
 #CFLAGS=
 fmplayer_CPPFLAGS=-Wall -Wextra -pedantic \
-                  -I.. \
-                  $(GTK3_CFLAGS) $(PORTAUDIO_CFLAGS) $(SNDFILE_CFLAGS)
-fmplayer_LDADD=$(GTK3_LIBS) $(PORTAUDIO_LIBS) $(SNDFILE_LIBS)
+                  -I.. -Isoundout \
+                  $(GTK3_CFLAGS) $(JACK_CFLAGS) $(PULSE_CFLAGS) $(ALSA_CFLAGS) $(SNDFILE_CFLAGS)
+fmplayer_LDADD=$(GTK3_LIBS) $(JACK_LIBS) $(PULSE_LIBS) $(ALSA_LIBS) $(SNDFILE_LIBS) -lm -lpthread
 
 if ENABLE_NEON
 LIBOPNA_SRC+=../libopna/opnassg-sinc-neon.s
@@ -52,7 +57,8 @@ fmplayer_SOURCES=main.c \
                  ../fft/fft.c \
                  $(LIBOPNA_SRC) \
                  $(FMDRIVER_SRC) \
-                 $(FMDSP_SRC)
+                 $(FMDSP_SRC) \
+                 $(SOUNDOUT_SRC)
 
 if ENABLE_OPENGL
 fmplayer_SOURCES+=oscilloview-gl.c

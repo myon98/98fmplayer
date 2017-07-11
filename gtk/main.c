@@ -1,5 +1,4 @@
 #include <gtk/gtk.h>
-#include <portaudio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -21,6 +20,8 @@
 #include "common/fmplayer_common.h"
 #include "fft/fft.h"
 
+#include "soundout.h"
+
 #include "fmplayer.xpm"
 #include "fmplayer32.xpm"
 
@@ -29,6 +30,7 @@
 
 enum {
   SRATE = 55467,
+//  SRATE = 55555,
   PPZ8MIX = 0xa000,
   AUDIOBUFLEN = 0,
 };
@@ -40,9 +42,8 @@ static struct {
   GtkWidget *box_widget;
   GtkWidget *fmdsp_widget;
   GtkWidget *filechooser_widget;
-  bool pa_initialized;
-  bool pa_paused;
-  PaStream *pastream;
+  bool sound_paused;
+  struct sound_state *ss;
   struct opna opna;
   struct opna_timer opna_timer;
   struct ppz8 ppz8;
@@ -68,10 +69,9 @@ static struct {
 };
 
 static void quit(void) {
-  if (g.pastream) {
-    Pa_CloseStream(g.pastream);
+  if (g.ss) {
+    g.ss->free(g.ss);
   }
-  if (g.pa_initialized) Pa_Terminate();
   fmplayer_file_free(g.fmfile);
   gtk_main_quit();
 }
@@ -118,17 +118,9 @@ static void msgbox_err(const char *msg) {
   gtk_widget_destroy(d);
 }
 
-
-static int pastream_cb(const void *inptr, void *outptr, unsigned long frames,
-                       const PaStreamCallbackTimeInfo *timeinfo,
-                       PaStreamCallbackFlags statusFlags,
-                       void *userdata) {
-  (void)inptr;
-  (void)timeinfo;
-  (void)statusFlags;
-  struct opna_timer *timer = (struct opna_timer *)userdata;
-  int16_t *buf = (int16_t *)outptr;
-  memset(outptr, 0, sizeof(int16_t)*frames*2);
+static void soundout_cb(void *userptr, int16_t *buf, unsigned frames) {
+  struct opna_timer *timer = (struct opna_timer *)userptr;
+  memset(buf, 0, sizeof(int16_t)*frames*2);
   opna_timer_mix_oscillo(timer, buf, frames,
                          g.oscillo_should_update ?
                          g.oscillodata_audiothread : 0);
@@ -150,7 +142,6 @@ static int pastream_cb(const void *inptr, void *outptr, unsigned long frames,
     fft_write(&g.at_fftdata, buf, frames);
     atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
   }
-  return paContinue;
 }
 
 static void load_fontrom(void) {
@@ -188,10 +179,6 @@ err:
 
 static bool openfile(const char *uri) {
   struct fmplayer_file *fmfile = 0;
-  if (!g.pa_initialized) {
-    msgbox_err("Could not initialize Portaudio");
-    goto err;
-  }
   enum fmplayer_file_error error;
   fmfile = fmplayer_file_alloc(uri, &error);
   if (!fmfile) {
@@ -206,19 +193,14 @@ static bool openfile(const char *uri) {
     free(errbuf);
     goto err;
   }
-  if (!g.pastream) {
-    PaError pe = Pa_OpenDefaultStream(&g.pastream, 0, 2, paInt16, SRATE, AUDIOBUFLEN,
-                                      pastream_cb, &g.opna_timer);
-    if (pe != paNoError) {
-      msgbox_err("cannot open portaudio stream");
+  if (!g.ss) {
+    g.ss = sound_init("FMPlayer", SRATE, soundout_cb, &g.opna_timer);
+    if (!g.ss) {
+      msgbox_err("cannot open audio stream");
       goto err;
     }
-  } else if (!g.pa_paused) {
-    PaError pe = Pa_StopStream(g.pastream);
-    if (pe != paNoError) {
-      msgbox_err("Portaudio Error");
-      goto err;
-    }
+  } else if (!g.sound_paused) {
+    g.ss->pause(g.ss, 1, 0);
   }
   fmplayer_file_free(g.fmfile);
   g.fmfile = fmfile;
@@ -236,8 +218,8 @@ static bool openfile(const char *uri) {
   }
   fmplayer_file_load(&g.work, g.fmfile, 1);
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
-  Pa_StartStream(g.pastream);
-  g.pa_paused = false;
+  g.ss->pause(g.ss, 0, 1);
+  g.sound_paused = false;
   g.work.paused = false;
   {
     const char *turi = strdup(uri);
@@ -404,15 +386,9 @@ static gboolean key_press_cb(GtkWidget *w,
     }
     break;
   case GDK_KEY_F7:
-    if (g.pa_paused) {
-      Pa_StartStream(g.pastream);
-      g.pa_paused = false;
-      g.work.paused = false;
-    } else {
-      Pa_StopStream(g.pastream);
-      g.pa_paused = true;
-      g.work.paused = true;
-    }
+    g.sound_paused ^= 1;
+    g.work.paused = g.sound_paused;
+    g.ss->pause(g.ss, g.sound_paused, 0);
     break;
   case GDK_KEY_F11:
     fmdsp_dispstyle_set(&g.fmdsp, (g.fmdsp.style+1) % FMDSP_DISPSTYLE_CNT);
@@ -528,7 +504,6 @@ int main(int argc, char **argv) {
 
   create_box();
 
-  g.pa_initialized = (Pa_Initialize() == paNoError);
   fmdsp_init(&g.fmdsp, &g.font98);
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   g.vram32_stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, PC98_W);
