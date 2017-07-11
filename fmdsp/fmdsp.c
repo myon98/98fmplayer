@@ -643,6 +643,7 @@ static void fmdsp_track_without_key(
       break;
     case FMDRIVER_TRACK_INFO_SSGEFF:
       track_info1 = "EFF ";
+      /* FALLTHRU */
     case FMDRIVER_TRACK_INFO_SSG:
       if (track->ssg_noise) {
         snprintf(track_info2, sizeof(track_info2), "%c%02X ",
