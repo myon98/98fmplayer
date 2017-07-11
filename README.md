@@ -10,6 +10,7 @@ PC-98 FM driver emulation (very early version)
 * FMP: FM, SSG, Rhythm, ADPCM, PPZ8, PDZF supported
 * This is just a byproduct of reverse-engineering formats, and its emulation is much worse than PMDWin, WinFMP
 * FM always generated in 55467Hz (closest integer to 7987200 / 144), SSG always generated in 249600Hz and downsampled with sinc filter (Never linear interpolates harmonics-rich signal like square wave)
+* FM generation bit-perfect with actual OPNA/OPN3 chip under limited conditions including stereo output when 4 <= ALG (Envelope is not bit-perfect yet, attack is bit-perfect only when AR >= 21)
 * SSGEG, Hardware LFO not supported
 * PPZ8: linear interpolation only (same as PMDWin/WinFMP, much better than original ppz8.com which only did nearest-neighbor interpolation)
 
@@ -36,4 +37,4 @@ $ cd win32/x86
 $ make
 ```
 Reads drum sample from the directory in which `fmplayer.exe` is placed.
-Uses DirectSound (WinMM if there is no DirectSound) to output sound. This works on Windows 2000, so it is  theoretically possible to run this on a real PC-98. (But it was too heavy for my PC-9821V12 which only has Pentium 120MHz)
+Uses DirectSound (WinMM if there is no DirectSound) to output sound. This works on Windows 2000, so it is  theoretically possible to run this on a real PC-98. (But it was too heavy for my PC-9821V12 which only has P5 Pentium 120MHz, or on PC-9821Ra300 with P6 Mendocino Celeron 300MHz)
