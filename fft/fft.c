@@ -4,7 +4,7 @@
 
 void fft_write(struct fmplayer_fft_data *data, const int16_t *buf, unsigned len) {
   if (len > FFTLEN) {
-    unsigned discard = FFTLEN - len;
+    unsigned discard = len - FFTLEN;
     buf += discard*2;
     len = FFTLEN;
   }
