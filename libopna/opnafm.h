@@ -44,15 +44,19 @@ struct opna_fm_slot {
 
   uint8_t keycode;
 
+  // set with opna_write
+  bool keyon_ext;
+  // synchronized with env update (once per 3 samples)
   bool keyon;
+  // set when opna_fm_slotout called
+  int16_t prevout;
 };
 
 struct opna_fm_channel {
   struct opna_fm_slot slot[4];
 
   // save 2 samples for slot 1 feedback
-  uint16_t fbmem1;
-  uint16_t fbmem2;
+  uint16_t fbmem;
   // save sample for long (>2) chain of slots
   uint16_t alg_mem;
 
@@ -97,7 +101,12 @@ void opna_fm_chan_reset(struct opna_fm_channel *chan);
 void opna_fm_chan_phase(struct opna_fm_channel *chan);
 void opna_fm_chan_env(struct opna_fm_channel *chan);
 void opna_fm_chan_set_blkfnum(struct opna_fm_channel *chan, unsigned blk, unsigned fnum);
-int16_t opna_fm_chanout(struct opna_fm_channel *chan);
+
+struct opna_fm_frame {
+  int16_t data[2];
+};
+
+struct opna_fm_frame opna_fm_chanout(struct opna_fm_channel *chan);
 void opna_fm_slot_key(struct opna_fm_channel *chan, int slotnum, bool keyon);
 
 void opna_fm_chan_set_alg(struct opna_fm_channel *chan, unsigned alg);

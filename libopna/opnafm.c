@@ -3,8 +3,11 @@
 
 #include "opnatables.h"
 
-#define LIBOPNA_ENABLE_HIRES_SIN
-#define LIBOPNA_ENABLE_HIRES_ENV
+//#include <stdio.h>
+#define printf(...)
+
+//#define LIBOPNA_ENABLE_HIRES_SIN
+//#define LIBOPNA_ENABLE_HIRES_ENV
 
 enum {
   ENV_MAX_HIRES = LIBOPNA_FM_ENV_MAX * 4
@@ -17,24 +20,9 @@ enum {
 };
 
 static void opna_fm_slot_reset(struct opna_fm_slot *slot) {
-  slot->phase = 0;
   slot->env = LIBOPNA_FM_ENV_MAX;
   slot->env_hires = ENV_MAX_HIRES;
-  slot->env_count = 0;
   slot->env_state = ENV_RELEASE;
-  slot->rate_shifter = 0;
-  slot->rate_selector = 0;
-  slot->rate_mul = 0;
-  slot->tl = 0;
-  slot->sl = 0;
-  slot->ar = 0;
-  slot->dr = 0;
-  slot->sr = 0;
-  slot->rr = 0;
-  slot->mul = 0;
-  slot->det = 0;
-  slot->ks = 0;
-  slot->keyon = false;
 }
 
 
@@ -42,18 +30,10 @@ void opna_fm_chan_reset(struct opna_fm_channel *chan) {
   for (int i = 0; i < 4; i++) {
     opna_fm_slot_reset(&chan->slot[i]);
   }
-
-  chan->fbmem1 = 0;
-  chan->fbmem2 = 0;
-  chan->alg_mem = 0;
-
-  chan->alg = 0;
-  chan->fb = 0;
-  chan->fnum = 0;
-  chan->blk = 0;
 }
 
 void opna_fm_reset(struct opna_fm *fm) {
+  *fm = (struct opna_fm) {0};
   for (int i = 0; i < 6; i++) {
     opna_fm_chan_reset(&fm->channel[i]);
     fm->lselect[i] = true;
@@ -90,11 +70,13 @@ static int16_t opna_fm_slotout(struct opna_fm_slot *slot, int16_t modulation) {
 
   int logout = logsintable[pind];
 #endif // LIBOPNA_ENABLE_HIRES_SIN
+//  if (slot->env == LIBOPNA_FM_ENV_MAX) {
 #ifdef LIBOPNA_ENABLE_HIRES_ENV
   logout += slot->env_hires;
 #else
   logout += (slot->env << 2);
 #endif
+//  }
   logout += (slot->tl << 5);
 
   int selector = logout & ((1<<EXPTABLEBIT)-1);
@@ -103,6 +85,7 @@ static int16_t opna_fm_slotout(struct opna_fm_slot *slot, int16_t modulation) {
 
   int16_t out = (exptable[selector] << 2) >> shifter;
   if (minus) out = -out;
+  slot->prevout = out;
   return out;
 }
 
@@ -142,73 +125,104 @@ void opna_fm_chan_phase(struct opna_fm_channel *chan) {
 
 static void opna_fm_chan_phase_se(struct opna_fm_channel *chan, struct opna_fm *fm) {
   unsigned freq;
-  freq = blkfnum2freq(fm->ch3.blk[2], fm->ch3.fnum[1]);
-  opna_fm_slot_phase(&chan->slot[0], freq);
   freq = blkfnum2freq(fm->ch3.blk[0], fm->ch3.fnum[0]);
-  opna_fm_slot_phase(&chan->slot[2], freq);
-  freq = blkfnum2freq(fm->ch3.blk[1], fm->ch3.fnum[2]);
+  opna_fm_slot_phase(&chan->slot[0], freq);
+  freq = blkfnum2freq(fm->ch3.blk[1], fm->ch3.fnum[1]);
   opna_fm_slot_phase(&chan->slot[1], freq);
+  freq = blkfnum2freq(fm->ch3.blk[2], fm->ch3.fnum[2]);
+  opna_fm_slot_phase(&chan->slot[2], freq);
   freq = blkfnum2freq(chan->blk, chan->fnum);
   opna_fm_slot_phase(&chan->slot[3], freq);
 }
 
-int16_t opna_fm_chanout(struct opna_fm_channel *chan) {
-  int16_t fb = chan->fbmem1 + chan->fbmem2;
-  int16_t slot0 = chan->fbmem1;
-  chan->fbmem1 = chan->fbmem2;
+struct opna_fm_frame opna_fm_chanout(struct opna_fm_channel *chan) {
+  int16_t slot0 = chan->slot[0].prevout;
+  int16_t slot1 = chan->slot[1].prevout;
+  int16_t slot2 = chan->slot[2].prevout;
+  int16_t slot3 = chan->slot[3].prevout;
+  int16_t fb = chan->fbmem + chan->slot[0].prevout;
+  chan->fbmem = slot0;
   if (!chan->fb) fb = 0;
-  chan->fbmem2 = opna_fm_slotout(&chan->slot[0], fb >> (9 - chan->fb));
+  opna_fm_slotout(&chan->slot[0], fb >> (9 - chan->fb));
 
-  int16_t slot2;
-  int16_t out = 0;
-
+  int16_t prev_alg_mem = chan->alg_mem;
+  struct opna_fm_frame ret;
   switch (chan->alg) {
+  // this looks ugly, but is verified with actual YMF288 and YM2608
   case 0:
-    slot2 = opna_fm_slotout(&chan->slot[2], chan->alg_mem);
-    chan->alg_mem = opna_fm_slotout(&chan->slot[1], slot0);
-    out = opna_fm_slotout(&chan->slot[3], slot2);
+    opna_fm_slotout(&chan->slot[1], chan->slot[0].prevout);
+    opna_fm_slotout(&chan->slot[2], slot1);
+    opna_fm_slotout(&chan->slot[3], slot2);
+    ret.data[0] = ret.data[1] = chan->slot[3].prevout >> 1;
     break;
   case 1:
-    slot2 = opna_fm_slotout(&chan->slot[2], chan->alg_mem);
-    chan->alg_mem = slot0;
-    chan->alg_mem += opna_fm_slotout(&chan->slot[1], 0);
-    out = opna_fm_slotout(&chan->slot[3], slot2);
+    opna_fm_slotout(&chan->slot[1], 0);
+    opna_fm_slotout(&chan->slot[2], prev_alg_mem);
+    opna_fm_slotout(&chan->slot[3], slot2);
+    chan->alg_mem = chan->slot[0].prevout;
+    chan->alg_mem += chan->slot[1].prevout;
+    chan->alg_mem &= ~1;
+    ret.data[0] = ret.data[1] = chan->slot[3].prevout >> 1;
     break;
   case 2:
-    slot2 = opna_fm_slotout(&chan->slot[2], chan->alg_mem);
-    chan->alg_mem = opna_fm_slotout(&chan->slot[1], 0);
-    out = opna_fm_slotout(&chan->slot[3], slot0 + slot2);
+    opna_fm_slotout(&chan->slot[1], 0);
+    opna_fm_slotout(&chan->slot[2], slot1);
+    opna_fm_slotout(&chan->slot[3], slot0 + slot2);
+    ret.data[0] = ret.data[1] = chan->slot[3].prevout >> 1;
     break;
   case 3:
-    slot2 = opna_fm_slotout(&chan->slot[2], 0);
-    out = opna_fm_slotout(&chan->slot[3], slot2 + chan->alg_mem);
-    chan->alg_mem = opna_fm_slotout(&chan->slot[1], slot0);
+    opna_fm_slotout(&chan->slot[1], chan->slot[0].prevout);
+    opna_fm_slotout(&chan->slot[2], 0);
+    opna_fm_slotout(&chan->slot[3], slot2 + prev_alg_mem);
+    chan->alg_mem = slot1;
+    ret.data[0] = ret.data[1] = chan->slot[3].prevout >> 1;
     break;
   case 4:
-    out = opna_fm_slotout(&chan->slot[1], slot0);
-    slot2 = opna_fm_slotout(&chan->slot[2], 0);
-    out += opna_fm_slotout(&chan->slot[3], slot2);
+    opna_fm_slotout(&chan->slot[1], slot0);
+    opna_fm_slotout(&chan->slot[2], 0);
+    opna_fm_slotout(&chan->slot[3], chan->slot[2].prevout);
+    ret.data[0] = ret.data[1] = slot3 >> 1;
+    ret.data[0] += chan->slot[1].prevout >> 1;
+    ret.data[1] += slot1 >> 1;
     break;
   case 5:
-    out = opna_fm_slotout(&chan->slot[2], chan->alg_mem);
-    chan->alg_mem = slot0;
-    out += opna_fm_slotout(&chan->slot[1], slot0);
-    out += opna_fm_slotout(&chan->slot[3], slot0);
+    opna_fm_slotout(&chan->slot[1], slot0);
+    opna_fm_slotout(&chan->slot[2], slot0);
+    opna_fm_slotout(&chan->slot[3], slot0);
+    chan->alg_mem = slot2;
+    chan->alg_mem &= ~1;
+    ret.data[0] = ret.data[1] = slot3 >> 1;
+    ret.data[0] += (chan->slot[1].prevout >> 1) + (slot2 >> 1);
+    ret.data[1] += (slot1 >> 1) + (prev_alg_mem >> 1);
     break;
   case 6:
-    out = opna_fm_slotout(&chan->slot[1], slot0);
-    out += opna_fm_slotout(&chan->slot[2], 0);
-    out += opna_fm_slotout(&chan->slot[3], 0);
+    opna_fm_slotout(&chan->slot[1], slot0);
+    opna_fm_slotout(&chan->slot[2], 0);
+    opna_fm_slotout(&chan->slot[3], 0);
+    chan->alg_mem = slot2;
+    chan->alg_mem &= ~1;
+    ret.data[0] = ret.data[1] = slot3 >> 1;
+    ret.data[0] += (chan->slot[1].prevout >> 1) + (slot2 >> 1);
+    ret.data[1] += (slot1 >> 1) + (prev_alg_mem >> 1);
     break;
   case 7:
-    out = slot0;
-    out += opna_fm_slotout(&chan->slot[1], 0);
-    out += opna_fm_slotout(&chan->slot[2], 0);
-    out += opna_fm_slotout(&chan->slot[3], 0);
+    opna_fm_slotout(&chan->slot[1], 0);
+    opna_fm_slotout(&chan->slot[2], 0);
+    opna_fm_slotout(&chan->slot[3], 0);
+    chan->alg_mem = chan->slot[1].prevout + chan->slot[2].prevout;
+    chan->alg_mem &= ~1;
+    ret.data[0] = ret.data[1] =
+        (chan->slot[0].prevout >> 1) + (chan->slot[3].prevout >> 1);
+    ret.data[0] += chan->alg_mem >> 1;
+    ret.data[1] += prev_alg_mem >> 1;
+    // when int = 32bit, this is implementation-defined, not UB
+    ret.data[0] <<= 1;
+    ret.data[0] >>= 1;
+    ret.data[1] <<= 1;
+    ret.data[1] >>= 1;
     break;
   }
-  
-  return out;
+  return ret;
 }
 
 static void opna_fm_slot_setrate(struct opna_fm_slot *slot, int status) {
@@ -240,6 +254,8 @@ static void opna_fm_slot_setrate(struct opna_fm_slot *slot, int status) {
   int rate = 2*r + (slot->keycode >> (3 - slot->ks));
 
   if (rate > 63) rate = 63;
+  printf("rate: %d\n", rate);
+  if (status == ENV_ATTACK && rate >= 62) rate += 4;
 #ifdef LIBOPNA_ENABLE_HIRES_ENV
   rate += 8;
 #endif
@@ -253,11 +269,15 @@ static void opna_fm_slot_setrate(struct opna_fm_slot *slot, int status) {
     slot->rate_mul = 1;
     slot->rate_shifter = rate_shifter;
   }
+  printf("status: %d\n", status);
+  printf("rate_selector: %d\n", slot->rate_selector);
+  printf("rate_mul:      %d\n", slot->rate_mul);
+  printf("rate_shifter:  %d\n\n", slot->rate_shifter);
 }
 
 static void opna_fm_slot_env(struct opna_fm_slot *slot) {
-  slot->env_count++;
-  if (!(slot->env_count & ((1<<slot->rate_shifter)-1))) {
+//  if (!(slot->env_count & ((1<<slot->rate_shifter)-1))) {
+  if ((slot->env_count & ((1<<slot->rate_shifter)-1)) == ((1<<slot->rate_shifter)-1)) {
     int rate_index = (slot->env_count >> slot->rate_shifter) & 7;
     int env_inc = rateinctable[slot->rate_selector][rate_index];
     env_inc *= slot->rate_mul;
@@ -303,15 +323,6 @@ static void opna_fm_slot_env(struct opna_fm_slot *slot) {
     int newenv;
     int sl;
     case ENV_ATTACK:
-      newenv = slot->env_hires + (((-slot->env-1) * env_inc) >> 6);
-      if (newenv <= 0) {
-        slot->env = 0;
-        slot->env_hires = 0;
-        slot->env_state = ENV_DECAY;
-        opna_fm_slot_setrate(slot, ENV_DECAY);
-      } else {
-        slot->env_hires = newenv;
-      }
       newenv = slot->env + (((-slot->env-1) * env_inc) >> 4);
       if (newenv <= 0) {
         slot->env = 0;
@@ -344,16 +355,19 @@ static void opna_fm_slot_env(struct opna_fm_slot *slot) {
     }
 #endif
   }
+  slot->env_count++;
 }
 
 void opna_fm_slot_key(struct opna_fm_channel *chan, int slotnum, bool keyon) {
   struct opna_fm_slot *slot = &chan->slot[slotnum];
+  //printf("%d: %d\n", slotnum, keyon);
   if (keyon) {
     if (!slot->keyon) {
       slot->keyon = true;
       slot->env_state = ENV_ATTACK;
       slot->env_count = 0;
       slot->phase = 0;
+      slot->prevout = 0;
       opna_fm_slot_setrate(slot, ENV_ATTACK);
     }
   } else {
@@ -456,16 +470,34 @@ void opna_fm_writereg(struct opna_fm *fm, unsigned reg, unsigned val) {
 //        printf("0x27\n");
 //        printf("  mode = %d\n", mode);
         fm->ch3.mode = mode;
+        for (int c = 0; c < 2; c++) {
+          unsigned blk, fnum;
+          if (fm->ch3.mode == CH3_MODE_NORMAL) {
+            blk = fm->channel[2].blk;
+            fnum = fm->channel[2].fnum;
+          } else {
+            blk = fm->ch3.blk[c];
+            fnum = fm->ch3.fnum[c];
+          }
+          fm->channel[2].slot[c].keycode = blkfnum2keycode(blk, fnum);
+          opna_fm_slot_setrate(&fm->channel[2].slot[c],
+                               fm->channel[2].slot[c].env_state);
+        }
       }
     }
     return;
   case 0x28:
     {
+//      printf("%02x\n", val);
       int c = val & 0x3;
       if (c == 3) return;
       if (val & 0x4) c += 3;
       for (int i = 0; i < 4; i++) {
-        opna_fm_slot_key(&fm->channel[c], i, (val & (1<<(4+i))));
+        bool keyon = val & (1<<(4+i));
+        fm->channel[c].slot[i].keyon_ext = keyon;
+        if (!keyon) {
+          opna_fm_slot_key(&fm->channel[c], i, false);
+        }
       }
     }
     return;
@@ -505,12 +537,26 @@ void opna_fm_writereg(struct opna_fm *fm, unsigned reg, unsigned val) {
       unsigned fnum = ((fm->blkfnum_h & 0x7) << 8) | (val & 0xff);
       switch (reg & 0xc) {
       case 0x0:
-        opna_fm_chan_set_blkfnum(chan, blk, fnum);
+        if (c != 2 || fm->ch3.mode == CH3_MODE_NORMAL) {
+//          printf("fnum: ch%d, mode: %d\n", c, fm->ch3.mode);
+          opna_fm_chan_set_blkfnum(chan, blk, fnum);
+        } else {
+//          printf("fnum: ch2, slot3\n");
+          chan->blk = blk;
+          chan->fnum = fnum;
+          chan->slot[3].keycode = blkfnum2keycode(blk, fnum);
+          opna_fm_slot_setrate(&chan->slot[3], chan->slot[3].env_state);
+        }
         break;
       case 0x8:
-        c %= 3;
+        c = (c + 2) % 3;
         fm->ch3.blk[c] = blk;
         fm->ch3.fnum[c] = fnum;
+        if (fm->ch3.mode != CH3_MODE_NORMAL) {
+          fm->channel[2].slot[c].keycode = blkfnum2keycode(blk, fnum);
+          opna_fm_slot_setrate(&fm->channel[2].slot[c],
+                               fm->channel[2].slot[c].env_state);
+        }
         break;
       case 0x4:
       case 0xc:
@@ -531,12 +577,6 @@ void opna_fm_writereg(struct opna_fm *fm, unsigned reg, unsigned val) {
       break;
     }
     break;
-  }
-}
-
-void opna_fm_chan_env(struct opna_fm_channel *chan) {
-  for (int i = 0; i < 4; i++) {
-    opna_fm_slot_env(&chan->slot[i]);
   }
 }
 
@@ -583,28 +623,32 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
   for (unsigned i = 0; i < samples; i++) {
     if (!fm->env_div3) {
       for (int c = 0; c < 6; c++) {
-        opna_fm_chan_env(&fm->channel[c]);
+        for (int s = 0; s < 4; s++) {
+          if (fm->channel[c].slot[s].keyon_ext) {
+            opna_fm_slot_key(&fm->channel[c], s, true);
+            opna_fm_slot_env(&fm->channel[c].slot[s]);
+          }
+          //opna_fm_slot_env(&fm->channel[c].slot[s]);
+        }
       }
-      fm->env_div3 = 3;
+      //printf("e %04d\n", fm->channel[0].slot[3].env);
     }
-    fm->env_div3--;
     
     int32_t lo = buf[i*2+0];
     int32_t ro = buf[i*2+1];
 
     for (int c = 0; c < 6; c++) {
-      int16_t o = opna_fm_chanout(&fm->channel[c]);
-      if (oscillo) oscillo[c].buf[offset+i] = o*2;
+      struct opna_fm_frame o = opna_fm_chanout(&fm->channel[c]);
+      if (oscillo) oscillo[c].buf[offset+i] = o.data[0] + o.data[1];
       // TODO: CSM
       if (c == 2 && fm->ch3.mode != CH3_MODE_NORMAL) {
         opna_fm_chan_phase_se(&fm->channel[c], fm);
       } else {
         opna_fm_chan_phase(&fm->channel[c]);
       }
-      o >>= 1;
       if (fm->mask & (1<<c)) continue;
-      if (fm->lselect[c]) lo += o;
-      if (fm->rselect[c]) ro += o;
+      if (fm->lselect[c]) lo += o.data[1];
+      if (fm->rselect[c]) ro += o.data[0];
     }
 
     if (lo < INT16_MIN) lo = INT16_MIN;
@@ -613,5 +657,24 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
     if (ro > INT16_MAX) ro = INT16_MAX;
     buf[i*2+0] = lo;
     buf[i*2+1] = ro;
+    if (lo == 1 || lo == 3 || lo == 5) {
+      //if (fm->channel[0].slot[3].env == 0511) {
+        //printf("l:%6d %4d %4d\n", lo, fm->channel[0].slot[3].phase >> 10, fm->channel[0].slot[3].env);
+      //}
+    }
+    if (!fm->env_div3) {
+      for (int c = 0; c < 6; c++) {
+        for (int s = 0; s < 4; s++) {
+          if (fm->channel[c].slot[s].keyon_ext) {
+            fm->channel[c].slot[s].keyon_ext = false;
+          } else {
+            opna_fm_slot_env(&fm->channel[c].slot[s]);
+          }
+          //opna_fm_slot_env(&fm->channel[c].slot[s]);
+        }
+      }
+      fm->env_div3 = 3;
+    }
+    fm->env_div3--;
   }
 }
