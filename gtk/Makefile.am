@@ -19,15 +19,22 @@ FMDSP_SRC=../fmdsp/fmdsp.c \
           ../fmdsp/font_fmdsp_small.c \
           ../fmdsp/fmdsp_platform_unix.c
 
-SOUNDOUT_SRC=soundout/soundout.c \
-             soundout/pulseout.c \
-             soundout/jackout.c \
-             soundout/alsaout.c
+SOUNDOUT_SRC=../soundout/soundout.c
+
+if ENABLE_JACK
+SOUNDOUT_SRC+=../soundout/jackout.c
+endif
+if ENABLE_PULSE
+SOUNDOUT_SRC+=../soundout/pulseout.c
+endif
+if ENABLE_ALSA
+SOUNDOUT_SRC+=../soundout/alsaout.c
+endif
 
 #fmplayer_CFLAGS=$(CFLAGS)
 #CFLAGS=
 fmplayer_CPPFLAGS=-Wall -Wextra -pedantic \
-                  -I.. -Isoundout \
+                  -I.. -I../soundout \
                   $(GTK3_CFLAGS) $(JACK_CFLAGS) $(PULSE_CFLAGS) $(ALSA_CFLAGS) $(SNDFILE_CFLAGS)
 fmplayer_LDADD=$(GTK3_LIBS) $(JACK_LIBS) $(PULSE_LIBS) $(ALSA_LIBS) $(SNDFILE_LIBS) -lm -lpthread
 

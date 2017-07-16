@@ -46,7 +46,8 @@ static void *alsaout_thread(void *ptr) {
     if (as->terminate) return 0;
     if (as->fds[0].revents) {
       uint64_t eventdata;
-      read(as->fd_event, &eventdata, sizeof(eventdata));
+      ssize_t t = read(as->fd_event, &eventdata, sizeof(eventdata));
+      (void)t;
     }
     unsigned short event;
     if (snd_pcm_poll_descriptors_revents(
@@ -80,13 +81,20 @@ static void *alsaout_thread(void *ptr) {
 static void alsaout_pause(struct sound_state *ss, int pause, int flush) {
   struct alsaout_state *as = (struct alsaout_state *)ss;
   
+  as->paused = pause;
+  if (!pause && flush) {
+    snd_pcm_drop(as->apcm);
+    snd_pcm_prepare(as->apcm);
+    snd_pcm_start(as->apcm);
+  } else {
+    snd_pcm_pause(as->apcm, pause);
+  }
   while (atomic_flag_test_and_set_explicit(
       &as->cb_flag, memory_order_acquire));
-  as->paused = pause;
-  snd_pcm_pause(as->apcm, pause);
   atomic_flag_clear_explicit(&as->cb_flag, memory_order_release);
   uint64_t event = 1;
-  write(as->fd_event, &event, sizeof(event));
+  ssize_t t = write(as->fd_event, &event, sizeof(event));
+  (void)t;
 }
 
 static void alsaout_free(struct sound_state *ss) {
@@ -95,7 +103,8 @@ static void alsaout_free(struct sound_state *ss) {
   if (as->thread_valid) {
     as->terminate = true;
     uint64_t event = 1;
-    write(as->fd_event, &event, sizeof(event));
+    ssize_t t = write(as->fd_event, &event, sizeof(event));
+    (void)t;
     pthread_join(as->alsa_thread, 0);
   }
   if (as->fd_event != -1) {
@@ -144,7 +153,7 @@ struct sound_state *alsaout_init(
     goto err;
   }
   as->thread_valid = true;
-  return as;
+  return &as->ss;
 
 err:
   alsaout_free(&as->ss);

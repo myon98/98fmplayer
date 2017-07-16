@@ -11,7 +11,7 @@ static struct {
 
 #define DATADIR "/.local/share/fmplayer/"
 
-void loadfile(void) {
+static void loadfile(void) {
   const char *path = "ym2608_adpcm_rom.bin";
   const char *home = getenv("HOME");
   char *dpath = 0;

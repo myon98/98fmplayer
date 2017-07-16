@@ -6,11 +6,28 @@ AC_PROG_RANLIB
 AM_PROG_AR
 AM_PROG_AS
 
-PKG_CHECK_MODULES([JACK], [jack soxr])
-PKG_CHECK_MODULES([PULSE], [libpulse])
-PKG_CHECK_MODULES([ALSA], [alsa])
+PKG_CHECK_MODULES([JACK], [jack soxr], [jack_found=yes], [jack_found=no])
+PKG_CHECK_MODULES([PULSE], [libpulse], [pulse_found=yes], [pulse_found=no])
+PKG_CHECK_MODULES([ALSA], [alsa], [alsa_found=yes], [alsa_found=no])
 PKG_CHECK_MODULES([GTK3], [gtk+-3.0 cairo])
 PKG_CHECK_MODULES([SNDFILE], [sndfile])
+
+AS_IF([test "x$jack_found" = "xno" -a "x$pulse_found" = "xno" -a "x$alsa_found" = "xno"], [
+  AC_MSG_ERROR([No audio output backend found])
+])
+
+AM_CONDITIONAL([ENABLE_JACK], [test "x$jack_found" = "xyes"])
+AS_IF([test "x$jack_found" = "xyes"], [
+  AC_DEFINE([ENABLE_JACK])
+])
+AM_CONDITIONAL([ENABLE_PULSE], [test "x$pulse_found" = "xyes"])
+AS_IF([test "x$pulse_found" = "xyes"], [
+  AC_DEFINE([ENABLE_PULSE])
+])
+AM_CONDITIONAL([ENABLE_ALSA], [test "x$alsa_found" = "xyes"])
+AS_IF([test "x$alsa_found" = "xyes"], [
+  AC_DEFINE([ENABLE_ALSA])
+])
 
 AC_ARG_ENABLE([neon], AS_HELP_STRING([--enable-neon], [Enable NEON optimized functions for SSG sinc filtering and fmdsp palette lookup. Tested on Cortex-A53 (Raspberry PI 3)]))
 AM_CONDITIONAL([ENABLE_NEON], [test "x$enable_neon" = "xyes"])

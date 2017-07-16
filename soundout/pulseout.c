@@ -18,16 +18,46 @@ struct pulseout_state {
   bool pa_status_changed;
 };
 
+#include <stdio.h>
+
+static void pulseout_success_cb(pa_stream *s, int success, void *userdata) {
+  (void)s;
+  (void)success;
+  struct pulseout_state *ps = userdata;
+  pa_threaded_mainloop_signal(ps->pa_tm, 0);
+}
+
 static void pulseout_pause(struct sound_state *ss, int pause, int flush) {
-  //return;
   struct pulseout_state *ps = (struct pulseout_state *)ss;
   if (ps->paused != !!pause) {
     if (pause) {
       pa_threaded_mainloop_lock(ps->pa_tm);
+      pa_operation *op_cork = pa_stream_cork(ps->pa_s, 1, pulseout_success_cb, ps);
+      while (pa_operation_get_state(op_cork) == PA_OPERATION_RUNNING)
+        pa_threaded_mainloop_wait(ps->pa_tm);
+      pa_operation_unref(op_cork);
     }
     ps->paused = pause;
     if (!pause) {
-      if (flush) ps->flush = true;
+      //if (flush) ps->flush = true;
+      if (flush) {
+        pa_operation *op_flush = pa_stream_flush(ps->pa_s, pulseout_success_cb, ps);
+        if (op_flush) {
+          while (pa_operation_get_state(op_flush) == PA_OPERATION_RUNNING)
+            pa_threaded_mainloop_wait(ps->pa_tm);
+          pa_operation_unref(op_flush);
+        } else {
+          fprintf(stderr, "FLUSH ERR\n");
+        }
+      }
+      pa_operation *op_cork = pa_stream_cork(ps->pa_s, 0, pulseout_success_cb, ps);
+      if (op_cork) {
+        while (pa_operation_get_state(op_cork) == PA_OPERATION_RUNNING)
+          pa_threaded_mainloop_wait(ps->pa_tm);
+        pa_operation_unref(op_cork);
+      } else {
+        fprintf(stderr, "CORK ERR\n");
+      }
       pa_threaded_mainloop_unlock(ps->pa_tm);
     }
   }
@@ -70,6 +100,7 @@ static void pulseout_cb(pa_stream *p, size_t bytes, void *userdata) {
 }
 
 static void pa_c_cb(pa_context *pa_c, void *userdata) {
+  (void)pa_c;
   struct pulseout_state *ps = userdata;
   ps->pa_status_changed = true;
   pa_threaded_mainloop_signal(ps->pa_tm, 0);
