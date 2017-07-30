@@ -47,7 +47,7 @@ static void pulseout_pause(struct sound_state *ss, int pause, int flush) {
             pa_threaded_mainloop_wait(ps->pa_tm);
           pa_operation_unref(op_flush);
         } else {
-          fprintf(stderr, "FLUSH ERR\n");
+          //fprintf(stderr, "FLUSH ERR\n");
         }
       }
       pa_operation *op_cork = pa_stream_cork(ps->pa_s, 0, pulseout_success_cb, ps);
@@ -56,7 +56,7 @@ static void pulseout_pause(struct sound_state *ss, int pause, int flush) {
           pa_threaded_mainloop_wait(ps->pa_tm);
         pa_operation_unref(op_cork);
       } else {
-        fprintf(stderr, "CORK ERR\n");
+        //fprintf(stderr, "CORK ERR\n");
       }
       pa_threaded_mainloop_unlock(ps->pa_tm);
     }
@@ -156,7 +156,14 @@ struct sound_state *pulseout_init(
   );
   if (!ps->pa_s) goto err;
   pa_stream_set_write_callback(ps->pa_s, pulseout_cb, ps);
-  if (pa_stream_connect_playback(ps->pa_s, 0, 0, 0, 0, 0) < 0) goto err;
+  pa_buffer_attr battr = {
+    .maxlength = -1,
+    .tlength = pa_usec_to_bytes(1000*1000/30, &ss),
+    .prebuf = -1,
+    .minreq = -1,
+    .fragsize = -1,
+  };
+  if (pa_stream_connect_playback(ps->pa_s, 0, &battr, PA_STREAM_ADJUST_LATENCY, 0, 0) < 0) goto err;
   return &ps->ss;
 err:
   pulseout_free(&ps->ss);

@@ -6,14 +6,45 @@ AC_PROG_RANLIB
 AM_PROG_AR
 AM_PROG_AS
 
-PKG_CHECK_MODULES([JACK], [jack soxr], [jack_found=yes], [jack_found=no])
-PKG_CHECK_MODULES([PULSE], [libpulse], [pulse_found=yes], [pulse_found=no])
-PKG_CHECK_MODULES([ALSA], [alsa], [alsa_found=yes], [alsa_found=no])
+AC_ARG_WITH([jack],
+  [AS_HELP_STRING([--without-jack], [disable support for JACK audio])])
+AC_ARG_WITH([pulse],
+  [AS_HELP_STRING([--without-pulse], [disable support for pulseaudio])])
+AC_ARG_WITH([alsa],
+  [AS_HELP_STRING([--without-alsa], [disable support for alsa])])
+
+AS_IF([test "x$with_jack" = "xyes"], [
+  PKG_CHECK_MODULES([JACK], [jack soxr])
+  jack_found=yes
+], [test "x$with_jack" != "xno"], [
+  PKG_CHECK_MODULES([JACK], [jack soxr], [jack_found=yes], [jack_found=no])
+], [
+  jack_found=no
+])
+
+AS_IF([test "x$with_pulse" = "xyes"], [
+  PKG_CHECK_MODULES([PULSE], [libpulse])
+  pulse_found=yes
+], [test "x$with_pulse" != "xno"], [
+  PKG_CHECK_MODULES([PULSE], [libpulse], [pulse_found=yes], [pulse_found=no])
+], [
+  pulse_found=no
+])
+
+AS_IF([test "x$with_alsa" = "xyes"], [
+  PKG_CHECK_MODULES([ALSA], [alsa])
+  alsa_found=yes
+], [test "x$with_alsa" != "xno"], [
+  PKG_CHECK_MODULES([ALSA], [alsa], [alsa_found=yes], [alsa_found=no])
+], [
+  alsa_found=no
+])
+
 PKG_CHECK_MODULES([GTK3], [gtk+-3.0 cairo])
 PKG_CHECK_MODULES([SNDFILE], [sndfile])
 
 AS_IF([test "x$jack_found" = "xno" -a "x$pulse_found" = "xno" -a "x$alsa_found" = "xno"], [
-  AC_MSG_ERROR([No audio output backend found])
+  AC_MSG_ERROR([No audio output backend found or enabled])
 ])
 
 AM_CONDITIONAL([ENABLE_JACK], [test "x$jack_found" = "xyes"])
