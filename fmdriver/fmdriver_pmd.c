@@ -5065,6 +5065,7 @@ static void pmd_part_proc_ssg(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  /*
   if (!part->ptr) {
     // original
     if (part->ssg_env_state_old == SSG_ENV_STATE_OLD_NEW) {
@@ -5075,6 +5076,7 @@ static void pmd_part_proc_ssg(
     // original end
     return;
   }
+  */
   part->proc_masked = pmd_part_masked(part);
   
   part->len_cnt--;
@@ -5120,10 +5122,12 @@ static void pmd_part_proc_ssg(
           if (part->proc_masked) {
             pmd_part_loop_check_masked(pmd, part);
           } else {
+            // 1617
             pmd_part_proc_ssg_lfoenv(work, pmd, part);
           }
           return;
         }
+        // 15bc
         part->ptr = part->loop_ptr;
         part->loop.ended = false;
       }
