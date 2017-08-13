@@ -35,6 +35,7 @@ void opna_adpcm_reset(struct opna_adpcm *adpcm) {
   adpcm->prev_acc = 0;
   adpcm->adpcmd = 127;
   adpcm->out = 0;
+  leveldata_init(&adpcm->leveldata);
 }
 
 static uint32_t addr_conv(const struct opna_adpcm *adpcm, uint16_t a) {
@@ -183,8 +184,14 @@ void opna_adpcm_writereg(struct opna_adpcm *adpcm, unsigned reg, unsigned val) {
 void opna_adpcm_mix(struct opna_adpcm *adpcm, int16_t *buf, unsigned samples) {
   if (!adpcm->ram) return;
   if (!(adpcm->control1 & C1_START)) return;
+  unsigned level = 0;
   for (unsigned i = 0; i < samples; i++) {
     adpcm_calc(adpcm);
+    {
+      int clevel = adpcm->out>>1;
+      if (clevel < 0) clevel = -clevel;
+      if (((unsigned)clevel) > level) level = clevel;
+    }
     if (!adpcm->masked) {
       int32_t lo = buf[i*2+0];
       int32_t ro = buf[i*2+1];
@@ -199,6 +206,7 @@ void opna_adpcm_mix(struct opna_adpcm *adpcm, int16_t *buf, unsigned samples) {
     }
     if (!(adpcm->control1 & C1_START)) return;
   }
+  leveldata_update(&adpcm->leveldata, level);
 }
 
 void opna_adpcm_set_ram_256k(struct opna_adpcm *adpcm, void *ram) {

@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdatomic.h>
+#include "leveldata/leveldata.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +37,7 @@ struct ppz8_channel {
   uint8_t pan;
   uint8_t voice;
   bool playing;
+  struct leveldata leveldata;
 };
 
 struct ppz8 {

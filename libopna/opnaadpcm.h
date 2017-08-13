@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "leveldata/leveldata.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,6 +25,8 @@ struct opna_adpcm {
   uint16_t adpcmd;
   int16_t out;
   bool masked;
+  atomic_uint levelvu;
+  struct leveldata leveldata;
 };
 
 void opna_adpcm_reset(struct opna_adpcm *adpcm);

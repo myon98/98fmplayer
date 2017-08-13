@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "leveldata/leveldata.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +36,7 @@ struct opna_ssg {
 struct opna_ssg_resampler {
   int16_t buf[OPNA_SSG_SINCTABLELEN*4 * 2];
   unsigned index;
+  struct leveldata leveldata[3];
 };
 
 void opna_ssg_reset(struct opna_ssg *ssg);

@@ -534,6 +534,7 @@ struct driver_fmp {
       uint8_t note;
       bool enabled;
     } rhythm[2];
+    uint8_t rhythm_current_note;
   } pdzf;
 };
 

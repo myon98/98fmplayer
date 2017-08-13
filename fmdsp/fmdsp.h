@@ -19,7 +19,8 @@ enum {
 };
 
 enum {
-  FMDSP_PALETTE_COLORS = 10
+  FMDSP_PALETTE_COLORS = 10,
+  FMDSP_LEVEL_COUNT = 19,
 };
 
 enum FMDSP_DISPSTYLE {
@@ -38,12 +39,16 @@ struct fmdsp {
   enum FMDSP_DISPSTYLE style;
   bool style_updated;
   bool masked[FMDRIVER_TRACK_NUM];
+  bool masked_rhythm;
   uint8_t fftdata[FFTDISPLEN];
   uint8_t fftcnt[FFTDISPLEN];
   uint8_t fftdropdiv[FFTDISPLEN];
   uint64_t framecnt;
   int cpuusage;
   int fps;
+  uint8_t leveldata[FMDSP_LEVEL_COUNT];
+  uint8_t levelcnt[FMDSP_LEVEL_COUNT];
+  uint8_t leveldropdiv[FMDSP_LEVEL_COUNT];
 };
 
 struct fmdriver_work;
@@ -51,8 +56,8 @@ void fmdsp_init(struct fmdsp *fmdsp, const struct fmdsp_font *font);
 void fmdsp_vram_init(struct fmdsp *fmdsp,
                      struct fmdriver_work *work,
                      uint8_t *vram);
-void fmdsp_update(struct fmdsp *fmdsp, const struct fmdriver_work *work,
-                  const struct opna *opna, uint8_t *vram,
+void fmdsp_update(struct fmdsp *fmdsp, struct fmdriver_work *work,
+                  struct opna *opna, uint8_t *vram,
                   struct fmplayer_fft_input_data *idata
                  );
 void fmdsp_vrampalette(struct fmdsp *fmdsp, const uint8_t *vram, uint8_t *vram32, int stride);

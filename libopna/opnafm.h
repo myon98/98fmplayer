@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "leveldata/leveldata.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -64,6 +65,8 @@ struct opna_fm_channel {
   uint8_t fb;
   uint16_t fnum;
   uint8_t blk;
+  
+  struct leveldata leveldata;
 };
 
 struct opna_fm {

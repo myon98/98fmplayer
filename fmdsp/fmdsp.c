@@ -6,6 +6,8 @@
 #include "libopna/opna.h"
 #include "fmdsp_platform_info.h"
 #include "version.h"
+#include <math.h>
+#include <string.h>
 
 fmdsp_vramlookup_type fmdsp_vramlookup_func = fmdsp_vramlookup_c;
 
@@ -87,7 +89,7 @@ static void fmdsp_putline(const char *strptr, uint8_t *vram,
           xo -= (xo % (fw*8));
           cp932str++;
         } else {
-          if ((x+xo+8) > PC98_W) return;
+          if ((x+xo+fw) > PC98_W) return;
           const void *fp = font->get(font, *cp932str++, FMDSP_FONT_ANK);
           if (fp) {
             vram_putchar(vram, fp, x+xo, y, fw, fh, color, bg);
@@ -102,7 +104,7 @@ static void fmdsp_putline(const char *strptr, uint8_t *vram,
       uint8_t sjis_2nd = *cp932str++;
       uint16_t jis = sjis2jis(sjis_1st, sjis_2nd);
       bool half = jis_is_halfwidth(jis);
-      if ((x+xo+(half ? 8 : 16)) > PC98_W) return;
+      if ((x+xo+fw*(half ? 1 : 2)) > PC98_W) return;
       const void *fp = font->get(font, jis, FMDSP_FONT_JIS_LEFT);
       if (fp) {
         vram_putchar(vram, fp, x+xo, y, fw, fh, color, bg);
@@ -395,10 +397,35 @@ static void fmdsp_track_init_10(struct fmdsp *fmdsp,
     for (int x = 0; x < 20; x++) {
       vram[(SPECTRUM_Y+4)*PC98_W+SPECTRUM_X+240+2*x] = 1;
     }
-    fmdsp_putline("ON/OFF", vram, &font_fmdsp_small, LEVEL_TEXT_X, LEVEL_TEXT_Y, 1, true);
-    fmdsp_putline("PANPOT", vram, &font_fmdsp_small, LEVEL_TEXT_X, LEVEL_TEXT_Y+8, 1, true);
-    fmdsp_putline("PROGRAM", vram, &font_fmdsp_small, LEVEL_TEXT_X-5, LEVEL_TEXT_Y+16, 1, true);
-    fmdsp_putline("KEYCODE", vram, &font_fmdsp_small, LEVEL_TEXT_X-5, LEVEL_TEXT_Y+23, 1, true);
+    fmdsp_putline("ON", vram, &font_fmdsp_small,
+                  LEVEL_TEXT_X+5, LEVEL_TEXT_Y, 1, true);
+    fmdsp_putline("PAN", vram, &font_fmdsp_small,
+                  LEVEL_TEXT_X, LEVEL_TEXT_Y+8, 1, true);
+    fmdsp_putline("PROG", vram, &font_fmdsp_small,
+                  LEVEL_TEXT_X-5, LEVEL_TEXT_Y+16, 1, true);
+    fmdsp_putline("KEY", vram, &font_fmdsp_small,
+                  LEVEL_TEXT_X, LEVEL_TEXT_Y+23, 1, true);
+    fmdsp_putline("FM1", vram, &font_fmdsp_small,
+                  LEVEL_X+LEVEL_W*0, LEVEL_TRACK_Y, 7, true);
+    fmdsp_putline("FM4", vram, &font_fmdsp_small,
+                  LEVEL_X+LEVEL_W*3, LEVEL_TRACK_Y, 7, true);
+    fmdsp_putline("SSG", vram, &font_fmdsp_small,
+                  LEVEL_X+LEVEL_W*6, LEVEL_TRACK_Y, 7, true);
+    fmdsp_putline("RHY", vram, &font_fmdsp_small,
+                  LEVEL_X+LEVEL_W*9, LEVEL_TRACK_Y, 7, true);
+    fmdsp_putline("ADP", vram, &font_fmdsp_small,
+                  LEVEL_X+LEVEL_W*10, LEVEL_TRACK_Y, 7, true);
+    fmdsp_putline("PPZ", vram, &font_fmdsp_small,
+                  LEVEL_X+LEVEL_W*11, LEVEL_TRACK_Y, 7, true);
+    for (int y = 0; y < 63; y++) {
+      vram[(LEVEL_Y+y)*PC98_W+LEVEL_X-2] = 2;
+      if ((y % 2) == 0) vram[(LEVEL_Y+y)*PC98_W+LEVEL_X-3] = 2;
+      if ((y % 8) == 6) vram[(LEVEL_Y+y)*PC98_W+LEVEL_X-4] = 2;
+    }
+    fmdsp_putline("0", vram, &font_fmdsp_small,
+                  LEVEL_X-9, LEVEL_Y-1, 7, true);
+    fmdsp_putline("-48", vram, &font_fmdsp_small,
+                  LEVEL_X-19, LEVEL_Y+56, 7, true);
   }
 }
 
@@ -713,8 +740,8 @@ static void fmdsp_track_without_key(
 }
 
 static void fmdsp_update_10(struct fmdsp *fmdsp,
-                  const struct fmdriver_work *work,
-                  const struct opna *opna,
+                  struct fmdriver_work *work,
+                  struct opna *opna,
                   uint8_t *vram,
                   struct fmplayer_fft_input_data *idata) {
   if (fmdsp->style != FMDSP_DISPSTYLE_ORIGINAL) {
@@ -939,6 +966,134 @@ static void fmdsp_update_10(struct fmdsp *fmdsp,
       vram[py*PC98_W+px+1] = 7;
       vram[py*PC98_W+px+2] = 7;
     }
+    // level
+    struct {
+      unsigned level;
+      int t;
+      bool masked;
+      uint8_t pan;
+      uint8_t prog;
+      uint8_t key;
+      bool playing;
+    } levels[FMDSP_LEVEL_COUNT] = {0};
+    for (int c = 0; c < 6; c++) {
+      levels[c].level = leveldata_read(&opna->fm.channel[c].leveldata);
+      static const int table[4] = {5, 4, 0, 2};
+      levels[c].pan = table[opna->fm.lselect[c]*2 + opna->fm.rselect[c]];
+    }
+    levels[0].t = FMDRIVER_TRACK_FM_1;
+    levels[1].t = FMDRIVER_TRACK_FM_2;
+    levels[2].t = FMDRIVER_TRACK_FM_3;
+    levels[3].t = FMDRIVER_TRACK_FM_4;
+    levels[4].t = FMDRIVER_TRACK_FM_5;
+    levels[5].t = FMDRIVER_TRACK_FM_6;
+    
+    for (int c = 0; c < 3; c++) {
+      levels[6+c].level = leveldata_read(&opna->resampler.leveldata[c]);
+      levels[6+c].t = FMDRIVER_TRACK_SSG_1+c;
+      levels[6+c].pan = 2;
+    }
+    {
+      unsigned dl = 0;
+      for (int d = 0; d < 6; d++) {
+        unsigned l = leveldata_read(&opna->drum.drums[d].leveldata);
+        if (l > dl) dl = l;
+      }
+      levels[9].level = dl;
+      levels[9].pan = 2;
+    }
+    levels[10].level = leveldata_read(&opna->adpcm.leveldata);
+    levels[10].t = FMDRIVER_TRACK_ADPCM;
+    {
+      static const int table[4] = {5, 4, 0, 2};
+      int ind = 0;
+      if (opna->adpcm.control2 & 0x80) ind |= 2;
+      if (opna->adpcm.control2 & 0x40) ind |= 1;
+      levels[10].pan = table[ind];
+    }
+    for (int p = 0; p < 8; p++) {
+      levels[11+p].pan = 5;
+      levels[11+p].t = FMDRIVER_TRACK_PPZ8_1+p;
+    }
+    if (work->ppz8) {
+      for (int p = 0; p < 8; p++) {
+        levels[11+p].level = leveldata_read(&work->ppz8->channel[p].leveldata);
+        static const int table[10] = {5, 0, 1, 1, 1, 2, 3, 3, 3, 4};
+        levels[11+p].pan = table[work->ppz8->channel[p].pan];
+      }
+    }
+    for (int c = 0; c < FMDSP_LEVEL_COUNT; c++) {
+      levels[c].masked = c == 9 ? fmdsp->masked_rhythm : fmdsp->masked[levels[c].t];
+      levels[c].prog = work->track_status[levels[c].t].tonenum;
+      levels[c].key = work->track_status[levels[c].t].key;
+      levels[c].playing = work->track_status[levels[c].t].playing;
+      if (work->track_status[levels[c].t].info == FMDRIVER_TRACK_INFO_PDZF ||
+          work->track_status[levels[c].t].info == FMDRIVER_TRACK_INFO_PPZ8) {
+        levels[c].playing = false;
+      }
+      if (!levels[c].playing) levels[c].pan = 5;
+    }
+    
+    for (int c = 0; c < FMDSP_LEVEL_COUNT; c++) {
+      unsigned level = levels[c].level;
+      unsigned llevel = 0;
+      if (level) {
+        float db = 20.0f * log10f((float)level / (1<<15));
+        float fllevel = (db / 48.0f + 1.0f) * 32.0f;
+        if (fllevel > 0.0f) llevel = fllevel;
+      }
+      
+      if (fmdsp->leveldata[c] <= llevel) {
+        fmdsp->leveldata[c] = llevel;
+        fmdsp->levelcnt[c] = 30;
+      } else {
+        if (fmdsp->levelcnt[c]) {
+          fmdsp->levelcnt[c]--;
+        } else {
+          if (fmdsp->leveldata[c]) {
+            if (fmdsp->leveldropdiv[c]) {
+              fmdsp->leveldropdiv[c]--;
+            } else {
+              static const uint8_t divtab[16] = {
+                32, 16, 8, 8, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2,
+              };
+              fmdsp->leveldropdiv[c] = divtab[fmdsp->leveldata[c] / 2];
+              fmdsp->leveldata[c]--;
+            }
+          }
+        }
+      }
+      for (unsigned y = 0; y < 64; y += 2) {
+        unsigned plevel = (63 - y) / 2;
+        for (int x = 0; x < LEVEL_DISP_W; x++) {
+          uint8_t color = llevel > plevel ? 2 : 3;
+          if (plevel == fmdsp->leveldata[c]) color = 7;
+          vram[(y+LEVEL_Y)*PC98_W+LEVEL_X+LEVEL_W*c+x] = color;
+        }
+      }
+      vramblit_color(vram,
+                     LEVEL_X+LEVEL_W*c-1, PANPOT_Y,
+                     s_panpot[levels[c].pan], PANPOT_W, PANPOT_H,
+                     levels[c].masked ? 5 : 1);
+      char buf[4];
+      if (c != 9) {
+        snprintf(buf, sizeof(buf), "%03d", levels[c].prog);
+        fmdsp_putline(buf, vram, &font_fmdsp_small,
+                      LEVEL_X+LEVEL_W*c, LEVEL_PROG_Y,
+                      1, true);
+      }
+      strcpy(buf, "---");
+      if (c != 9 && levels[c].playing) {
+        uint8_t oct = levels[c].key >> 4;
+        uint8_t n = levels[c].key & 0xf;
+        if (n < 12) {
+          snprintf(buf, sizeof(buf), "%03d", oct*12+n);
+        }
+      }
+      fmdsp_putline(buf, vram, &font_fmdsp_small,
+                    LEVEL_X+LEVEL_W*c, LEVEL_KEY_Y,
+                    1, true);
+    }
   }
 }
 static void fmdsp_update_13(struct fmdsp *fmdsp,
@@ -997,8 +1152,8 @@ static void fmdsp_update_13(struct fmdsp *fmdsp,
 }
 
 void fmdsp_update(struct fmdsp *fmdsp,
-                  const struct fmdriver_work *work,
-                  const struct opna *opna,
+                  struct fmdriver_work *work,
+                  struct opna *opna,
                   uint8_t *vram,
                   struct fmplayer_fft_input_data *idata) {
   if (fmdsp->style_updated) {
@@ -1022,6 +1177,7 @@ void fmdsp_update(struct fmdsp *fmdsp,
   fmdsp->masked[FMDRIVER_TRACK_SSG_2] = mask & LIBOPNA_CHAN_SSG_2;
   fmdsp->masked[FMDRIVER_TRACK_SSG_3] = mask & LIBOPNA_CHAN_SSG_3;
   fmdsp->masked[FMDRIVER_TRACK_ADPCM] = mask & LIBOPNA_CHAN_ADPCM;
+  fmdsp->masked_rhythm = (mask & LIBOPNA_CHAN_DRUM_ALL) == LIBOPNA_CHAN_DRUM_ALL;
   unsigned ppz8mask = 0;
   if (work->ppz8) {
     ppz8mask = ppz8_get_mask(work->ppz8);

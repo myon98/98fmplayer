@@ -37,6 +37,7 @@ void ppz8_init(struct ppz8 *ppz8, uint16_t srate, uint16_t mix_volume) {
     channel->vol = 8;
     channel->pan = 5;
     channel->voice = 0;
+    leveldata_init(&channel->leveldata);
   }
   ppz8->srate = srate;
   ppz8->totalvol = 12;
@@ -128,6 +129,7 @@ static int32_t ppz8_channel_calc(struct ppz8 *ppz8, struct ppz8_channel *channel
 }
 
 void ppz8_mix(struct ppz8 *ppz8, int16_t *buf, unsigned samples) {
+  unsigned level[8] = {0};
   static const uint8_t pan_vol[10][2] = {
     {0, 0},
     {4, 0},
@@ -144,11 +146,13 @@ void ppz8_mix(struct ppz8 *ppz8, int16_t *buf, unsigned samples) {
     int32_t lo = buf[i*2+0];
     int32_t ro = buf[i*2+1];
     for (int p = 0; p < 8; p++) {
-      //if (p < 3) continue;
-      //if (p >= 6) continue;
       struct ppz8_channel *channel = &ppz8->channel[p];
       if (!channel->playing) continue;
       int32_t out = ppz8_channel_calc(ppz8, channel);
+      {
+        unsigned uout = out > 0 ? out : -out;
+        if (uout > level[p]) level[p] = uout;
+      }
       if ((1u << p) & (ppz8->mask)) continue;
       out *= ppz8->mix_volume;
       out >>= 15;
@@ -161,6 +165,9 @@ void ppz8_mix(struct ppz8 *ppz8, int16_t *buf, unsigned samples) {
     if (ro > INT16_MAX) ro = INT16_MAX;
     buf[i*2+0] = lo;
     buf[i*2+1] = ro;
+  }
+  for (int p = 0; p < 8; p++) {
+    leveldata_update(&ppz8->channel[p].leveldata, level[p]);
   }
 }
 

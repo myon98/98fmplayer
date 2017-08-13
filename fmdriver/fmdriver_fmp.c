@@ -2698,6 +2698,7 @@ static void fmp_part_cmd_rhythm(struct fmdriver_work *work,
             uint8_t voice = fmp->pdzf.rhythm[p&1].voice[((rhythm->volumes[p] & 0x10) >> 4)];
             uint8_t pan = fmp->pdzf.rhythm[p&1].pan + 5;
             uint32_t freq = fmp_ppz8_note_freq(fmp->pdzf.rhythm[p&1].note);
+            fmp->pdzf.rhythm_current_note = fmp->pdzf.rhythm[p&1].note;
             uint8_t channel = 6;
             work->ppz8_functbl->channel_play(
               work->ppz8,
@@ -2777,15 +2778,40 @@ static void fmp_work_status_init(struct fmdriver_work *work,
 static void fmp_work_status_update(struct fmdriver_work *work,
                                    const struct driver_fmp *fmp) {
   work->ssg_noise_freq = fmp->ssg_noise_freq;
-  for (int t = 0; t < FMDRIVER_TRACK_NUM; t++) {
+  for (int t = 0; t < FMDRIVER_TRACK_PPZ8_1; t++) {
     struct fmdriver_track_status *track = &work->track_status[t];
     const struct fmp_part *part = &fmp->parts[fmp_track_map[t]];
     track->playing = !part->status.off;
     track->info = FMDRIVER_TRACK_INFO_NORMAL;
+    track->ticks = part->status.off ? 0 : part->tonelen-1;
+    track->ticks_left = part->tonelen_cnt;
+    track->key = part->status.rest ? 0xff : fmp_note2key(part->prev_note);
+    track->tonenum = part->tone;
+    track->detune = part->detune - ((part->detune & 0x8000) ? 0x10000 : 0);
+    track->status[0] = part->lfo_f.p ? 'P' : '-';
+    track->status[1] = part->lfo_f.q ? 'Q' : '-';
+    track->status[2] = part->lfo_f.r ? 'R' : '-';
+    track->status[3] = part->lfo_f.a ? 'A' : '-';
+    track->status[4] = '-';
+    track->status[5] = part->lfo_f.e ? 'e' : '-';
+    track->status[6] = (part->type.fm && part->u.fm.hlfo_apms) ? 'H' : '-';
+    track->status[7] = part->status.pitchbend ? 'P' : '-';
     if (part->type.adpcm) {
       track->actual_key = 0xff;
       track->volume = part->actual_vol;
     } else if (part->type.ssg) {
+      struct fmdriver_track_status *ppztrack =
+          &work->track_status[FMDRIVER_TRACK_PPZ8_1-1+track->ppz8_ch];
+      ppztrack->actual_key = 0xff;
+      if (part->pdzf.mode || part->u.ssg.env_f.ppz) {
+        ppztrack->playing = !part->status.off;
+        ppztrack->key = track->key;
+        ppztrack->tonenum = track->tonenum;
+        ppztrack->info = FMDRIVER_TRACK_INFO_NORMAL;
+      } else {
+        ppztrack->playing = false;
+        ppztrack->key = 0xff;
+      }
       if (part->pdzf.mode) {
         track->info = FMDRIVER_TRACK_INFO_PDZF;
         track->actual_key = 0xff;
@@ -2801,8 +2827,15 @@ static void fmp_work_status_update(struct fmdriver_work *work,
       track->volume = part->current_vol - 1;
     } else {
       if (part->pdzf.mode) {
+        struct fmdriver_track_status *ppztrack =
+            &work->track_status[FMDRIVER_TRACK_PPZ8_1-1+track->ppz8_ch];
         track->info = FMDRIVER_TRACK_INFO_PDZF;
         track->actual_key = 0xff;
+        ppztrack->actual_key = 0xff;
+        ppztrack->playing = !part->status.off;
+        ppztrack->key = track->key;
+        ppztrack->tonenum = work->ppz8 ? work->ppz8->channel[track->ppz8_ch-1].voice : 0;
+        ppztrack->info = FMDRIVER_TRACK_INFO_NORMAL;
       } else {
         if (part->u.fm.slot_mask & 0xf0) {
           track->info = FMDRIVER_TRACK_INFO_FM3EX;
@@ -2814,20 +2847,13 @@ static void fmp_work_status_update(struct fmdriver_work *work,
       }
       track->volume = 0x7f - part->actual_vol;
     }
-    track->ticks = part->status.off ? 0 : part->tonelen-1;
-    track->ticks_left = part->tonelen_cnt;
-    track->key = part->status.rest ? 0xff : fmp_note2key(part->prev_note);
-    track->tonenum = part->tone;
-    track->detune = part->detune - ((part->detune & 0x8000) ? 0x10000 : 0);
-    track->status[0] = part->lfo_f.p ? 'P' : '-';
-    track->status[1] = part->lfo_f.q ? 'Q' : '-';
-    track->status[2] = part->lfo_f.r ? 'R' : '-';
-    track->status[3] = part->lfo_f.a ? 'A' : '-';
-    track->status[4] = '-';
-    track->status[5] = part->lfo_f.e ? 'e' : '-';
-    track->status[6] = (part->type.fm && part->u.fm.hlfo_apms) ? 'H' : '-';
-    track->status[7] = part->status.pitchbend ? 'P' : '-';
   }
+  work->track_status[FMDRIVER_TRACK_PPZ8_7].playing = fmp->pdzf.rhythm[0].enabled || fmp->pdzf.rhythm[1].enabled;
+  work->track_status[FMDRIVER_TRACK_PPZ8_7].tonenum = work->ppz8 ? work->ppz8->channel[6].voice : 0;
+  uint8_t key = 0xff;
+  if (work->ppz8 && work->ppz8->channel[6].playing) key = fmp->pdzf.rhythm_current_note;
+  work->track_status[FMDRIVER_TRACK_PPZ8_7].key = key;
+  work->track_status[FMDRIVER_TRACK_PPZ8_7].actual_key = key;
 }
 
 static void fmp_part_pdzf_freq_update(
@@ -3147,6 +3173,11 @@ static void fmp_struct_init(struct fmdriver_work *work,
   fmp->parts[FMP_PART_FM_EX3].pdzf.ppz8_channel = 5;
   fmp->parts[FMP_PART_FM_EX3].pdzf.loopstart32 = -1;
   fmp->parts[FMP_PART_FM_EX3].pdzf.loopend32 = -1;
+  
+  // ppz8 unused parts
+  for (int i = 0; i < 8; i++) {
+    fmp->parts[FMP_PART_PPZ8_1+i].status.off = true;
+  }
 }
 
 // 1774

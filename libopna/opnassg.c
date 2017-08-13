@@ -134,6 +134,9 @@ void opna_ssg_resampler_reset(struct opna_ssg_resampler *resampler) {
     resampler->buf[i] = 0;
   }
   resampler->index = 0;
+  for (int c = 0; c < 3; c++) {
+    leveldata_init(&resampler->leveldata[c]);
+  }
 }
 
 void opna_ssg_writereg(struct opna_ssg *ssg, unsigned reg, unsigned val) {
@@ -286,6 +289,7 @@ void opna_ssg_mix_55466(
       }
     }
   }
+  unsigned level[3] = {0};
   for (int i = 0; i < samples; i++) {
     {
       int ssg_samples = ((resampler->index + 9)>>1) - ((resampler->index)>>1);
@@ -305,6 +309,12 @@ void opna_ssg_mix_55466(
     opna_ssg_sinc_calc_func(resampler->index, resampler->buf, outbuf);
     for (int ch = 0; ch < 3; ch++) {
       if (oscillo) oscillo[ch].buf[offset+i] = outbuf[ch] >> 15;
+      int32_t nlevel = outbuf[ch];
+      nlevel >>= 16;
+      nlevel *= 13000;
+      nlevel >>= 14;
+      if (nlevel < 0) nlevel = -nlevel;
+      if (((unsigned)nlevel) > level[ch]) level[ch] = nlevel;
       if (!(ssg->mask & (1<<ch))) sample += outbuf[ch] >> 2;
     }
     sample >>= 16;
@@ -321,6 +331,9 @@ void opna_ssg_mix_55466(
     if (ro > INT16_MAX) ro = INT16_MAX;
     buf[i*2+0] = lo;
     buf[i*2+1] = ro;
+  }
+  for (int c = 0; c < 3; c++) {
+    leveldata_update(&resampler->leveldata[c], level[c]);
   }
 }
 #undef BUFINDEX

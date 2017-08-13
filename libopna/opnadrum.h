@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "leveldata/leveldata.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,6 +33,7 @@ struct opna_drum {
     unsigned level;
     bool left;
     bool right;
+    struct leveldata leveldata;
   } drums[6];
   unsigned total_level;
   int16_t rom_bd[OPNA_ROM_BD_SIZE];
