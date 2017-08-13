@@ -194,6 +194,12 @@ static void pmd_reset_state(struct driver_pmd *pmd) {
     p->actual_note = 0xff;
     p->curr_note = 0xff;
   }
+  for (struct pmd_part *p = &pmd->parts[PMD_PART_PPZ_1]; p <= (&pmd->parts[PMD_PART_PPZ_8]); p++) {
+    p->loop.ended = true;
+  }
+  for (struct pmd_part *p = &pmd->parts[PMD_PART_FM_3B]; p <= (&pmd->parts[PMD_PART_FM_3D]); p++) {
+    p->loop.ended = true;
+  }
   // 1090
   pmd->no_keyoff = false;
   pmd->status1 = 0;
@@ -791,7 +797,7 @@ static bool pmd_ssg_env_tick_new_check(
 }
 
 // 3060
-static void pmd_part_lfo_init_fm(
+static uint8_t pmd_part_lfo_init_fm(
   struct fmdriver_work *work,
   struct driver_pmd *pmd,
   struct pmd_part *part,
@@ -807,7 +813,7 @@ static void pmd_part_lfo_init_fm(
   
   if (n == 0xf) {
     pmd_lfo_tick_if_needed(pmd, part);
-    return;
+    return note;
   }
   part->portamento_diff = 0;
 
@@ -816,10 +822,11 @@ static void pmd_part_lfo_init_fm(
   } else {
     pmd_lfo_tick_if_needed_hlfo(work, pmd, part);
   }
+  return note;
 }
 
 // 2fc4
-static void pmd_part_lfo_init_ssg(
+static uint8_t pmd_part_lfo_init_ssg(
   struct fmdriver_work *work,
   struct driver_pmd *pmd,
   struct pmd_part *part,
@@ -834,13 +841,13 @@ static void pmd_part_lfo_init_ssg(
   part->curr_note = note;
   if (n == 0xf) {
     pmd_lfo_tick_if_needed(pmd, part);
-    return;
+    return note;
   }
   // 2fe1
   part->portamento_diff = 0;
   if (pmd->no_keyoff) {
     pmd_lfo_tick_if_needed(pmd, part);
-    return;
+    return note;
   }
   if (part->ssg_env_state_old != SSG_ENV_STATE_OLD_NEW) {
     // 2ff6
@@ -860,7 +867,6 @@ static void pmd_part_lfo_init_ssg(
     part->ssg_env_param_set[SSG_ENV_PARAM_OLD_RR] =
       part->ssg_env_param[SSG_ENV_PARAM_OLD_RR];
     pmd_lfo_tick_if_needed_hlfo(work, pmd, part);
-    return;
   } else {
     // 3021
     part->ssg_env_param[SSG_ENV_PARAM_NEW_AR] =
@@ -881,8 +887,8 @@ static void pmd_part_lfo_init_ssg(
     // 31b9
     pmd_ssg_env_tick_new_check(part);
     pmd_lfo_tick_if_needed_hlfo(work, pmd, part);
-    return;
   }
+  return note;
 }
 
 // 0e5e
@@ -2991,7 +2997,7 @@ static void pmd_cmdda_portamento_fm(
   if (pmd_part_masked(part)) {
     return;
   }
-  pmd_part_lfo_init_fm(work, pmd, part, note);
+  note = pmd_part_lfo_init_fm(work, pmd, part, note);
   note = pmd_part_note_transpose(part, note);
   pmd_note_freq_fm(part, note);
   uint16_t f1 = part->actual_freq;
@@ -3033,7 +3039,7 @@ static void pmd_cmdda_portamento_ssg(
   if (pmd_part_masked(part)) {
     return;
   }
-  pmd_part_lfo_init_ssg(work, pmd, part, note);
+  note = pmd_part_lfo_init_ssg(work, pmd, part, note);
   note = pmd_part_note_transpose(part, note);
   pmd_note_freq_ssg(part, note);
   uint16_t f1 = part->actual_freq;
@@ -3432,6 +3438,7 @@ static void pmd_fm3ex_init(
   part->vol = 0x6c;
   part->pan = pmd->parts[PMD_PART_FM_3].pan;
   part->mask.slot = true;
+  part->loop.ended = false;
 }
 
 // 1d90
@@ -4132,6 +4139,7 @@ static void pmd_cmdb4_ppz8_init(
     ppzpart->actual_note = 0xff;
     ppzpart->vol = 0x80;
     ppzpart->pan = 5;
+    ppzpart->loop.ended = false;
   }
 }
 
@@ -5038,7 +5046,7 @@ static void pmd_part_proc_fm(
         pmd_part_proc_note_masked(work, pmd, part);
         return;
       } else {
-        pmd_part_lfo_init_fm(work, pmd, part, cmd);
+        cmd = pmd_part_lfo_init_fm(work, pmd, part, cmd);
         cmd = pmd_part_note_transpose(part, cmd);
         pmd_note_freq_fm(part, cmd);
         part->len = part->len_cnt = pmd_part_cmdload(pmd, part);
@@ -5126,7 +5134,7 @@ static void pmd_part_proc_ssg(
         return;
       } else {
         // 15c4
-        pmd_part_lfo_init_ssg(work, pmd, part, cmd);
+        cmd = pmd_part_lfo_init_ssg(work, pmd, part, cmd);
         cmd = pmd_part_note_transpose(part, cmd);
         pmd_note_freq_ssg(part, cmd);
         part->len = part->len_cnt = pmd_part_cmdload(pmd, part);
@@ -5399,7 +5407,7 @@ static void pmd_part_proc_adpcm(
       if (part->proc_masked) {
         pmd_part_proc_note_masked(work, pmd, part);
       } else {
-        pmd_part_lfo_init_ssg(work, pmd, part, cmd);
+        cmd = pmd_part_lfo_init_ssg(work, pmd, part, cmd);
         cmd = pmd_part_note_transpose(part, cmd);
         pmd_note_freq_adpcm(part, cmd);
         part->len = part->len_cnt = pmd_part_cmdload(pmd, part);
@@ -5471,7 +5479,7 @@ static void pmd_part_proc_ppz8(
         part->actual_freq_upper = 0;
         pmd_part_proc_note_masked(work, pmd, part);
       } else {
-        pmd_part_lfo_init_ssg(work, pmd, part, cmd);
+        cmd = pmd_part_lfo_init_ssg(work, pmd, part, cmd);
         cmd = pmd_part_note_transpose(part, cmd);
         pmd_note_freq_ppz8(part, cmd);
         part->len = part->len_cnt = pmd_part_cmdload(pmd, part);
