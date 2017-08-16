@@ -24,6 +24,7 @@
 
 #include "fmplayer.xpm"
 #include "fmplayer32.xpm"
+#include "fmdsp/fontrom_shinonome.inc"
 
 #define DATADIR "/.local/share/fmplayer/"
 //#define FMDSP_2X
@@ -174,6 +175,7 @@ static void load_fontrom(void) {
 err_file:
   fclose(font);
 err:
+  fmdsp_font_from_font_rom(&g.font98, fmdsp_shinonome_font_rom);
   return;
 }
 

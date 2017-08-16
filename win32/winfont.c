@@ -73,11 +73,18 @@ static const void *winfont_get(const struct fmdsp_font *font,
     TextOut(fw->dc, 0, 0, text, 1);
     break;
   case FMDSP_FONT_JIS_LEFT:
-    if (c>>8 == 0x29) {
-      // doublebyte halfwidth
-      text[0] = jis2unih(c & 0xff);
-    } else {
-      text[0] = jis2uni(c);
+    {
+      uint8_t row = c >> 8;
+      if (row == 0x29 || row == 0x2a) {
+        // doublebyte halfwidth ANK
+        // JIS doublewidth  JIS halfwidth
+        // 0x2921-0x297e -> 0x21-0x7e (ASCII)
+        // 0x2a21-0x2a7e -> 0xa1-0xfe (halfwidth katakana)
+        uint16_t jis = (c & 0xff) | ((row-0x29) * 0x80);
+        text[0] = jis2unih(jis);
+      } else {
+        text[0] = jis2uni(c);
+      }
     }
     TextOut(fw->dc, 0, 0, text, 1);
     break;

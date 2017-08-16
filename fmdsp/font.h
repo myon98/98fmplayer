@@ -15,7 +15,8 @@ static inline bool sjis_is_mb_start(uint8_t c) {
 }
 
 static inline bool jis_is_halfwidth(uint16_t jis) {
-  return (jis>>8) == 0x29;
+  uint8_t row = jis >> 8;
+  return row == 0x29 || row == 0x2a;
 }
 
 static inline uint16_t sjis2jis(uint8_t sjis_1st, uint8_t sjis_2nd) {
