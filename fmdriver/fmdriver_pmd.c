@@ -1840,7 +1840,7 @@ static void pmd_ppz8_freq_out(
   uint32_t freq = part->actual_freq | (((uint32_t)part->actual_freq_upper) << 16);
   if (!freq) return;
   if (part->portamento_diff) {
-    freq += part->portamento_diff * 4;
+    freq += part->portamento_diff << 4;
   }
   int32_t det = 0;
   if (part->lfof.freq || part->lfof_b.freq) {
@@ -5429,7 +5429,7 @@ static void pmd_part_proc_ppz8(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
-  if (!part->ptr) return;
+  //if (!part->ptr) return;
   part->proc_masked = pmd_part_masked(part);
   part->len_cnt--;
   if (part->proc_masked) {
