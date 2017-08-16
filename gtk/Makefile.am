@@ -34,7 +34,7 @@ endif
 #fmplayer_CFLAGS=$(CFLAGS)
 #CFLAGS=
 fmplayer_CPPFLAGS=-Wall -Wextra -pedantic \
-                  -I.. -I../soundout \
+                  -I$(top_srcdir)/.. -I$(top_srcdir)/../soundout \
                   $(GTK3_CFLAGS) $(JACK_CFLAGS) $(PULSE_CFLAGS) $(ALSA_CFLAGS) $(SNDFILE_CFLAGS)
 fmplayer_LDADD=$(GTK3_LIBS) $(JACK_LIBS) $(PULSE_LIBS) $(ALSA_LIBS) $(SNDFILE_LIBS) -lm -lpthread
 
