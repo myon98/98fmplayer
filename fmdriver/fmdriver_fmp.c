@@ -2814,7 +2814,8 @@ static void fmp_work_status_update(struct fmdriver_work *work,
       }
       if (part->pdzf.mode) {
         track->info = FMDRIVER_TRACK_INFO_PDZF;
-        track->actual_key = 0xff;
+        track->actual_key = part->status.rest ? 0xff : fmdriver_ppz8_freq2key(part->pdzf.lastfreq);
+        ppztrack->actual_key = track->actual_key;
       } else if (part->u.ssg.env_f.ppz) {
         track->info = FMDRIVER_TRACK_INFO_PPZ8;
         track->actual_key = 0xff;
@@ -2830,8 +2831,8 @@ static void fmp_work_status_update(struct fmdriver_work *work,
         struct fmdriver_track_status *ppztrack =
             &work->track_status[FMDRIVER_TRACK_PPZ8_1-1+track->ppz8_ch];
         track->info = FMDRIVER_TRACK_INFO_PDZF;
-        track->actual_key = 0xff;
-        ppztrack->actual_key = 0xff;
+        track->actual_key = part->status.rest ? 0xff : fmdriver_ppz8_freq2key(part->pdzf.lastfreq);
+        ppztrack->actual_key = track->actual_key;
         ppztrack->playing = !part->status.off;
         ppztrack->key = track->key;
         ppztrack->tonenum = work->ppz8 ? work->ppz8->channel[track->ppz8_ch-1].voice : 0;
