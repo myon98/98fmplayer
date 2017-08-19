@@ -560,6 +560,7 @@ static void pmd_lfo_tick_waveform(
     }
     break;
   case LFO_WF_ONESHOT:
+    // 2f18
     if (part->lfo.times) {
       if (part->lfo.times != 0xff) {
         part->lfo.times--;
@@ -1604,8 +1605,8 @@ static void pmd_ssg_vol_out(
       if (part->lfof.vol || part->lfof_b.vol) {
         int32_t lfovol = 0;
         // TODO:
-        if (part->lfof.vol) vol += part->lfo_diff;
-        if (part->lfof_b.vol) vol += part->lfo_diff_b;
+        if (part->lfof.vol) lfovol += part->lfo_diff;
+        if (part->lfof_b.vol) lfovol += part->lfo_diff_b;
         lfovol += vol;
         vol = lfovol;
         if (lfovol < 0) {
