@@ -1729,8 +1729,8 @@ static void pmd_ppz8_vol_out(
     // 0ba4
     if (part->lfof.vol || part->lfof_b.vol) {
       int32_t lfovol = 0;
-      if (part->lfof.vol) vol += part->lfo_diff;
-      if (part->lfof_b.vol) vol += part->lfo_diff_b;
+      if (part->lfof.vol) lfovol += part->lfo_diff;
+      if (part->lfof_b.vol) lfovol += part->lfo_diff_b;
       lfovol += vol;
       vol = lfovol;
       if (lfovol < 0) {
