@@ -860,7 +860,7 @@ static uint8_t pmd_part_lfo_init_ssg(
     if (!al) {
       // 3008
       part->ssg_env_state_old = SSG_ENV_STATE_OLD_SR;
-      part->ssg_env_vol = part->ssg_env_param[SSG_ENV_PARAM_OLD_AD];
+      part->ssg_env_vol = part->ssg_env_param_set[SSG_ENV_PARAM_OLD_AD];
     }
     // 3012
     part->ssg_env_param_set[SSG_ENV_PARAM_OLD_SR] =
