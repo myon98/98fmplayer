@@ -10,6 +10,12 @@
 extern "C" {
 #endif
 
+enum ppz8_interp {
+  PPZ8_INTERP_NONE,
+  PPZ8_INTERP_LINEAR,
+  PPZ8_INTERP_SINC,
+};
+
 struct ppz8_pcmvoice {
   uint32_t start;
   uint32_t len;
@@ -32,11 +38,11 @@ struct ppz8_channel {
   uint32_t freq;
   uint32_t loopstartoff;
   uint32_t loopendoff;
-  int16_t prevout[2];
   uint8_t vol;
   uint8_t pan;
   uint8_t voice;
   bool playing;
+  bool looped;
   struct leveldata leveldata;
 };
 
@@ -47,6 +53,7 @@ struct ppz8 {
   uint8_t totalvol;
   uint16_t mix_volume;
   unsigned mask;
+  enum ppz8_interp interp;
 };
 
 void ppz8_init(struct ppz8 *ppz8, uint16_t srate, uint16_t mix_volume);
@@ -69,6 +76,10 @@ static inline uint32_t ppz8_pzi_decodebuf_samples(uint32_t pzidatalen) {
 
 unsigned ppz8_get_mask(const struct ppz8 *ppz8);
 void ppz8_set_mask(struct ppz8 *ppz8, unsigned mask);
+
+static inline void ppz8_set_interpolation(struct ppz8 *ppz8, enum ppz8_interp interp) {
+  ppz8->interp = interp;
+}
 
 struct ppz8_functbl {
   void (*channel_play)(struct ppz8 *ppz8, uint8_t channel, uint8_t voice);

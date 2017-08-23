@@ -1,6 +1,7 @@
 #include "ppz8.h"
 #include "fmdriver_common.h"
 #include <string.h>
+#include "ppz8-sinctable.inc"
 
 unsigned ppz8_get_mask(const struct ppz8 *ppz8) {
   return ppz8->mask;
@@ -32,40 +33,119 @@ void ppz8_init(struct ppz8 *ppz8, uint16_t srate, uint16_t mix_volume) {
     channel->freq = 0;
     channel->loopstartoff = -1;
     channel->loopendoff = -1;
-    channel->prevout[0] = 0;
-    channel->prevout[1] = 0;
     channel->vol = 8;
     channel->pan = 5;
     channel->voice = 0;
+    channel->looped = false;
     leveldata_init(&channel->leveldata);
   }
   ppz8->srate = srate;
   ppz8->totalvol = 12;
   ppz8->mix_volume = mix_volume;
+  ppz8->interp = PPZ8_INTERP_SINC;
 }
 
 static uint64_t ppz8_loop(const struct ppz8_channel *channel, uint64_t ptr) {
   if (channel->loopstartptr != (uint64_t)-1) {
-    if (channel->loopendptr != (uint64_t)-1) {
-      if (ptr >= channel->loopendptr) {
-        if (channel->loopendptr == channel->loopstartptr) return (uint64_t)-1;
-        uint32_t offset = (ptr - channel->loopendptr) >> 16;
-        offset %= (uint32_t)((channel->loopendptr - channel->loopstartptr) >> 16);
-        offset += (uint32_t)(channel->loopstartptr >> 16);
-        return (ptr & ((1<<16)-1)) | (((uint64_t)offset) << 16);
-      }
-    } else if (ptr >= channel->endptr) {
-      if (channel->endptr == channel->loopstartptr) return (uint64_t)-1;
-      uint32_t offset = (ptr - channel->endptr) >> 16;
-      offset %= (uint32_t)((channel->endptr - channel->loopstartptr) >> 16);
+    uint64_t loopendptr = (channel->loopendptr == (uint64_t)-1) ?
+        channel->endptr : channel->loopendptr;
+    if (ptr >= loopendptr) {
+      if (loopendptr == channel->loopstartptr) return (uint64_t)-1;
+      uint32_t offset = (ptr - loopendptr) >> 16;
+      offset %= (uint32_t)((loopendptr - channel->loopstartptr) >> 16);
       offset += (uint32_t)(channel->loopstartptr >> 16);
       return (ptr & ((1<<16)-1)) | (((uint64_t)offset) << 16);
     }
   }
-  if (ptr >= channel->endptr) {
+  uint64_t limit = channel->endptr;
+  if ((channel->loopstartptr != (uint64_t)-1) &&
+      (channel->loopendptr != (uint64_t)-1) &&
+      (channel->loopendptr > channel->endptr)) {
+    limit = channel->loopendptr;
+  }
+  if (ptr >= limit) {
     return (uint64_t)-1;
   }
   return ptr;
+}
+
+static void ppz8_channel_get_centered_samples(
+    struct ppz8 *ppz8,
+    struct ppz8_channel *channel,
+    int16_t *obuf, int samples) {
+  struct ppz8_pcmbuf *buf = &ppz8->buf[channel->voice>>7];
+  uint32_t currind = channel->ptr >> 16;
+  for (int i = 0; i < samples; i++) {
+    int indoff = i - (samples - 1)/2;
+    uint32_t ind = currind + indoff;
+    if (indoff < 0) {
+      if ((channel->loopstartptr != (uint64_t)-1) && channel->looped) {
+        uint32_t loopendind = ((channel->loopendptr == (uint64_t)-1) ?
+            channel->endptr : channel->loopendptr) >> 16;
+        uint32_t loopperiod = loopendind - (channel->loopstartptr >> 16);
+        if (!loopperiod) {
+          ind = -1;
+        } else {
+          uint32_t loopoffset = -(ind - ((uint32_t)(channel->loopstartptr >> 16)) - loopperiod);
+          loopoffset %= loopperiod;
+          if (!loopoffset) loopoffset = loopperiod;
+          ind = (channel->loopstartptr >> 16) + loopperiod - loopoffset;
+        }
+      } else {
+        if (((uint32_t)-indoff) > currind) {
+          ind = -1;
+        }
+      }
+    } else {
+      uint32_t loopendind = (channel->loopendptr == (uint64_t)-1) ?
+          channel->endptr : channel->loopendptr;
+      if ((channel->loopstartptr != (uint64_t)-1) && (ind >= loopendind)) {
+        uint32_t loopperiod = loopendind - (channel->loopstartptr >> 16);
+        if (!loopperiod) {
+          ind = -1;
+        } else {
+          uint32_t loopoffset = ind - (channel->loopstartptr >> 16);
+          loopoffset %= loopperiod;
+          ind = (channel->loopstartptr >> 16) + loopoffset;
+        }
+      }
+    }
+    if ((ind >= (channel->endptr >> 16)) || (ind >= buf->buflen) || !buf->data) {
+      obuf[i] = 0;
+    } else {
+      obuf[i] = buf->data[ind];
+    }
+  }
+}
+
+static int32_t ppz8_channel_calc_nearest_neighbor(struct ppz8 *ppz8, struct ppz8_channel *channel) {
+  int16_t sample;
+  ppz8_channel_get_centered_samples(ppz8, channel, &sample, 1);
+  return sample;
+}
+
+static int32_t ppz8_channel_calc_linear(struct ppz8 *ppz8, struct ppz8_channel *channel) {
+  int32_t out = 0;
+  int16_t samples[2];
+  ppz8_channel_get_centered_samples(ppz8, channel, samples, 2);
+  uint16_t coeff = channel->ptr & 0xffffu;
+  out += (int32_t)samples[0] * (0x10000u - coeff);
+  out += (int32_t)samples[1] * coeff;
+  out >>= 16;
+  return out;
+}
+
+static int32_t ppz8_channel_calc_sinc(struct ppz8 *ppz8, struct ppz8_channel *channel) {
+  int16_t samples[7];
+  uint8_t frac = channel->ptr >> 8;
+  ppz8_channel_get_centered_samples(ppz8, channel, samples, 7);
+  const int16_t *sinctable = ppz8_sinctable[frac];
+  int32_t out = 0;
+  for (int i = 0; i < 7; i++) {
+    out += samples[i] * sinctable[i];
+  }
+  out >>= 15;
+  return out;
 }
 
 static int32_t ppz8_channel_calc(struct ppz8 *ppz8, struct ppz8_channel *channel) {
@@ -73,10 +153,17 @@ static int32_t ppz8_channel_calc(struct ppz8 *ppz8, struct ppz8_channel *channel
   struct ppz8_pcmvoice *voice = &buf->voice[channel->voice & 0x7f];
   int32_t out = 0;
   if (channel->vol) {
-    uint16_t coeff = channel->ptr & 0xffffu;
-    out += (int32_t)channel->prevout[0] * (0x10000u - coeff);
-    out += (int32_t)channel->prevout[1] * coeff;
-    out >>= 16;
+    switch (ppz8->interp) {
+    case PPZ8_INTERP_SINC:
+      out = ppz8_channel_calc_sinc(ppz8, channel);
+      break;
+    case PPZ8_INTERP_LINEAR:
+      out = ppz8_channel_calc_linear(ppz8, channel);
+      break;
+    default:
+      out = ppz8_channel_calc_nearest_neighbor(ppz8, channel);
+      break;
+    }
     // volume: out * 2**((volume-15)/2)
     out >>= (7 - ((channel->vol&0xf)>>1));
     if (!(channel->vol&1)) {
@@ -86,45 +173,10 @@ static int32_t ppz8_channel_calc(struct ppz8 *ppz8, struct ppz8_channel *channel
   }
 
   uint64_t ptrdiff = (((uint64_t)channel->freq * voice->origfreq) << 1) / ppz8->srate;
-  uint64_t oldptr = channel->ptr;
-  channel->ptr += ptrdiff;
-  uint32_t bufdiff = (channel->ptr>>16) - (oldptr>>16);
-  if (bufdiff) {
-    if (bufdiff == 1) {
-      channel->prevout[0] = channel->prevout[1];
-      channel->prevout[1] = 0;
-      channel->ptr = ppz8_loop(channel, channel->ptr);
-      if (channel->ptr != (uint64_t)-1) {
-        uint32_t bufptr = channel->ptr >> 16;
-        if (buf->data && bufptr < buf->buflen) {
-          channel->prevout[1] = buf->data[bufptr];
-        }
-      } else {
-        channel->playing = false;
-      }
-    } else {
-      channel->prevout[0] = 0;
-      channel->prevout[1] = 0;
-      uint64_t ptr1 = ppz8_loop(channel, channel->ptr - 0x10000);
-      if (ptr1 != (uint64_t)-1) {
-        uint32_t bufptr = ptr1 >> 16;
-        if (buf->data && bufptr < buf->buflen) {
-          channel->prevout[0] = buf->data[bufptr];
-        }
-        channel->ptr = ppz8_loop(channel, channel->ptr);
-        if (channel->ptr != (uint64_t)-1) {
-          bufptr = channel->ptr >> 16;
-          if (buf->data && bufptr < buf->buflen) {
-            channel->prevout[1] = buf->data[bufptr];
-          }
-        } else {
-          channel->playing = false;
-        }
-      } else {
-        channel->playing = false;
-      }
-    }
-  }
+  uint64_t newptr = channel->ptr + ptrdiff;
+  channel->ptr = ppz8_loop(channel, newptr);
+  if (newptr != channel->ptr) channel->looped = true;
+  if (channel->ptr == (uint64_t)-1) channel->playing = false;
   return out;
 }
 
@@ -276,13 +328,8 @@ static void ppz8_channel_play(struct ppz8 *ppz8, uint8_t ch, uint8_t v) {
     : channel->ptr + (((uint64_t)(channel->loopstartoff))<<16);
   channel->loopendptr = (channel->loopendoff == (uint32_t)-1) ? (uint64_t)-1
     : channel->ptr + (((uint64_t)(channel->loopendoff))<<16);
-  channel->prevout[0] = 0;
-  channel->prevout[1] = 0;
   channel->playing = true;
-  uint32_t bufptr = channel->ptr >> 16;
-  if (buf->data && bufptr < buf->buflen) {
-    channel->prevout[1] = buf->data[bufptr];
-  }
+  channel->looped = false;
 }
 
 static void ppz8_channel_stop(struct ppz8 *ppz8, uint8_t ch) {
