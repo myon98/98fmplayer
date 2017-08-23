@@ -2,6 +2,7 @@
 PC-98 FM driver emulation (very early version)
 ![gtk screenshot](/img/screenshot_gtk.png?raw=true)
 ![gtk toneviewer screenshot](/img/screenshot_gtk.toneview.png?raw=true)
+![gtk config screenshot](/img/screenshot_gtk.config.png?raw=true)
 ![w2k screenshot](/img/screenshotw2k.png?raw=true)
 
 ## Current status:
@@ -12,11 +13,11 @@ PC-98 FM driver emulation (very early version)
 * FM always generated in 55467Hz (closest integer to 7987200 / 144), SSG always generated in 249600Hz and downsampled with sinc filter (Never linear interpolates harmonics-rich signal like square wave)
 * FM generation bit-perfect with actual OPNA/OPN3 chip under limited conditions including stereo output when 4 <= ALG (Envelope is not bit-perfect yet, attack is bit-perfect only when AR >= 21)
 * SSGEG, Hardware LFO not supported
-* PPZ8: linear interpolation only (same as PMDWin/WinFMP, much better than original ppz8.com which only did nearest-neighbor interpolation)
+* PPZ8: support nearest neighbor, linear and sinc interpolation
 
 ## Installation/Usage (not very usable yet)
 ### gtk
-Uses gtk3, portaudio
+Uses gtk3, pulseaudio/jack/alsa
 ```
 $ cd gtk
 $ autoreconf -i
@@ -25,7 +26,6 @@ $ make
 $ ./fmplayer
 ```
 Reads drum sample from `$HOME/.local/share/fmplayer/ym2608_adpcm_rom.bin` (same format as MAME).
-Currently needs `$HOME/.local/share/fmplayer/font.rom` to display titles/comments.
 
 ### win32
 Releases:

@@ -8,12 +8,13 @@ PC-98用のFM音源ドライバエミュレーション(予定)
 * UI: GTK3 で作った仮のものと、仮 Win32 版
 ![gtk screenshot](/img/screenshot_gtk.png?raw=true)
 ![gtk toneviewer screenshot](/img/screenshot_gtk.toneview.png?raw=true)
+![gtk config screenshot](/img/screenshot_gtk.config.png?raw=true)
 ![w2k screenshot](/img/screenshotw2k.png?raw=true)
 * PMD, FMP の形式を解析するついでに作ったもので、手持ちのデータが少ないため再現性は PMDWin, WinFMP の劣化版
 * FM は 55467Hz で合成, SSG は 249600Hz で合成した後 sinc でフィルタして混合 (高調波の多い矩形波に対して線形補間を行ったりはしません)
 * FM 合成は特定の条件下で実チップ OPNA/OPN3 の出力と 4 <= ALG の時のステレオ出力を含めて完全に一致 (エンベロープは完全でなく、AR >= 21 のときのみ一致)
 * CSM モード (効果音モードとの違いが分からない) と SSGEG とハードウェア LFO 未対応
-* PPZ8 は線形補間のみ(オリジナルの無補完よりは…)
+* PPZ8 は無補間、線形補間、 sinc 補間に対応
 * libopna, fmdriver 部分は freestanding な c99 (のはず) なのでマイコンからFM音源の制御にも使える (但し曲データを全部読み込むバッファが必要なので SRAM が 64KB くらいは必要)
 
 ## 今後の予定:
@@ -23,7 +24,7 @@ PC-98用のFM音源ドライバエミュレーション(予定)
 
 ## (まだ使えるような状況じゃないけど) 使い方
 ### GTK 版の仮 UI
-gtk3, portaudio を使用します。
+gtk3, pulseaudio/jack/alsa を使用します。
 ```
 $ cd gtk
 $ autoreconf -i
@@ -32,7 +33,6 @@ $ make
 $ ./fmplayer
 ```
 `$HOME/.local/share/fmplayer/ym2608_adpcm_rom.bin`からMAME互換のドラムサンプルを読み込みます。
-現在のところタイトル表示は font.rom を `$HOME/.local/share/fmplayer/font.rom` に置かなければ表示されません。(2バイト半角文字、 Ambiguous Width など色々な問題があるのでわざわざ自力でフォントを読む構造にしてあります、そのうち font.rom がなくてもとりあえず表示できるようにはします)
 
 ### WIN32 版の仮 UI
 Releases:
