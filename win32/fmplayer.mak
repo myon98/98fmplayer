@@ -45,7 +45,8 @@ OBJBASE=main \
         $(FMDRIVER_OBJS) \
         $(LIBOPNA_OBJS) \
         $(TONEDATA_OBJS) \
-        $(FMDSP_OBJS)
+        $(FMDSP_OBJS) \
+				configdialog
 RESBASE=lnf
 LIBBASE=user32 \
         kernel32 \

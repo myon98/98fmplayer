@@ -23,6 +23,7 @@
 #include "common/fmplayer_common.h"
 #include "wavesave.h"
 #include "fft/fft.h"
+#include "configdialog.h"
 
 enum {
   ID_OPENFILE = 0x10,
@@ -32,6 +33,7 @@ enum {
   ID_OSCILLOVIEW,
   ID_ABOUT,
   ID_WAVESAVE,
+  ID_CONFIG,
 };
 
 #define FMPLAYER_CLASSNAME L"myon_fmplayer_ym2608_win32"
@@ -66,8 +68,8 @@ static struct {
   bool paused;
   HWND mainwnd;
   WNDPROC btn_defproc;
-  HWND button_2x, button_toneview, button_oscilloview, button_about;
-  bool toneview_on, oscilloview_on, about_on;
+  HWND button_2x, button_toneview, button_oscilloview, button_about, button_config;
+  bool toneview_on, oscilloview_on, about_on, config_on;
   const wchar_t *lastopenpath;
   bool fmdsp_2x;
   struct oscillodata oscillodata_audiothread[LIBOPNA_OSCILLO_TRACK_COUNT];
@@ -78,8 +80,10 @@ static struct {
   atomic_flag at_fftdata_flag;
   struct fmplayer_fft_data at_fftdata;
   struct fmplayer_fft_input_data fftdata;
+  atomic_flag opna_flag;
 } g = {
   .at_fftdata_flag = ATOMIC_FLAG_INIT,
+  .opna_flag = ATOMIC_FLAG_INIT,
 };
 
 HWND g_currentdlg;
@@ -87,7 +91,9 @@ HWND g_currentdlg;
 static void sound_cb(void *p, int16_t *buf, unsigned frames) {
   struct opna_timer *timer = (struct opna_timer *)p;
   ZeroMemory(buf, sizeof(int16_t)*frames*2);
+  while (atomic_flag_test_and_set_explicit(&g.opna_flag, memory_order_acquire));
   opna_timer_mix_oscillo(timer, buf, frames, g.oscillodata_audiothread);
+  atomic_flag_clear_explicit(&g.opna_flag, memory_order_release);
   if (!atomic_flag_test_and_set_explicit(
       &toneview_g.flag, memory_order_acquire)) {
     tonedata_from_opna(&toneview_g.tonedata, &g.opna);
@@ -170,6 +176,11 @@ static void openfile(HWND hwnd, const wchar_t *path) {
     about_set_adpcmrom_loaded(true);
   }
   opna_set_mask(&g.opna, mask);
+  opna_ssg_set_mix(&g.opna.ssg, fmplayer_config.ssg_mix);
+  opna_ssg_set_ymf288(&g.opna.ssg, &g.opna.resampler, fmplayer_config.ssg_ymf288);
+  ppz8_set_interpolation(&g.ppz8, fmplayer_config.ppz8_interp);
+  opna_fm_set_hires_sin(&g.opna.fm, fmplayer_config.fm_hires_sin);
+  opna_fm_set_hires_env(&g.opna.fm, fmplayer_config.fm_hires_env);
   WideCharToMultiByte(932, WC_NO_BEST_FIT_CHARS, path, -1, g.work.filename, sizeof(g.work.filename), 0, 0);
   fmplayer_file_load(&g.work, g.fmfile, 1);
   if (!g.sound) {
@@ -504,6 +515,15 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
     50, 25,
     hwnd, (HMENU)ID_ABOUT, g.hinst, 0
   );
+  g.button_config = CreateWindowEx(
+    0,
+    L"BUTTON",
+    L"&Config...",
+    WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_CHECKBOX | BS_PUSHLIKE,
+    460, 10,
+    100, 25,
+    hwnd, (HMENU)ID_CONFIG, g.hinst, 0
+  );
   g.btn_defproc = (WNDPROC)GetWindowLongPtr(button, GWLP_WNDPROC);
   SetWindowLongPtr(button, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   SetWindowLongPtr(pbutton, GWLP_WNDPROC, (intptr_t)btn_wndproc);
@@ -512,6 +532,7 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   SetWindowLongPtr(g.button_toneview, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   SetWindowLongPtr(g.button_oscilloview, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   SetWindowLongPtr(g.button_about, GWLP_WNDPROC, (intptr_t)btn_wndproc);
+  SetWindowLongPtr(g.button_config, GWLP_WNDPROC, (intptr_t)btn_wndproc);
   NONCLIENTMETRICS ncm;
   ncm.cbSize = sizeof(ncm);
   SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
@@ -523,6 +544,7 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   SetWindowFont(g.button_toneview, font, TRUE);
   SetWindowFont(g.button_oscilloview, font, TRUE);
   SetWindowFont(g.button_about, font, TRUE);
+  SetWindowFont(g.button_config, font, TRUE);
   loadfont();
   fmdsp_init(&g.fmdsp, g.font_loaded ? &g.font : 0);
   fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
@@ -550,6 +572,23 @@ static void about_close_cb(void *ptr) {
   (void)ptr;
   g.about_on = false;
   Button_SetCheck(g.button_about, false);
+}
+
+static void configdialog_close_cb(void *ptr) {
+  (void)ptr;
+  g.config_on = false;
+  Button_SetCheck(g.button_config, false);
+}
+
+static void configdialog_change_cb(void *ptr) {
+  (void)ptr;
+  while (atomic_flag_test_and_set_explicit(&g.opna_flag, memory_order_acquire));
+  opna_ssg_set_mix(&g.opna.ssg, fmplayer_config.ssg_mix);
+  opna_ssg_set_ymf288(&g.opna.ssg, &g.opna.resampler, fmplayer_config.ssg_ymf288);
+  ppz8_set_interpolation(&g.ppz8, fmplayer_config.ppz8_interp);
+  opna_fm_set_hires_sin(&g.opna.fm, fmplayer_config.fm_hires_sin);
+  opna_fm_set_hires_env(&g.opna.fm, fmplayer_config.fm_hires_env);
+  atomic_flag_clear_explicit(&g.opna_flag, memory_order_release);
 }
 
 static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
@@ -611,6 +650,17 @@ static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
           free(path);
         }
       }
+    }
+    break;
+  case ID_CONFIG:
+    if (!g.config_on) {
+      g.config_on = true;
+      configdialog_open(g.hinst, hwnd, configdialog_close_cb, 0, configdialog_change_cb, 0);
+      Button_SetCheck(g.button_config, true);
+    } else {
+      g.config_on = false;
+      configdialog_close();
+      Button_SetCheck(g.button_config, false);
     }
     break;
   }
