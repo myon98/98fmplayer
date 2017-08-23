@@ -52,32 +52,36 @@ void opna_fm_reset(struct opna_fm *fm) {
   fm->mask = 0;
 }
 // maximum output: 2042<<2 = 8168
-static int16_t opna_fm_slotout(struct opna_fm_slot *slot, int16_t modulation) {
-#ifdef LIBOPNA_ENABLE_HIRES_SIN
-  unsigned pind_hires = (slot->phase >> 8);
-  pind_hires += modulation << 1;
-  bool minus = pind_hires & (1<<(LOGSINTABLEHIRESBIT+1));
-  bool reverse = pind_hires & (1<<LOGSINTABLEHIRESBIT);
-  if (reverse) pind_hires = ~pind_hires;
-  pind_hires &= (1<<LOGSINTABLEHIRESBIT)-1;
+static int16_t opna_fm_slotout(struct opna_fm_slot *slot, int16_t modulation,
+  bool hires_sin, bool hires_env
+) {
+  int logout;
+  bool minus;
+  if (hires_sin) {
+    unsigned pind_hires = (slot->phase >> 8);
+    pind_hires += modulation << 1;
+    minus = pind_hires & (1<<(LOGSINTABLEHIRESBIT+1));
+    bool reverse = pind_hires & (1<<LOGSINTABLEHIRESBIT);
+    if (reverse) pind_hires = ~pind_hires;
+    pind_hires &= (1<<LOGSINTABLEHIRESBIT)-1;
 
-  int logout = logsintable_hires[pind_hires];
-#else
-  unsigned pind = (slot->phase >> 10);
-  pind += modulation >> 1;
-  bool minus = pind & (1<<(LOGSINTABLEBIT+1));
-  bool reverse = pind & (1<<LOGSINTABLEBIT);
-  if (reverse) pind = ~pind;
-  pind &= (1<<LOGSINTABLEBIT)-1;
+    logout = logsintable_hires[pind_hires];
+  } else {
+    unsigned pind = (slot->phase >> 10);
+    pind += modulation >> 1;
+    minus = pind & (1<<(LOGSINTABLEBIT+1));
+    bool reverse = pind & (1<<LOGSINTABLEBIT);
+    if (reverse) pind = ~pind;
+    pind &= (1<<LOGSINTABLEBIT)-1;
 
-  int logout = logsintable[pind];
-#endif // LIBOPNA_ENABLE_HIRES_SIN
+    logout = logsintable[pind];
+  }
 //  if (slot->env == LIBOPNA_FM_ENV_MAX) {
-#ifdef LIBOPNA_ENABLE_HIRES_ENV
-  logout += slot->env_hires;
-#else
-  logout += (slot->env << 2);
-#endif
+  if (hires_env) {
+    logout += slot->env_hires;
+  } else {
+    logout += (slot->env << 2);
+  }
 //  }
   logout += (slot->tl << 5);
 
@@ -137,7 +141,8 @@ static void opna_fm_chan_phase_se(struct opna_fm_channel *chan, struct opna_fm *
   opna_fm_slot_phase(&chan->slot[3], freq);
 }
 
-struct opna_fm_frame opna_fm_chanout(struct opna_fm_channel *chan) {
+struct opna_fm_frame opna_fm_chanout(struct opna_fm_channel *chan,
+  bool hires_sin, bool hires_env) {
   int16_t slot0 = chan->slot[0].prevout;
   int16_t slot1 = chan->slot[1].prevout;
   int16_t slot2 = chan->slot[2].prevout;
@@ -145,52 +150,52 @@ struct opna_fm_frame opna_fm_chanout(struct opna_fm_channel *chan) {
   int16_t fb = chan->fbmem + chan->slot[0].prevout;
   chan->fbmem = slot0;
   if (!chan->fb) fb = 0;
-  opna_fm_slotout(&chan->slot[0], fb >> (9 - chan->fb));
+  opna_fm_slotout(&chan->slot[0], fb >> (9 - chan->fb), hires_sin, hires_env);
 
   int16_t prev_alg_mem = chan->alg_mem;
   struct opna_fm_frame ret;
   switch (chan->alg) {
   // this looks ugly, but is verified with actual YMF288 and YM2608
   case 0:
-    opna_fm_slotout(&chan->slot[1], chan->slot[0].prevout);
-    opna_fm_slotout(&chan->slot[2], slot1);
-    opna_fm_slotout(&chan->slot[3], slot2);
+    opna_fm_slotout(&chan->slot[1], chan->slot[0].prevout, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[2], slot1, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[3], slot2, hires_sin, hires_env);
     ret.data[0] = ret.data[1] = chan->slot[3].prevout >> 1;
     break;
   case 1:
-    opna_fm_slotout(&chan->slot[1], 0);
-    opna_fm_slotout(&chan->slot[2], prev_alg_mem);
-    opna_fm_slotout(&chan->slot[3], slot2);
+    opna_fm_slotout(&chan->slot[1], 0, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[2], prev_alg_mem, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[3], slot2, hires_sin, hires_env);
     chan->alg_mem = chan->slot[0].prevout;
     chan->alg_mem += chan->slot[1].prevout;
     chan->alg_mem &= ~1;
     ret.data[0] = ret.data[1] = chan->slot[3].prevout >> 1;
     break;
   case 2:
-    opna_fm_slotout(&chan->slot[1], 0);
-    opna_fm_slotout(&chan->slot[2], slot1);
-    opna_fm_slotout(&chan->slot[3], slot0 + slot2);
+    opna_fm_slotout(&chan->slot[1], 0, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[2], slot1, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[3], slot0 + slot2, hires_sin, hires_env);
     ret.data[0] = ret.data[1] = chan->slot[3].prevout >> 1;
     break;
   case 3:
-    opna_fm_slotout(&chan->slot[1], chan->slot[0].prevout);
-    opna_fm_slotout(&chan->slot[2], 0);
-    opna_fm_slotout(&chan->slot[3], slot2 + prev_alg_mem);
+    opna_fm_slotout(&chan->slot[1], chan->slot[0].prevout, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[2], 0, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[3], slot2 + prev_alg_mem, hires_sin, hires_env);
     chan->alg_mem = slot1;
     ret.data[0] = ret.data[1] = chan->slot[3].prevout >> 1;
     break;
   case 4:
-    opna_fm_slotout(&chan->slot[1], slot0);
-    opna_fm_slotout(&chan->slot[2], 0);
-    opna_fm_slotout(&chan->slot[3], chan->slot[2].prevout);
+    opna_fm_slotout(&chan->slot[1], slot0, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[2], 0, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[3], chan->slot[2].prevout, hires_sin, hires_env);
     ret.data[0] = ret.data[1] = slot3 >> 1;
     ret.data[0] += chan->slot[1].prevout >> 1;
     ret.data[1] += slot1 >> 1;
     break;
   case 5:
-    opna_fm_slotout(&chan->slot[1], slot0);
-    opna_fm_slotout(&chan->slot[2], slot0);
-    opna_fm_slotout(&chan->slot[3], slot0);
+    opna_fm_slotout(&chan->slot[1], slot0, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[2], slot0, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[3], slot0, hires_sin, hires_env);
     chan->alg_mem = slot2;
     chan->alg_mem &= ~1;
     ret.data[0] = ret.data[1] = slot3 >> 1;
@@ -198,9 +203,9 @@ struct opna_fm_frame opna_fm_chanout(struct opna_fm_channel *chan) {
     ret.data[1] += (slot1 >> 1) + (prev_alg_mem >> 1);
     break;
   case 6:
-    opna_fm_slotout(&chan->slot[1], slot0);
-    opna_fm_slotout(&chan->slot[2], 0);
-    opna_fm_slotout(&chan->slot[3], 0);
+    opna_fm_slotout(&chan->slot[1], slot0, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[2], 0, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[3], 0, hires_sin, hires_env);
     chan->alg_mem = slot2;
     chan->alg_mem &= ~1;
     ret.data[0] = ret.data[1] = slot3 >> 1;
@@ -208,9 +213,9 @@ struct opna_fm_frame opna_fm_chanout(struct opna_fm_channel *chan) {
     ret.data[1] += (slot1 >> 1) + (prev_alg_mem >> 1);
     break;
   case 7:
-    opna_fm_slotout(&chan->slot[1], 0);
-    opna_fm_slotout(&chan->slot[2], 0);
-    opna_fm_slotout(&chan->slot[3], 0);
+    opna_fm_slotout(&chan->slot[1], 0, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[2], 0, hires_sin, hires_env);
+    opna_fm_slotout(&chan->slot[3], 0, hires_sin, hires_env);
     chan->alg_mem = chan->slot[1].prevout + chan->slot[2].prevout;
     chan->alg_mem &= ~1;
     ret.data[0] = ret.data[1] =
@@ -250,6 +255,9 @@ static void opna_fm_slot_setrate(struct opna_fm_slot *slot, int status) {
     slot->rate_selector = 0;
     slot->rate_mul = 0;
     slot->rate_shifter = 0;
+    slot->rate_selector_hires = 0;
+    slot->rate_mul_hires = 0;
+    slot->rate_shifter_hires = 0;
     return;
   }
 
@@ -258,9 +266,6 @@ static void opna_fm_slot_setrate(struct opna_fm_slot *slot, int status) {
   if (rate > 63) rate = 63;
   printf("rate: %d\n", rate);
   if (status == ENV_ATTACK && rate >= 62) rate += 4;
-#ifdef LIBOPNA_ENABLE_HIRES_ENV
-  rate += 8;
-#endif
   int rate_shifter = 11 - (rate >> 2);
   if (rate_shifter < 0) {
     slot->rate_selector = (rate & ((1<<2)-1)) + 4;
@@ -271,91 +276,107 @@ static void opna_fm_slot_setrate(struct opna_fm_slot *slot, int status) {
     slot->rate_mul = 1;
     slot->rate_shifter = rate_shifter;
   }
+  
+  int rate_hires = rate + 8;
+  int rate_shifter_hires = 11 - (rate_hires >> 2);
+  if (rate_shifter_hires < 0) {
+    slot->rate_selector_hires = (rate_hires & ((1<<2)-1)) + 4;
+    slot->rate_mul_hires = 1<<(-rate_shifter_hires-1);
+    slot->rate_shifter_hires = 0;
+  } else {
+    slot->rate_selector_hires = rate_hires & ((1<<2)-1);
+    slot->rate_mul_hires = 1;
+    slot->rate_shifter_hires = rate_shifter_hires;
+  }
   printf("status: %d\n", status);
   printf("rate_selector: %d\n", slot->rate_selector);
   printf("rate_mul:      %d\n", slot->rate_mul);
   printf("rate_shifter:  %d\n\n", slot->rate_shifter);
 }
 
-static void opna_fm_slot_env(struct opna_fm_slot *slot) {
+static void opna_fm_slot_env(struct opna_fm_slot *slot, bool hires_env) {
 //  if (!(slot->env_count & ((1<<slot->rate_shifter)-1))) {
-  if ((slot->env_count & ((1<<slot->rate_shifter)-1)) == ((1<<slot->rate_shifter)-1)) {
-    int rate_index = (slot->env_count >> slot->rate_shifter) & 7;
-    int env_inc = rateinctable[slot->rate_selector][rate_index];
-    env_inc *= slot->rate_mul;
+  int rate_shifter = hires_env ? slot->rate_shifter_hires : slot->rate_shifter;
+  int rate_selector = hires_env ? slot->rate_selector_hires : slot->rate_selector;
+  int rate_mul = hires_env ? slot->rate_mul_hires : slot->rate_mul;
+  if ((slot->env_count & ((1<<rate_shifter)-1)) == ((1<<rate_shifter)-1)) {
+    int rate_index = (slot->env_count >> rate_shifter) & 7;
+    int env_inc = rateinctable[rate_selector][rate_index];
+    env_inc *= rate_mul;
 
-#ifdef LIBOPNA_ENABLE_HIRES_ENV
-    switch (slot->env_state) {
-    int newenv;
-    int sl;
-    case ENV_ATTACK:
-      newenv = slot->env_hires + (((-slot->env_hires-1) * env_inc) >> 6);
-      if (newenv <= 0) {
-        slot->env_hires = 0;
-        slot->env_state = ENV_DECAY;
-        opna_fm_slot_setrate(slot, ENV_DECAY);
-      } else {
-        slot->env_hires = newenv;
+    if (hires_env) {
+      switch (slot->env_state) {
+      int newenv;
+      int sl;
+      case ENV_ATTACK:
+        newenv = slot->env_hires + (((-slot->env_hires-1) * env_inc) >> 6);
+        if (newenv <= 0) {
+          slot->env_hires = 0;
+          slot->env_state = ENV_DECAY;
+          opna_fm_slot_setrate(slot, ENV_DECAY);
+        } else {
+          slot->env_hires = newenv;
+        }
+        break;
+      case ENV_DECAY:
+        slot->env_hires += env_inc;
+        sl = slot->sl;
+        if (sl == 0xf) sl = 0x1f;
+        if (slot->env_hires >= (sl << 7)) {
+          slot->env_state = ENV_SUSTAIN;
+          opna_fm_slot_setrate(slot, ENV_SUSTAIN);
+        }
+        break;
+      case ENV_SUSTAIN:
+        slot->env_hires += env_inc;
+        if (slot->env_hires >= ENV_MAX_HIRES) slot->env_hires = ENV_MAX_HIRES;
+        break;
+      case ENV_RELEASE:
+        slot->env_hires += env_inc;
+        if (slot->env_hires >= ENV_MAX_HIRES) {
+          slot->env_hires = ENV_MAX_HIRES;
+          slot->env_state = ENV_OFF;
+        }
+        break;
       }
-      break;
-    case ENV_DECAY:
-      slot->env_hires += env_inc;
-      sl = slot->sl;
-      if (sl == 0xf) sl = 0x1f;
-      if (slot->env_hires >= (sl << 7)) {
-        slot->env_state = ENV_SUSTAIN;
-        opna_fm_slot_setrate(slot, ENV_SUSTAIN);
+      slot->env = slot->env_hires >> 2;
+    } else {
+      switch (slot->env_state) {
+      int newenv;
+      int sl;
+      case ENV_ATTACK:
+        newenv = slot->env + (((-slot->env-1) * env_inc) >> 4);
+        if (newenv <= 0) {
+          slot->env = 0;
+          slot->env_state = ENV_DECAY;
+          opna_fm_slot_setrate(slot, ENV_DECAY);
+        } else {
+          slot->env = newenv;
+        }
+        break;
+      case ENV_DECAY:
+        slot->env += env_inc;
+        sl = slot->sl;
+        if (sl == 0xf) sl = 0x1f;
+        if (slot->env >= (sl << 5)) {
+          slot->env_state = ENV_SUSTAIN;
+          opna_fm_slot_setrate(slot, ENV_SUSTAIN);
+        }
+        break;
+      case ENV_SUSTAIN:
+        slot->env += env_inc;
+        if (slot->env >= LIBOPNA_FM_ENV_MAX) slot->env = LIBOPNA_FM_ENV_MAX;
+        break;
+      case ENV_RELEASE:
+        slot->env += env_inc;
+        if (slot->env >= LIBOPNA_FM_ENV_MAX) {
+          slot->env = LIBOPNA_FM_ENV_MAX;
+          slot->env_state = ENV_OFF;
+        }
+        break;
       }
-      break;
-    case ENV_SUSTAIN:
-      slot->env_hires += env_inc;
-      if (slot->env_hires >= ENV_MAX_HIRES) slot->env_hires = ENV_MAX_HIRES;
-      break;
-    case ENV_RELEASE:
-      slot->env_hires += env_inc;
-      if (slot->env_hires >= ENV_MAX_HIRES) {
-        slot->env_hires = ENV_MAX_HIRES;
-        slot->env_state = ENV_OFF;
-      }
-      break;
+      slot->env_hires = slot->env << 2;
     }
-    slot->env = slot->env_hires >> 2;
-#else // LIBOPNA_ENABLE_HIRES_ENV
-    switch (slot->env_state) {
-    int newenv;
-    int sl;
-    case ENV_ATTACK:
-      newenv = slot->env + (((-slot->env-1) * env_inc) >> 4);
-      if (newenv <= 0) {
-        slot->env = 0;
-        slot->env_state = ENV_DECAY;
-        opna_fm_slot_setrate(slot, ENV_DECAY);
-      } else {
-        slot->env = newenv;
-      }
-      break;
-    case ENV_DECAY:
-      slot->env += env_inc;
-      sl = slot->sl;
-      if (sl == 0xf) sl = 0x1f;
-      if (slot->env >= (sl << 5)) {
-        slot->env_state = ENV_SUSTAIN;
-        opna_fm_slot_setrate(slot, ENV_SUSTAIN);
-      }
-      break;
-    case ENV_SUSTAIN:
-      slot->env += env_inc;
-      if (slot->env >= LIBOPNA_FM_ENV_MAX) slot->env = LIBOPNA_FM_ENV_MAX;
-      break;
-    case ENV_RELEASE:
-      slot->env += env_inc;
-      if (slot->env >= LIBOPNA_FM_ENV_MAX) {
-        slot->env = LIBOPNA_FM_ENV_MAX;
-        slot->env_state = ENV_OFF;
-      }
-      break;
-    }
-#endif
   }
   slot->env_count++;
 }
@@ -627,7 +648,7 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
         for (int s = 0; s < 4; s++) {
           if (fm->channel[c].slot[s].keyon_ext) {
             opna_fm_slot_key(&fm->channel[c], s, true);
-            opna_fm_slot_env(&fm->channel[c].slot[s]);
+            opna_fm_slot_env(&fm->channel[c].slot[s], fm->hires_env);
           }
           //opna_fm_slot_env(&fm->channel[c].slot[s]);
         }
@@ -639,7 +660,7 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
     int32_t ro = buf[i*2+1];
 
     for (int c = 0; c < 6; c++) {
-      struct opna_fm_frame o = opna_fm_chanout(&fm->channel[c]);
+      struct opna_fm_frame o = opna_fm_chanout(&fm->channel[c], fm->hires_sin, fm->hires_env);
       unsigned nlevel[2];
       nlevel[0] = o.data[0] > 0 ? o.data[0] : -o.data[0];
       nlevel[1] = o.data[1] > 0 ? o.data[1] : -o.data[1];
@@ -674,7 +695,7 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
           if (fm->channel[c].slot[s].keyon_ext) {
             fm->channel[c].slot[s].keyon_ext = false;
           } else {
-            opna_fm_slot_env(&fm->channel[c].slot[s]);
+            opna_fm_slot_env(&fm->channel[c].slot[s], fm->hires_env);
           }
           //opna_fm_slot_env(&fm->channel[c].slot[s]);
         }

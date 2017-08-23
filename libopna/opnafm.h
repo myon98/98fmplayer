@@ -31,6 +31,10 @@ struct opna_fm_slot {
   uint8_t rate_selector;
   uint8_t rate_mul;
 
+  uint8_t rate_shifter_hires;
+  uint8_t rate_selector_hires;
+  uint8_t rate_mul_hires;
+
   uint8_t tl;
   uint8_t sl;
 
@@ -92,6 +96,9 @@ struct opna_fm {
   // mask
   // when (1<<channel), the channel is masked
   unsigned mask;
+  
+  bool hires_sin;
+  bool hires_env;
 };
 
 void opna_fm_reset(struct opna_fm *fm);
@@ -109,7 +116,7 @@ struct opna_fm_frame {
   int16_t data[2];
 };
 
-struct opna_fm_frame opna_fm_chanout(struct opna_fm_channel *chan);
+struct opna_fm_frame opna_fm_chanout(struct opna_fm_channel *chan, bool hires_sin, bool hires_env);
 void opna_fm_slot_key(struct opna_fm_channel *chan, int slotnum, bool keyon);
 
 void opna_fm_chan_set_alg(struct opna_fm_channel *chan, unsigned alg);
@@ -123,6 +130,14 @@ void opna_fm_slot_set_tl(struct opna_fm_slot *slot, unsigned tl);
 void opna_fm_slot_set_ks(struct opna_fm_slot *slot, unsigned ks);
 void opna_fm_slot_set_mul(struct opna_fm_slot *slot, unsigned mul);
 void opna_fm_slot_set_det(struct opna_fm_slot *slot, unsigned det);
+
+static inline void opna_fm_set_hires_sin(struct opna_fm *fm, bool hires) {
+  fm->hires_sin = hires;
+}
+
+static inline void opna_fm_set_hires_env(struct opna_fm *fm, bool hires) {
+  fm->hires_env = hires;
+}
 
 #ifdef __cplusplus
 }
