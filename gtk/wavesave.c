@@ -5,6 +5,7 @@
 #include "libopna/opna.h"
 #include "libopna/opnatimer.h"
 #include "common/fmplayer_common.h"
+#include "configdialog.h"
 
 enum {
   SRATE = 55467,
@@ -168,6 +169,11 @@ static void wavesave(GtkWindow *parent,
   }
   struct thread_write_data *tdata = g_new0(struct thread_write_data, 1);
   fmplayer_init_work_opna(&tdata->work, &tdata->ppz8, &tdata->opna, &tdata->timer, tdata->adpcm_ram);
+  opna_ssg_set_mix(&tdata->opna.ssg, fmplayer_config.ssg_mix);
+  opna_ssg_set_ymf288(&tdata->opna.ssg, &tdata->opna.resampler, fmplayer_config.ssg_ymf288);
+  ppz8_set_interpolation(&tdata->ppz8, fmplayer_config.ppz8_interp);
+  opna_fm_set_hires_sin(&tdata->opna.fm, fmplayer_config.fm_hires_sin);
+  opna_fm_set_hires_env(&tdata->opna.fm, fmplayer_config.fm_hires_env);
   fmplayer_file_load(&tdata->work, fmfile, loopcnt);
   tdata->fadeout.timer = &tdata->timer;
   tdata->fadeout.work = &tdata->work;

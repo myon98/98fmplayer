@@ -17,6 +17,7 @@
 #include "oscillo/oscillo.h"
 #include "oscilloview.h"
 #include "wavesave.h"
+#include "configdialog.h"
 #include "common/fmplayer_common.h"
 #include "fft/fft.h"
 
@@ -45,6 +46,7 @@ static struct {
   GtkWidget *filechooser_widget;
   bool sound_paused;
   struct sound_state *ss;
+  atomic_flag opna_flag;
   struct opna opna;
   struct opna_timer opna_timer;
   struct ppz8 ppz8;
@@ -66,6 +68,7 @@ static struct {
   struct fmplayer_fft_input_data fftdata;
 } g = {
   .oscillo_should_update = true,
+  .opna_flag = ATOMIC_FLAG_INIT,
   .at_fftdata_flag = ATOMIC_FLAG_INIT,
 };
 
@@ -111,6 +114,23 @@ static void on_oscillo_view(GtkMenuItem *menuitem, gpointer ptr) {
   show_oscilloview();
 }
 
+static void config_update(void *ptr) {
+  (void)ptr;
+  while (atomic_flag_test_and_set_explicit(&g.opna_flag, memory_order_acquire));
+  opna_ssg_set_mix(&g.opna.ssg, fmplayer_config.ssg_mix);
+  opna_ssg_set_ymf288(&g.opna.ssg, &g.opna.resampler, fmplayer_config.ssg_ymf288);
+  ppz8_set_interpolation(&g.ppz8, fmplayer_config.ppz8_interp);
+  opna_fm_set_hires_sin(&g.opna.fm, fmplayer_config.fm_hires_sin);
+  opna_fm_set_hires_env(&g.opna.fm, fmplayer_config.fm_hires_env);
+  atomic_flag_clear_explicit(&g.opna_flag, memory_order_release);
+}
+
+static void on_config(GtkMenuItem *menuitem, gpointer ptr) {
+  (void)menuitem;
+  (void)ptr;
+  show_configdialog(config_update, 0);
+}
+
 static void msgbox_err(const char *msg) {
   GtkWidget *d = gtk_message_dialog_new(GTK_WINDOW(g.mainwin), GTK_DIALOG_MODAL,
                           GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE,
@@ -122,10 +142,11 @@ static void msgbox_err(const char *msg) {
 static void soundout_cb(void *userptr, int16_t *buf, unsigned frames) {
   struct opna_timer *timer = (struct opna_timer *)userptr;
   memset(buf, 0, sizeof(int16_t)*frames*2);
+  while (atomic_flag_test_and_set_explicit(&g.opna_flag, memory_order_acquire));
   opna_timer_mix_oscillo(timer, buf, frames,
                          g.oscillo_should_update ?
                          g.oscillodata_audiothread : 0);
-
+  atomic_flag_clear_explicit(&g.opna_flag, memory_order_release);
   if (!atomic_flag_test_and_set_explicit(
       &toneview_g.flag, memory_order_acquire)) {
     tonedata_from_opna(&toneview_g.tonedata, &g.opna);
@@ -211,6 +232,7 @@ static bool openfile(const char *uri) {
   memset(g.adpcm_ram, 0, sizeof(g.adpcm_ram));
   fmplayer_init_work_opna(&g.work, &g.ppz8, &g.opna, &g.opna_timer, g.adpcm_ram);
   opna_set_mask(&g.opna, mask);
+  config_update(0);
   char *disppath = g_filename_from_uri(uri, 0, 0);
   if (disppath) {
     strncpy(g.work.filename, disppath, sizeof(g.work.filename)-1);
@@ -269,6 +291,9 @@ static GtkWidget *create_menubar() {
   GtkWidget *oscilloview = gtk_menu_item_new_with_label("Oscillo view");
   g_signal_connect(oscilloview, "activate", G_CALLBACK(on_oscillo_view), 0);
   gtk_menu_shell_append(GTK_MENU_SHELL(filemenu), oscilloview);
+  GtkWidget *config = gtk_menu_item_new_with_label("Config");
+  g_signal_connect(config, "activate", G_CALLBACK(on_config), 0);
+  gtk_menu_shell_append(GTK_MENU_SHELL(filemenu), config);
   return menubar;
 }
 

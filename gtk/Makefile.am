@@ -65,7 +65,8 @@ fmplayer_SOURCES=main.c \
                  $(LIBOPNA_SRC) \
                  $(FMDRIVER_SRC) \
                  $(FMDSP_SRC) \
-                 $(SOUNDOUT_SRC)
+                 $(SOUNDOUT_SRC) \
+								 configdialog.c
 
 if ENABLE_OPENGL
 fmplayer_SOURCES+=oscilloview-gl.c
