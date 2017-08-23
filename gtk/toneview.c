@@ -122,5 +122,7 @@ void show_toneview(void) {
     }
     gtk_widget_add_tick_callback(g.tonewin, tick_cb, 0, 0);
     gtk_widget_show_all(g.tonewin);
+  } else {
+    gtk_window_present(GTK_WINDOW(g.tonewin));
   }
 }

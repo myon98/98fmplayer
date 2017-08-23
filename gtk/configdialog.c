@@ -152,6 +152,6 @@ void show_configdialog(config_update_func *func, void *ptr) {
     }
     gtk_widget_show_all(g.configwin);
   } else {
-    
+    gtk_window_present(GTK_WINDOW(g.configwin));
   }
 }

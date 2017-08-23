@@ -165,6 +165,8 @@ void show_oscilloview(void) {
     g_signal_connect(glarea, "realize", G_CALLBACK(on_realize), 0);
     gtk_container_add(GTK_CONTAINER(g.win), glarea);
     gtk_widget_add_tick_callback(glarea, tick_cb, 0, 0);
+    gtk_widget_show_all(g.win);
+  } else {
+    gtk_window_present(GTK_WINDOW(g.win));
   }
-  gtk_widget_show_all(g.win);
 }
