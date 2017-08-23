@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 #include "leveldata/leveldata.h"
 
 #ifdef __cplusplus
@@ -31,6 +32,8 @@ struct opna_ssg {
   unsigned mask;
   int32_t previn[3];
   int32_t prevout[3];
+  uint32_t mix;
+  bool ymf288;
 };
 
 struct opna_ssg_resampler {
@@ -62,6 +65,21 @@ unsigned opna_ssg_readreg(const struct opna_ssg *ssg, unsigned reg);
 // channel level (0 - 31)
 int opna_ssg_channel_level(const struct opna_ssg *ssg, int ch);
 unsigned opna_ssg_tone_period(const struct opna_ssg *ssg, int ch);
+
+static inline void opna_ssg_set_ymf288(
+    struct opna_ssg *ssg, struct opna_ssg_resampler *resampler, bool ymf288) {
+  // enable bit-perfect with YMF288/OPN3-L mode
+  if (ssg->ymf288 != ymf288) {
+    ssg->ymf288 = ymf288;
+    memset(resampler->buf, 0, sizeof(resampler->buf));
+  }
+}
+
+static inline void opna_ssg_set_mix(struct opna_ssg *ssg, uint32_t mix) {
+  // 0x10000: default (PC-9801-86 equivalent)
+  // only valid when !ymf288
+  ssg->mix = mix;
+}
 
 typedef void (*opna_ssg_sinc_calc_func_type)(unsigned resampler_index,
                                              const int16_t *inbuf, int32_t *outbuf);
