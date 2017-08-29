@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <windowsx.h>
 #include <commctrl.h>
+#include "configdialog.h"
 
 enum {
   SRATE = 55467,
@@ -99,6 +100,11 @@ static void wavesave(HWND parent,
   }
   *inst = (struct wavesave_instance){0};
   fmplayer_init_work_opna(&inst->work, &inst->ppz8, &inst->opna, &inst->timer, inst->adpcm_ram);
+  opna_ssg_set_mix(&inst->opna.ssg, fmplayer_config.ssg_mix);
+  opna_ssg_set_ymf288(&inst->opna.ssg, &inst->opna.resampler, fmplayer_config.ssg_ymf288);
+  ppz8_set_interpolation(&inst->ppz8, fmplayer_config.ppz8_interp);
+  opna_fm_set_hires_sin(&inst->opna.fm, fmplayer_config.fm_hires_sin);
+  opna_fm_set_hires_env(&inst->opna.fm, fmplayer_config.fm_hires_env);
   fmplayer_file_load(&inst->work, fmfile, LOOPCNT);
   inst->fadeout.timer = &inst->timer;
   inst->fadeout.work = &inst->work;
