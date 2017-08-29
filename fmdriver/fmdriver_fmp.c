@@ -2955,6 +2955,13 @@ static void fmp_init_parts(struct fmdriver_work *work,
     spart->u.ssg.env.decay_rate = 0xff;
     spart->u.ssg.env.sustain_lv = 0xff;
     spart->u.ssg.env.release_rate = 0x0a;
+    // not in original
+    spart->u.ssg.envbak.startvol = 0xff;
+    spart->u.ssg.envbak.attack_rate = 0xff;
+    spart->u.ssg.envbak.decay_rate = 0xff;
+    spart->u.ssg.envbak.sustain_lv = 0xff;
+    spart->u.ssg.envbak.release_rate = 0x0a;
+    // end
     fpart->current_vol = 0x1a;
     fpart->actual_vol = 0x1a;
     spart->current_vol = 0x0e;
