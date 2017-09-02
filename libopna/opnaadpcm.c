@@ -182,9 +182,11 @@ void opna_adpcm_writereg(struct opna_adpcm *adpcm, unsigned reg, unsigned val) {
 }
 
 void opna_adpcm_mix(struct opna_adpcm *adpcm, int16_t *buf, unsigned samples) {
-  if (!adpcm->ram) return;
-  if (!(adpcm->control1 & C1_START)) return;
   unsigned level = 0;
+  if (!adpcm->ram || !(adpcm->control1 & C1_START)) {
+    leveldata_update(&adpcm->leveldata, level);
+    return;
+  }
   for (unsigned i = 0; i < samples; i++) {
     adpcm_calc(adpcm);
     {
