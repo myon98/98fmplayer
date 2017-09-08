@@ -5,12 +5,16 @@
 #include <stdlib.h>
 #include <wchar.h>
 
+#if !defined(FMPLAYER_FILE_WIN_UTF16) && !defined(FMPLAYER_FILE_WIN_UTF8)
+#error "specify path string format"
+#endif
+
 static void *fileread(const wchar_t *path,
                       size_t maxsize, size_t *filesize,
                       enum fmplayer_file_error *error) {
   HANDLE file = INVALID_HANDLE_VALUE;
   void *buf = 0;
-  file = CreateFile(path, GENERIC_READ, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  file = CreateFileW(path, GENERIC_READ, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
   if (file == INVALID_HANDLE_VALUE) {
     if (error) *error = FMPLAYER_FILE_ERR_NOTFOUND;
     goto err;
@@ -43,9 +47,27 @@ err:
   return 0;
 }
 
+static inline wchar_t *u8tou16(const char *s) {
+  wchar_t *ws = 0;
+  int slen = MultiByteToWideChar(CP_UTF8, 0, s, -1, 0, 0);
+  if (!slen) goto err;
+  ws = malloc(slen * sizeof(wchar_t));
+  if (!ws) goto err;
+  if (!MultiByteToWideChar(CP_UTF8, 0, s, -1, ws, slen)) goto err;
+  return ws;
+err:
+  free(ws);
+  return 0;
+}
+
 void *fmplayer_fileread(const void *pathptr, const char *pcmname, const char *extension,
                         size_t maxsize, size_t *filesize, enum fmplayer_file_error *error) {
-  const wchar_t *path = (const wchar_t *)pathptr;
+  const wchar_t *path = 0;
+#if defined(FMPLAYER_FILE_WIN_UTF16)
+  path = wcsdup(pathptr);
+#elif defined(FMPLAYER_FILE_WIN_UTF8)
+  path = u8tou16(pathptr);
+#endif
   wchar_t *wpcmpath = 0, *wpcmname = 0, *wpcmextname = 0;
   if (!pcmname) return fileread(path, maxsize, filesize, error);
   int wpcmnamelen = MultiByteToWideChar(932, 0, pcmname, -1, 0, 0);
@@ -66,22 +88,29 @@ void *fmplayer_fileread(const void *pathptr, const char *pcmname, const char *ex
   wpcmpath = malloc((wcslen(path) + 1 + wcslen(wpcmname) + 1) * sizeof(wchar_t));
   if (!wpcmpath) goto err;
   wcscpy(wpcmpath, path);
-  PathRemoveFileSpec(wpcmpath);
+  PathRemoveFileSpecW(wpcmpath);
   wcscat(wpcmpath, L"\\");
   wcscat(wpcmpath, wpcmname);
   void *buf = fileread(wpcmpath, maxsize, filesize, error);
   free(wpcmextname);
   free(wpcmname);
   free(wpcmpath);
+  free((void *)path);
   return buf;
 err:
   free(wpcmextname);
   free(wpcmname);
   free(wpcmpath);
+  free((void *)path);
   return 0;
 }
 
 void *fmplayer_path_dup(const void *pathptr) {
-  const wchar_t *path = (const wchar_t *)pathptr;
+#if defined(FMPLAYER_FILE_WIN_UTF16)
+  const wchar_t *path = pathptr;
   return wcsdup(path);
+#elif defined(FMPLAYER_FILE_WIN_UTF8)
+  const char *path = pathptr;
+  return strdup(path);
+#endif
 }

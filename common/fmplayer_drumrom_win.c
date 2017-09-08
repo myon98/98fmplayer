@@ -3,6 +3,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shlwapi.h>
+#include <wchar.h>
 static struct {
   char drum_rom[OPNA_ROM_SIZE];
   bool loaded;
@@ -11,15 +12,15 @@ static struct {
 static void loadrom(void) {
   const wchar_t *path = L"ym2608_adpcm_rom.bin";
   wchar_t exepath[MAX_PATH];
-  if (GetModuleFileName(0, exepath, MAX_PATH)) {
-    PathRemoveFileSpec(exepath);
-    if ((lstrlen(exepath) + lstrlen(path) + 1) < MAX_PATH) {
-      lstrcat(exepath, L"\\");
-      lstrcat(exepath, path);
+  if (GetModuleFileNameW(0, exepath, MAX_PATH)) {
+    PathRemoveFileSpecW(exepath);
+    if ((wcslen(exepath) + wcslen(path) + 1) < MAX_PATH) {
+      wcscat(exepath, L"\\");
+      wcscat(exepath, path);
       path = exepath;
     }
   }
-  HANDLE file = CreateFile(path, GENERIC_READ,
+  HANDLE file = CreateFileW(path, GENERIC_READ,
                             0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
   if (file == INVALID_HANDLE_VALUE) goto err;
   DWORD filesize = GetFileSize(file, 0);
