@@ -5,7 +5,7 @@ ICONFILES=../fmplayer.png ../fmplayer32.png
 
 DEFINES=UNICODE _UNICODE \
         WINVER=0x0500 _WIN32_WINNT=0x0500 \
-        DIRECTSOUND_VERSION=0x0800
+        DIRECTSOUND_VERSION=0x0800 FMPLAYER_FILE_WIN_UTF16
 
 FMDRIVER_OBJS=fmdriver_pmd \
               fmdriver_fmp \
