@@ -1,0 +1,5 @@
+#version 110
+#define lowp
+#define mediump
+#define highp
+
