@@ -3,6 +3,7 @@
 #include "font.h"
 #include "fmdriver/fmdriver.h"
 #include "libopna/opna.h"
+#include "version.h"
 
 #include "fmdsp_sprites.h"
 #include <stdlib.h>
@@ -103,8 +104,8 @@ static const uint8_t track_disp_table_13[] = {
 struct fmdsp_pacc {
   struct pacc_ctx *pc;
   struct pacc_vtable pacc;
-  struct pacc_tex *tex_font, *tex_checker, *tex_key_left, *tex_key_right, *tex_key_mask, *tex_key_bg, *tex_num, *tex_dt_sign, *tex_solid, *tex_vertical, *tex_horizontal, *tex_logo;
-  struct pacc_buf *buf_font_2, *buf_font_2_d, *buf_font_1, *buf_font_1_d, *buf_checker, *buf_key_left, *buf_key_right, *buf_key_mask, *buf_key_mask_sub, *buf_key_bg, *buf_num, *buf_dt_sign, *buf_solid_2, *buf_solid_3, *buf_solid_7, *buf_vertical_2, *buf_vertical_3, *buf_vertical_7, *buf_logo;
+  struct pacc_tex *tex_font, *tex_checker, *tex_key_left, *tex_key_right, *tex_key_mask, *tex_key_bg, *tex_num, *tex_dt_sign, *tex_solid, *tex_vertical, *tex_horizontal, *tex_logo, *tex_ver, *tex_text, *tex_tri, *tex_curl_left, *tex_curl_right;
+  struct pacc_buf *buf_font_7, *buf_font_2, *buf_font_2_d, *buf_font_1, *buf_font_1_d, *buf_checker, *buf_key_left, *buf_key_right, *buf_key_mask, *buf_key_mask_sub, *buf_key_bg, *buf_num, *buf_dt_sign, *buf_solid_2, *buf_solid_2_d, *buf_solid_3_d, *buf_solid_7, *buf_solid_7_d, *buf_vertical_2, *buf_vertical_3, *buf_vertical_7, *buf_logo, *buf_ver, *buf_text, *buf_tri_7, *buf_curl_left, *buf_curl_right;
   struct opna *opna;
   struct fmdriver_work *work;
   uint8_t curr_palette[FMDSP_PALETTE_COLORS*3];
@@ -141,6 +142,7 @@ void fmdsp_pacc_release(struct fmdsp_pacc *fp) {
       fp->pacc.buf_delete(fp->buf_font_1_d);
       fp->pacc.buf_delete(fp->buf_font_2);
       fp->pacc.buf_delete(fp->buf_font_2_d);
+      fp->pacc.buf_delete(fp->buf_font_7);
       fp->pacc.buf_delete(fp->buf_checker);
       fp->pacc.buf_delete(fp->buf_key_left);
       fp->pacc.buf_delete(fp->buf_key_right);
@@ -150,12 +152,19 @@ void fmdsp_pacc_release(struct fmdsp_pacc *fp) {
       fp->pacc.buf_delete(fp->buf_num);
       fp->pacc.buf_delete(fp->buf_dt_sign);
       fp->pacc.buf_delete(fp->buf_solid_2);
-      fp->pacc.buf_delete(fp->buf_solid_3);
+      fp->pacc.buf_delete(fp->buf_solid_2_d);
+      fp->pacc.buf_delete(fp->buf_solid_3_d);
       fp->pacc.buf_delete(fp->buf_solid_7);
+      fp->pacc.buf_delete(fp->buf_solid_7_d);
       fp->pacc.buf_delete(fp->buf_vertical_2);
       fp->pacc.buf_delete(fp->buf_vertical_3);
       fp->pacc.buf_delete(fp->buf_vertical_7);
       fp->pacc.buf_delete(fp->buf_logo);
+      fp->pacc.buf_delete(fp->buf_ver);
+      fp->pacc.buf_delete(fp->buf_text);
+      fp->pacc.buf_delete(fp->buf_tri_7);
+      fp->pacc.buf_delete(fp->buf_curl_left);
+      fp->pacc.buf_delete(fp->buf_curl_right);
       fp->pacc.tex_delete(fp->tex_font);
       fp->pacc.tex_delete(fp->tex_checker);
       fp->pacc.tex_delete(fp->tex_key_left);
@@ -168,6 +177,11 @@ void fmdsp_pacc_release(struct fmdsp_pacc *fp) {
       fp->pacc.tex_delete(fp->tex_vertical);
       fp->pacc.tex_delete(fp->tex_horizontal);
       fp->pacc.tex_delete(fp->tex_logo);
+      fp->pacc.tex_delete(fp->tex_ver);
+      fp->pacc.tex_delete(fp->tex_text);
+      fp->pacc.tex_delete(fp->tex_tri);
+      fp->pacc.tex_delete(fp->tex_curl_left);
+      fp->pacc.tex_delete(fp->tex_curl_right);
     }
     free(fp);
   }
@@ -255,6 +269,9 @@ static void update_track_without_key(
   int tracknum = track_type_table[t].num;
   int num1 = (tracknum/10) % 10;
   int num2 = tracknum % 10;
+  if (fp->masked[t]) {
+    num1 = num2 = 10;
+  }
   fp->pacc.buf_rect_off(
       fp->pc, fp->buf_num,
       x+NUM_X+NUM_W*0, y+1,
@@ -339,9 +356,11 @@ static void update_track_without_key(
   fp->pacc.buf_rect_off(
       fp->pc, fp->buf_dt_sign,
       x+TDETAIL_DT_S_X, y+6+2, DT_SIGN_W, DT_SIGN_H, 0, DT_SIGN_H*sign);
-  struct pacc_buf *buf_rect = ((track->key & 0xf) == 0xf) ? fp->buf_solid_7 : fp->buf_solid_2;
-  if (!track->playing) buf_rect = fp->buf_solid_3;
-  struct pacc_buf *buf_vertical = ((track->key & 0xf) == 0xf) ? fp->buf_vertical_7 : fp->buf_vertical_2;
+  struct pacc_buf *buf_rect = (((track->key & 0xf) == 0xf) || fp->masked[t]) ?
+    fp->buf_solid_7_d : fp->buf_solid_2_d;
+  if (!track->playing) buf_rect = fp->buf_solid_3_d;
+  struct pacc_buf *buf_vertical = (((track->key & 0xf) == 0xf) || fp->masked[t]) ?
+    fp->buf_vertical_7 : fp->buf_vertical_2;
   if (!track->playing) buf_vertical = fp->buf_vertical_3;
   fp->pacc.buf_rect(fp->pc, buf_rect, x+BAR_L_X, y+BAR_Y, BAR_L_W-1, BAR_H);
   int width = track->ticks_left>>2;
@@ -368,9 +387,11 @@ static void update_track_13(struct fmdsp_pacc *fp, int x) {
               KEY_W, KEY_H_S,
               0, KEY_H*(track->actual_key&0xf) + KEY_S_OFF_Y);
         }
+        struct pacc_buf *buf_key_mask = fp->masked[t] ?
+          fp->buf_key_mask_sub : fp->buf_key_mask;
         if ((track->key >> 4) == i) {
           fp->pacc.buf_rect_off(
-              fp->pc, fp->buf_key_mask,
+              fp->pc, buf_key_mask,
               x+KEY_X+KEY_W*i, TRACK_H_S*it+KEY_Y,
               KEY_W, KEY_H_S,
               0, KEY_H*(track->key&0xf) + KEY_S_OFF_Y);
@@ -395,9 +416,11 @@ static void update_track_10(struct fmdsp_pacc *fp, const uint8_t *track_table, i
               KEY_W, KEY_H,
               0, KEY_H*(track->actual_key&0xf));
         }
+        struct pacc_buf *buf_key_mask = fp->masked[t] ?
+          fp->buf_key_mask_sub : fp->buf_key_mask;
         if ((track->key >> 4) == i) {
           fp->pacc.buf_rect_off(
-              fp->pc, fp->buf_key_mask,
+              fp->pc, buf_key_mask,
               x+KEY_X+KEY_W*i, TRACK_H*it+KEY_Y,
               KEY_W, KEY_H,
               0, KEY_H*(track->key&0xf));
@@ -439,6 +462,16 @@ struct fmdsp_pacc *fmdsp_pacc_init(
   if (!fp->tex_horizontal) goto err;
   fp->tex_logo = fp->pacc.gen_tex(fp->pc, LOGO_W, LOGO_H);
   if (!fp->tex_logo) goto err;
+  fp->tex_ver = fp->pacc.gen_tex(fp->pc, VER_W, VER_H);
+  if (!fp->tex_ver) goto err;
+  fp->tex_text = fp->pacc.gen_tex(fp->pc, TOP_TEXT_W, TOP_TEXT_H);
+  if (!fp->tex_text) goto err;
+  fp->tex_tri = fp->pacc.gen_tex(fp->pc, FILEBAR_TRI_W, FILEBAR_TRI_H);
+  if (!fp->tex_tri) goto err;
+  fp->tex_curl_left = fp->pacc.gen_tex(fp->pc, CURL_W, CURL_H);
+  if (!fp->tex_curl_left) goto err;
+  fp->tex_curl_right = fp->pacc.gen_tex(fp->pc, CURL_W, CURL_H);
+  if (!fp->tex_curl_right) goto err;
 
   uint8_t *buf;
   buf = fp->pacc.tex_lock(fp->tex_checker);
@@ -462,6 +495,21 @@ struct fmdsp_pacc *fmdsp_pacc_init(
   buf = fp->pacc.tex_lock(fp->tex_dt_sign);
   memcpy(buf, s_dt_sign, DT_SIGN_W*DT_SIGN_H*3);
   fp->pacc.tex_unlock(fp->tex_dt_sign);
+  buf = fp->pacc.tex_lock(fp->tex_ver);
+  memcpy(buf, s_ver, VER_W*VER_H);
+  fp->pacc.tex_unlock(fp->tex_ver);
+  buf = fp->pacc.tex_lock(fp->tex_text);
+  memcpy(buf, s_text, TOP_TEXT_W*TOP_TEXT_H);
+  fp->pacc.tex_unlock(fp->tex_text);
+  buf = fp->pacc.tex_lock(fp->tex_tri);
+  memcpy(buf, s_filebar_tri, FILEBAR_TRI_W*FILEBAR_TRI_H);
+  fp->pacc.tex_unlock(fp->tex_tri);
+  buf = fp->pacc.tex_lock(fp->tex_curl_left);
+  memcpy(buf, s_curl_left, CURL_W*CURL_H);
+  fp->pacc.tex_unlock(fp->tex_curl_left);
+  buf = fp->pacc.tex_lock(fp->tex_curl_right);
+  memcpy(buf, s_curl_right, CURL_W*CURL_H);
+  fp->pacc.tex_unlock(fp->tex_curl_right);
   buf = fp->pacc.tex_lock(fp->tex_solid);
   buf[0] = 1;
   fp->pacc.tex_unlock(fp->tex_solid);
@@ -505,6 +553,8 @@ struct fmdsp_pacc *fmdsp_pacc_init(
   if (!fp->buf_font_2) goto err;
   fp->buf_font_2_d = fp->pacc.gen_buf(fp->pc, fp->tex_font, pacc_buf_mode_stream);
   if (!fp->buf_font_2_d) goto err;
+  fp->buf_font_7 = fp->pacc.gen_buf(fp->pc, fp->tex_font, pacc_buf_mode_static);
+  if (!fp->buf_font_7) goto err;
   fp->buf_checker = fp->pacc.gen_buf(fp->pc, fp->tex_checker, pacc_buf_mode_static);
   if (!fp->buf_checker) goto err;
   fp->buf_key_left = fp->pacc.gen_buf(fp->pc, fp->tex_key_left, pacc_buf_mode_static);
@@ -515,18 +565,22 @@ struct fmdsp_pacc *fmdsp_pacc_init(
   if (!fp->buf_key_left) goto err;
   fp->buf_key_mask_sub = fp->pacc.gen_buf(fp->pc, fp->tex_key_mask, pacc_buf_mode_stream);
   if (!fp->buf_key_mask_sub) goto err;
-  fp->buf_key_bg= fp->pacc.gen_buf(fp->pc, fp->tex_key_bg, pacc_buf_mode_static);
+  fp->buf_key_bg = fp->pacc.gen_buf(fp->pc, fp->tex_key_bg, pacc_buf_mode_static);
   if (!fp->buf_key_bg) goto err;
   fp->buf_num = fp->pacc.gen_buf(fp->pc, fp->tex_num, pacc_buf_mode_stream);
   if (!fp->buf_num) goto err;
   fp->buf_dt_sign = fp->pacc.gen_buf(fp->pc, fp->tex_dt_sign, pacc_buf_mode_stream);
   if (!fp->buf_dt_sign) goto err;
-  fp->buf_solid_2 = fp->pacc.gen_buf(fp->pc, fp->tex_solid, pacc_buf_mode_stream);
+  fp->buf_solid_2 = fp->pacc.gen_buf(fp->pc, fp->tex_solid, pacc_buf_mode_static);
   if (!fp->buf_solid_2) goto err;
-  fp->buf_solid_3 = fp->pacc.gen_buf(fp->pc, fp->tex_solid, pacc_buf_mode_stream);
-  if (!fp->buf_solid_3) goto err;
-  fp->buf_solid_7 = fp->pacc.gen_buf(fp->pc, fp->tex_solid, pacc_buf_mode_stream);
+  fp->buf_solid_2_d = fp->pacc.gen_buf(fp->pc, fp->tex_solid, pacc_buf_mode_stream);
+  if (!fp->buf_solid_2_d) goto err;
+  fp->buf_solid_3_d = fp->pacc.gen_buf(fp->pc, fp->tex_solid, pacc_buf_mode_stream);
+  if (!fp->buf_solid_3_d) goto err;
+  fp->buf_solid_7 = fp->pacc.gen_buf(fp->pc, fp->tex_solid, pacc_buf_mode_static);
   if (!fp->buf_solid_7) goto err;
+  fp->buf_solid_7_d = fp->pacc.gen_buf(fp->pc, fp->tex_solid, pacc_buf_mode_stream);
+  if (!fp->buf_solid_7_d) goto err;
   fp->buf_vertical_2 = fp->pacc.gen_buf(fp->pc, fp->tex_vertical, pacc_buf_mode_stream);
   if (!fp->buf_vertical_2) goto err;
   fp->buf_vertical_3 = fp->pacc.gen_buf(fp->pc, fp->tex_vertical, pacc_buf_mode_stream);
@@ -535,6 +589,16 @@ struct fmdsp_pacc *fmdsp_pacc_init(
   if (!fp->buf_vertical_7) goto err;
   fp->buf_logo = fp->pacc.gen_buf(fp->pc, fp->tex_logo, pacc_buf_mode_static);
   if (!fp->buf_logo) goto err;
+  fp->buf_ver = fp->pacc.gen_buf(fp->pc, fp->tex_ver, pacc_buf_mode_static);
+  if (!fp->buf_ver) goto err;
+  fp->buf_text = fp->pacc.gen_buf(fp->pc, fp->tex_text, pacc_buf_mode_static);
+  if (!fp->buf_text) goto err;
+  fp->buf_tri_7 = fp->pacc.gen_buf(fp->pc, fp->tex_tri, pacc_buf_mode_static);
+  if (!fp->buf_tri_7) goto err;
+  fp->buf_curl_left = fp->pacc.gen_buf(fp->pc, fp->tex_curl_left, pacc_buf_mode_static);
+  if (!fp->buf_curl_left) goto err;
+  fp->buf_curl_right = fp->pacc.gen_buf(fp->pc, fp->tex_curl_right, pacc_buf_mode_static);
+  if (!fp->buf_curl_right) goto err;
 
   fp->pacc.buf_rect_off(fp->pc, fp->buf_checker, 1, CHECKER_Y, PC98_W-1, CHECKER_H, 1, 0);
   fp->pacc.buf_rect(fp->pc, fp->buf_checker, 0, CHECKER_Y+2, 1, CHECKER_H-4);
@@ -546,13 +610,218 @@ err:
   return 0;
 }
 
+static void init_default(struct fmdsp_pacc *fp) {
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_logo,
+      LOGO_FM_X, LOGO_Y, LOGO_W, LOGO_H);
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TOP_MUS_X, TOP_MUSIC_Y,
+      "MUS");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TOP_IC_X, TOP_MUSIC_Y,
+      "IC");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TOP_F_X, TOP_MUSIC_Y,
+      "F");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TOP_ILE_X, TOP_MUSIC_Y,
+      "ILE");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TOP_SELECTOR_X, TOP_MUSIC_Y,
+      "SELECTOR");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TOP_AND_X, TOP_MUSIC_Y,
+      "&");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TOP_STATUS_X, TOP_MUSIC_Y,
+      "STATUS");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TOP_D_X, TOP_MUSIC_Y,
+      "D");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TOP_ISPLAY_X, TOP_MUSIC_Y,
+      "ISPLAY");
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_ver,
+      TOP_VER_X, VER_Y,
+      VER_W, VER_H);
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      VER_0_X, TOP_MUSIC_Y,
+      "%s.", FMPLAYER_VERSION_0);
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      VER_1_X, TOP_MUSIC_Y,
+      "%s.", FMPLAYER_VERSION_1);
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      VER_2_X, TOP_MUSIC_Y,
+      "%s", FMPLAYER_VERSION_2);
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_text,
+      TOP_MUS_X, TOP_TEXT_Y, TOP_TEXT_W, TOP_TEXT_H);
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_7,
+      DRIVER_TEXT_X, DRIVER_TEXT_Y,
+      "DR");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_7,
+      DRIVER_TEXT_2_X, DRIVER_TEXT_Y,
+      "IVER");
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_tri_7,
+      DRIVER_TRI_X, DRIVER_TRI_Y,
+      FILEBAR_TRI_W, FILEBAR_TRI_H);
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_curl_left,
+      CURL_LEFT_X, CURL_Y,
+      CURL_W, CURL_H);
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_curl_right,
+      CURL_RIGHT_X, CURL_Y,
+      CURL_W, CURL_H);
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_solid_2,
+      312, 14, 82, 1);
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_solid_7,
+      395, 14, 239, 1);
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_solid_2,
+      TIME_BAR_X, TIME_Y-2, TIME_BAR_W, TIME_BAR_H);
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_solid_2,
+      TIME_BAR_X, CLOCK_Y-2, TIME_BAR_W, TIME_BAR_H);
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_solid_2,
+      TIME_BAR_X, TIMERB_Y-2, TIME_BAR_W, TIME_BAR_H);
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_solid_2,
+      TIME_BAR_X, LOOPCNT_Y-2, TIME_BAR_W, TIME_BAR_H);
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_solid_2,
+      TIME_BAR_X, VOLDOWN_Y-2, TIME_BAR_W, TIME_BAR_H);
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_solid_2,
+      TIME_BAR_X, PGMNUM_Y-2, TIME_BAR_W, TIME_BAR_H);
+
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X, TIME_Y-2,
+      "PASSED");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X+11, TIME_Y+5,
+      "T");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X+15, TIME_Y+5,
+      "IME");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X, CLOCK_Y-2,
+      "CLOCK");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X+5, CLOCK_Y+5,
+      "COUNT");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X, TIMERB_Y-2,
+      "T");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X+4, TIMERB_Y-2,
+      "IMER");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X+5, TIMERB_Y+5,
+      "CYCLE");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X, LOOPCNT_Y-2,
+      "LOOP");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X+5, LOOPCNT_Y+5,
+      "COUNT");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X, VOLDOWN_Y-2,
+      "VOLUME");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X+10, VOLDOWN_Y+5,
+      "DOWN");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X, PGMNUM_Y-2,
+      "PGM");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      TIME_TEXT_X, PGMNUM_Y+5,
+      "NUMBER");
+
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_solid_2,
+      CPU_BAR_X, CPU_Y, TIME_BAR_W, TIME_BAR_H);
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      CPU_X, CPU_Y,
+      "CPU");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      CPU_X+17, CPU_Y,
+      "POWER");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      CPU_X+17, CPU_Y+7,
+      "COUNT");
+
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_solid_2,
+      FPS_BAR_X, CPU_Y, TIME_BAR_W, TIME_BAR_H);
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      FPS_X, CPU_Y,
+      "FRAMES");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      FPS_X+32, CPU_Y,
+      "PER");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2,
+      FPS_X+17, CPU_Y+7,
+      "SECOND");
+}
+
 static void mode_update(struct fmdsp_pacc *fp) {
   fp->pacc.buf_clear(fp->buf_font_1);
   fp->pacc.buf_clear(fp->buf_font_2);
+  fp->pacc.buf_clear(fp->buf_font_7);
+  fp->pacc.buf_clear(fp->buf_solid_2);
+  fp->pacc.buf_clear(fp->buf_solid_7);
   fp->pacc.buf_clear(fp->buf_key_left);
   fp->pacc.buf_clear(fp->buf_key_right);
   fp->pacc.buf_clear(fp->buf_key_bg);
   fp->pacc.buf_clear(fp->buf_logo);
+  fp->pacc.buf_clear(fp->buf_ver);
+  fp->pacc.buf_clear(fp->buf_text);
+  fp->pacc.buf_clear(fp->buf_tri_7);
+  fp->pacc.buf_clear(fp->buf_checker);
+  fp->pacc.buf_clear(fp->buf_curl_left);
+  fp->pacc.buf_clear(fp->buf_curl_right);
+  fp->pacc.buf_rect_off(fp->pc, fp->buf_checker, 1, CHECKER_Y, PC98_W-1, CHECKER_H, 1, 0);
+  fp->pacc.buf_rect(fp->pc, fp->buf_checker, 0, CHECKER_Y+2, 1, CHECKER_H-4);
   switch (fp->lmode) {
   case FMDSP_LEFT_MODE_OPNA:
     init_track_10(fp, track_disp_table_opna, 0);
@@ -571,9 +840,7 @@ static void mode_update(struct fmdsp_pacc *fp) {
   }
   switch (fp->rmode) {
   case FMDSP_RIGHT_MODE_DEFAULT:
-    fp->pacc.buf_rect(
-        fp->pc, fp->buf_logo,
-        LOGO_FM_X, LOGO_Y, LOGO_W, LOGO_H);
+    init_default(fp);
     break;
   case FMDSP_RIGHT_MODE_TRACK_INFO:
     break;
@@ -617,9 +884,9 @@ void fmdsp_pacc_render(struct fmdsp_pacc *fp) {
   fp->pacc.buf_clear(fp->buf_font_2_d);
   fp->pacc.buf_clear(fp->buf_num);
   fp->pacc.buf_clear(fp->buf_dt_sign);
-  fp->pacc.buf_clear(fp->buf_solid_2);
-  fp->pacc.buf_clear(fp->buf_solid_3);
-  fp->pacc.buf_clear(fp->buf_solid_7);
+  fp->pacc.buf_clear(fp->buf_solid_2_d);
+  fp->pacc.buf_clear(fp->buf_solid_3_d);
+  fp->pacc.buf_clear(fp->buf_solid_7_d);
   fp->pacc.buf_clear(fp->buf_vertical_2);
   fp->pacc.buf_clear(fp->buf_vertical_3);
   fp->pacc.buf_clear(fp->buf_vertical_7);
@@ -691,19 +958,27 @@ void fmdsp_pacc_render(struct fmdsp_pacc *fp) {
   fp->pacc.draw(fp->pc, fp->buf_font_2, pacc_mode_color);
   fp->pacc.draw(fp->pc, fp->buf_font_2_d, pacc_mode_color);
   fp->pacc.draw(fp->pc, fp->buf_solid_2, pacc_mode_color);
+  fp->pacc.draw(fp->pc, fp->buf_solid_2_d, pacc_mode_color);
   fp->pacc.draw(fp->pc, fp->buf_vertical_2, pacc_mode_color);
   fp->pacc.color(fp->pc, 3);
-  fp->pacc.draw(fp->pc, fp->buf_solid_3, pacc_mode_color);
+  fp->pacc.draw(fp->pc, fp->buf_solid_3_d, pacc_mode_color);
   fp->pacc.draw(fp->pc, fp->buf_vertical_3, pacc_mode_color);
   fp->pacc.color(fp->pc, 7);
+  fp->pacc.draw(fp->pc, fp->buf_font_7, pacc_mode_color);
   fp->pacc.draw(fp->pc, fp->buf_solid_7, pacc_mode_color);
+  fp->pacc.draw(fp->pc, fp->buf_solid_7_d, pacc_mode_color);
   fp->pacc.draw(fp->pc, fp->buf_vertical_7, pacc_mode_color);
+  fp->pacc.draw(fp->pc, fp->buf_tri_7, pacc_mode_color);
   fp->pacc.draw(fp->pc, fp->buf_num, pacc_mode_copy);
   fp->pacc.draw(fp->pc, fp->buf_checker, pacc_mode_copy);
   fp->pacc.draw(fp->pc, fp->buf_key_left, pacc_mode_copy);
   fp->pacc.draw(fp->pc, fp->buf_key_bg, pacc_mode_copy);
   fp->pacc.draw(fp->pc, fp->buf_key_right, pacc_mode_copy);
   fp->pacc.draw(fp->pc, fp->buf_logo, pacc_mode_copy);
+  fp->pacc.draw(fp->pc, fp->buf_ver, pacc_mode_copy);
+  fp->pacc.draw(fp->pc, fp->buf_text, pacc_mode_copy);
+  fp->pacc.draw(fp->pc, fp->buf_curl_left, pacc_mode_copy);
+  fp->pacc.draw(fp->pc, fp->buf_curl_right, pacc_mode_copy);
   fp->pacc.color(fp->pc, 8);
   fp->pacc.draw(fp->pc, fp->buf_key_mask_sub, pacc_mode_color_trans);
   fp->pacc.color(fp->pc, 6);
