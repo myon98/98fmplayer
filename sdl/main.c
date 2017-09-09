@@ -156,6 +156,54 @@ int main(int argc, char **argv) {
         openfile(e.drop.file);
         SDL_free(e.drop.file);
         break;
+      case SDL_KEYDOWN:
+        if (e.key.keysym.scancode == SDL_SCANCODE_F11) {
+          if (e.key.keysym.mod & KMOD_SHIFT) {
+            fmdsp_pacc_set_right_mode(
+                g.fp,
+                (fmdsp_pacc_right_mode(g.fp) + 1) % FMDSP_RIGHT_MODE_CNT);
+          } else {
+            fmdsp_pacc_set_left_mode(
+                g.fp,
+                (fmdsp_pacc_left_mode(g.fp) + 1) % FMDSP_LEFT_MODE_CNT);
+          }
+        }
+        if (e.key.keysym.mod & KMOD_CTRL) {
+          switch (e.key.keysym.scancode) {
+          case SDL_SCANCODE_F1:
+            fmdsp_pacc_palette(g.fp, 0);
+            break;
+          case SDL_SCANCODE_F2:
+            fmdsp_pacc_palette(g.fp, 1);
+            break;
+          case SDL_SCANCODE_F3:
+            fmdsp_pacc_palette(g.fp, 2);
+            break;
+          case SDL_SCANCODE_F4:
+            fmdsp_pacc_palette(g.fp, 3);
+            break;
+          case SDL_SCANCODE_F5:
+            fmdsp_pacc_palette(g.fp, 4);
+            break;
+          case SDL_SCANCODE_F6:
+            fmdsp_pacc_palette(g.fp, 5);
+            break;
+          case SDL_SCANCODE_F7:
+            fmdsp_pacc_palette(g.fp, 6);
+            break;
+          case SDL_SCANCODE_F8:
+            fmdsp_pacc_palette(g.fp, 7);
+            break;
+          case SDL_SCANCODE_F9:
+            fmdsp_pacc_palette(g.fp, 8);
+            break;
+          case SDL_SCANCODE_F10:
+            fmdsp_pacc_palette(g.fp, 9);
+            break;
+          default:
+            break;
+          }
+        }
       }
     }
     fmdsp_pacc_render(g.fp);

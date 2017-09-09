@@ -4,19 +4,17 @@
 #include "fmdriver/fmdriver.h"
 #include "libopna/opna.h"
 
-enum {
-  FMDSP_PALETTE_COLORS = 10,
-};
-
 #include "fmdsp_sprites.h"
 #include <stdlib.h>
 #include <string.h>
 
 enum {
-  PC98_W = 640,
-  PC98_H = 400,
-  CHECKER_H = (16+3)*3+8,
-  CHECKER_Y = PC98_H-CHECKER_H,
+  FADEDELTA = 16,
+};
+
+enum {
+  KEY_S_OFF_Y = 4,
+  LOGO_W = LOGO_FM_W + 2 + LOGO_DS_W + 2 + LOGO_P_W,
 };
 
 static const struct {
@@ -46,7 +44,7 @@ static const struct {
   {FMDRIVER_TRACKTYPE_PPZ8, 8},
 };
 
-static const uint8_t track_disp_table_default[] = {
+static const uint8_t track_disp_table_opna[] = {
   FMDRIVER_TRACK_FM_1,
   FMDRIVER_TRACK_FM_2,
   FMDRIVER_TRACK_FM_3,
@@ -84,15 +82,38 @@ static const uint8_t track_disp_table_ppz8[] = {
   FMDRIVER_TRACK_ADPCM,
   FMDRIVER_TRACK_NUM,
 };
+static const uint8_t track_disp_table_13[] = {
+  FMDRIVER_TRACK_FM_1,
+  FMDRIVER_TRACK_FM_2,
+  FMDRIVER_TRACK_FM_3,
+  FMDRIVER_TRACK_FM_3_EX_1,
+  FMDRIVER_TRACK_FM_3_EX_2,
+  FMDRIVER_TRACK_FM_3_EX_3,
+  FMDRIVER_TRACK_FM_4,
+  FMDRIVER_TRACK_FM_5,
+  FMDRIVER_TRACK_FM_6,
+  FMDRIVER_TRACK_SSG_1,
+  FMDRIVER_TRACK_SSG_2,
+  FMDRIVER_TRACK_SSG_3,
+  FMDRIVER_TRACK_ADPCM,
+  FMDRIVER_TRACK_NUM,
+};
 
 
 struct fmdsp_pacc {
   struct pacc_ctx *pc;
   struct pacc_vtable pacc;
-  struct pacc_tex *tex_font, *tex_checker, *tex_key_left, *tex_key_right, *tex_key_mask, *tex_key_bg, *tex_num, *tex_dt_sign, *tex_solid, *tex_vertical, *tex_horizontal;
-  struct pacc_buf *buf_font_2, *buf_font_2_d, *buf_font_1, *buf_font_1_d, *buf_checker, *buf_key_left, *buf_key_right, *buf_key_mask, *buf_key_mask_sub, *buf_key_bg, *buf_num, *buf_dt_sign, *buf_solid_2, *buf_solid_3, *buf_solid_7, *buf_vertical_2, *buf_vertical_3, *buf_vertical_7;
+  struct pacc_tex *tex_font, *tex_checker, *tex_key_left, *tex_key_right, *tex_key_mask, *tex_key_bg, *tex_num, *tex_dt_sign, *tex_solid, *tex_vertical, *tex_horizontal, *tex_logo;
+  struct pacc_buf *buf_font_2, *buf_font_2_d, *buf_font_1, *buf_font_1_d, *buf_checker, *buf_key_left, *buf_key_right, *buf_key_mask, *buf_key_mask_sub, *buf_key_bg, *buf_num, *buf_dt_sign, *buf_solid_2, *buf_solid_3, *buf_solid_7, *buf_vertical_2, *buf_vertical_3, *buf_vertical_7, *buf_logo;
   struct opna *opna;
   struct fmdriver_work *work;
+  uint8_t curr_palette[FMDSP_PALETTE_COLORS*3];
+  uint8_t target_palette[FMDSP_PALETTE_COLORS*3];
+  enum fmdsp_left_mode lmode;
+  enum fmdsp_right_mode rmode;
+  bool mode_changed;
+  bool masked[FMDRIVER_TRACK_NUM];
+  bool masked_rhythm;
 };
 
 static struct pacc_tex *tex_from_font(
@@ -134,6 +155,7 @@ void fmdsp_pacc_release(struct fmdsp_pacc *fp) {
       fp->pacc.buf_delete(fp->buf_vertical_2);
       fp->pacc.buf_delete(fp->buf_vertical_3);
       fp->pacc.buf_delete(fp->buf_vertical_7);
+      fp->pacc.buf_delete(fp->buf_logo);
       fp->pacc.tex_delete(fp->tex_font);
       fp->pacc.tex_delete(fp->tex_checker);
       fp->pacc.tex_delete(fp->tex_key_left);
@@ -145,6 +167,7 @@ void fmdsp_pacc_release(struct fmdsp_pacc *fp) {
       fp->pacc.tex_delete(fp->tex_solid);
       fp->pacc.tex_delete(fp->tex_vertical);
       fp->pacc.tex_delete(fp->tex_horizontal);
+      fp->pacc.tex_delete(fp->tex_logo);
     }
     free(fp);
   }
@@ -196,6 +219,19 @@ static void init_track_without_key(
   fp->pacc.buf_printf(
       fp->pc, fp->buf_font_1,
       x+TDETAIL_M_X, y+6, "M:");
+}
+
+static void init_track_13(struct fmdsp_pacc *fp, int x) {
+  const uint8_t *track_table = track_disp_table_13;
+  for (int i = 0; i < 13; i++) {
+    int t = track_table[i];
+    init_track_without_key(fp, t, x, TRACK_H_S*i);
+    fp->pacc.buf_rect_off(fp->pc, fp->buf_key_left, x+KEY_LEFT_X, TRACK_H_S*i+KEY_Y, KEY_LEFT_W, KEY_H_S, 0, KEY_S_OFF_Y);
+    for (int j = 0; j < KEY_OCTAVES; j++) {
+      fp->pacc.buf_rect_off(fp->pc, fp->buf_key_bg, x+KEY_X+KEY_W*j, TRACK_H_S*i+KEY_Y, KEY_W, KEY_H_S, 0, KEY_S_OFF_Y);
+    }
+    fp->pacc.buf_rect_off(fp->pc, fp->buf_key_right, x+KEY_X+KEY_W*KEY_OCTAVES, TRACK_H_S*i+KEY_Y, KEY_RIGHT_W, KEY_H_S, 0, KEY_S_OFF_Y);
+  }
 }
 
 static void init_track_10(struct fmdsp_pacc *fp, const uint8_t *track_table, int x) {
@@ -317,6 +353,33 @@ static void update_track_without_key(
       x+BAR_X+BAR_W*(track->ticks>>2), y+BAR_Y, BAR_W, BAR_H);
 }
 
+static void update_track_13(struct fmdsp_pacc *fp, int x) {
+  const uint8_t *track_table = track_disp_table_13;
+  for (int it = 0; it < 13; it++) {
+    int t = track_table[it];
+    const struct fmdriver_track_status *track = &fp->work->track_status[t];
+    update_track_without_key(fp, t, x, TRACK_H_S*it);
+    for (int i = 0; i < KEY_OCTAVES; i++) {
+      if (track->playing || track->info == FMDRIVER_TRACK_INFO_SSGEFF) {
+        if ((track->actual_key >> 4) == i) {
+          fp->pacc.buf_rect_off(
+              fp->pc, fp->buf_key_mask_sub,
+              x+KEY_X+KEY_W*i, TRACK_H_S*it+KEY_Y,
+              KEY_W, KEY_H_S,
+              0, KEY_H*(track->actual_key&0xf) + KEY_S_OFF_Y);
+        }
+        if ((track->key >> 4) == i) {
+          fp->pacc.buf_rect_off(
+              fp->pc, fp->buf_key_mask,
+              x+KEY_X+KEY_W*i, TRACK_H_S*it+KEY_Y,
+              KEY_W, KEY_H_S,
+              0, KEY_H*(track->key&0xf) + KEY_S_OFF_Y);
+        }
+      }
+    }
+  }
+}
+
 static void update_track_10(struct fmdsp_pacc *fp, const uint8_t *track_table, int x) {
   for (int it = 0; it < 10; it++) {
     int t = track_table[it];
@@ -367,13 +430,15 @@ struct fmdsp_pacc *fmdsp_pacc_init(
   fp->tex_num = fp->pacc.gen_tex(fp->pc, NUM_W, NUM_H*11);
   if (!fp->tex_num) goto err;
   fp->tex_dt_sign = fp->pacc.gen_tex(fp->pc, DT_SIGN_W, DT_SIGN_H*3);
-  if (!fp->tex_num) goto err;
+  if (!fp->tex_dt_sign) goto err;
   fp->tex_solid = fp->pacc.gen_tex(fp->pc, 1, 1);
-  if (!fp->tex_num) goto err;
+  if (!fp->tex_solid) goto err;
   fp->tex_vertical = fp->pacc.gen_tex(fp->pc, 2, 1);
-  if (!fp->tex_num) goto err;
+  if (!fp->tex_vertical) goto err;
   fp->tex_horizontal = fp->pacc.gen_tex(fp->pc, 1, 2);
-  if (!fp->tex_num) goto err;
+  if (!fp->tex_horizontal) goto err;
+  fp->tex_logo = fp->pacc.gen_tex(fp->pc, LOGO_W, LOGO_H);
+  if (!fp->tex_logo) goto err;
 
   uint8_t *buf;
   buf = fp->pacc.tex_lock(fp->tex_checker);
@@ -415,6 +480,22 @@ struct fmdsp_pacc *fmdsp_pacc_init(
     }
   }
   fp->pacc.tex_unlock(fp->tex_key_mask);
+  buf = fp->pacc.tex_lock(fp->tex_logo);
+  for (int y = 0; y < LOGO_H; y++) {
+    memcpy(
+        buf + y*LOGO_W,
+        s_logo_fm + y*LOGO_FM_W,
+        LOGO_FM_W);
+    memcpy(
+        buf + y*LOGO_W + LOGO_FM_W + 2,
+        s_logo_ds + y*LOGO_DS_W,
+        LOGO_DS_W);
+    memcpy(
+        buf + y*LOGO_W + LOGO_FM_W + 2 + LOGO_DS_W + 2,
+        s_logo_p + y*LOGO_P_W,
+        LOGO_P_W);
+  }
+  fp->pacc.tex_unlock(fp->tex_logo);
 
   fp->buf_font_1 = fp->pacc.gen_buf(fp->pc, fp->tex_font, pacc_buf_mode_static);
   if (!fp->buf_font_1) goto err;
@@ -452,19 +533,84 @@ struct fmdsp_pacc *fmdsp_pacc_init(
   if (!fp->buf_vertical_3) goto err;
   fp->buf_vertical_7 = fp->pacc.gen_buf(fp->pc, fp->tex_vertical, pacc_buf_mode_stream);
   if (!fp->buf_vertical_7) goto err;
+  fp->buf_logo = fp->pacc.gen_buf(fp->pc, fp->tex_logo, pacc_buf_mode_static);
+  if (!fp->buf_logo) goto err;
 
   fp->pacc.buf_rect_off(fp->pc, fp->buf_checker, 1, CHECKER_Y, PC98_W-1, CHECKER_H, 1, 0);
   fp->pacc.buf_rect(fp->pc, fp->buf_checker, 0, CHECKER_Y+2, 1, CHECKER_H-4);
-  fp->pacc.palette(fp->pc, s_palettes[5], FMDSP_PALETTE_COLORS);
-  init_track_10(fp, track_disp_table_default, 0);
-  init_track_10(fp, track_disp_table_ppz8, 320);
+  memcpy(fp->target_palette, s_palettes[0], sizeof(fp->target_palette));
+  fp->mode_changed = true;
   return fp;
 err:
   fmdsp_pacc_release(fp);
   return 0;
 }
 
+static void mode_update(struct fmdsp_pacc *fp) {
+  fp->pacc.buf_clear(fp->buf_font_1);
+  fp->pacc.buf_clear(fp->buf_font_2);
+  fp->pacc.buf_clear(fp->buf_key_left);
+  fp->pacc.buf_clear(fp->buf_key_right);
+  fp->pacc.buf_clear(fp->buf_key_bg);
+  fp->pacc.buf_clear(fp->buf_logo);
+  switch (fp->lmode) {
+  case FMDSP_LEFT_MODE_OPNA:
+    init_track_10(fp, track_disp_table_opna, 0);
+    break;
+  case FMDSP_LEFT_MODE_OPN:
+    init_track_10(fp, track_disp_table_opn, 0);
+    break;
+  case FMDSP_LEFT_MODE_13:
+    init_track_13(fp, 0);
+    break;
+  case FMDSP_LEFT_MODE_PPZ8:
+    init_track_10(fp, track_disp_table_ppz8, 0);
+    break;
+  default:
+    break;
+  }
+  switch (fp->rmode) {
+  case FMDSP_RIGHT_MODE_DEFAULT:
+    fp->pacc.buf_rect(
+        fp->pc, fp->buf_logo,
+        LOGO_FM_X, LOGO_Y, LOGO_W, LOGO_H);
+    break;
+  case FMDSP_RIGHT_MODE_TRACK_INFO:
+    break;
+  case FMDSP_RIGHT_MODE_PPZ8:
+    init_track_10(fp, track_disp_table_ppz8, 320);
+    break;
+  default:
+    break;
+  }
+}
+
 void fmdsp_pacc_render(struct fmdsp_pacc *fp) {
+  if (memcmp(fp->curr_palette, fp->target_palette, sizeof(fp->target_palette))) {
+    for (int i = 0; i < FMDSP_PALETTE_COLORS*3; i++) {
+      uint8_t p = fp->curr_palette[i];
+      uint8_t t = fp->target_palette[i];
+      if (p < t) {
+        if ((p + FADEDELTA) < t) {
+          p += FADEDELTA;
+        } else {
+          p = t;
+        }
+      } else if (p > t) {
+        if (p > (t + FADEDELTA)) {
+          p -= FADEDELTA;
+        } else {
+          p = t;
+        }
+      }
+      fp->curr_palette[i] = p;
+    }
+    fp->pacc.palette(fp->pc, fp->curr_palette, FMDSP_PALETTE_COLORS);
+  }
+  if (fp->mode_changed) {
+    mode_update(fp);
+    fp->mode_changed = false;
+  }
   fp->pacc.buf_clear(fp->buf_key_mask);
   fp->pacc.buf_clear(fp->buf_key_mask_sub);
   fp->pacc.buf_clear(fp->buf_font_1_d);
@@ -477,9 +623,64 @@ void fmdsp_pacc_render(struct fmdsp_pacc *fp) {
   fp->pacc.buf_clear(fp->buf_vertical_2);
   fp->pacc.buf_clear(fp->buf_vertical_3);
   fp->pacc.buf_clear(fp->buf_vertical_7);
+  unsigned mask = 0;
+  if (fp->opna) {
+    mask = opna_get_mask(fp->opna);
+  }
+  fp->masked[FMDRIVER_TRACK_FM_1] = mask & LIBOPNA_CHAN_FM_1;
+  fp->masked[FMDRIVER_TRACK_FM_2] = mask & LIBOPNA_CHAN_FM_2;
+  fp->masked[FMDRIVER_TRACK_FM_3] = mask & LIBOPNA_CHAN_FM_3;
+  fp->masked[FMDRIVER_TRACK_FM_3_EX_1] = mask & LIBOPNA_CHAN_FM_3;
+  fp->masked[FMDRIVER_TRACK_FM_3_EX_2] = mask & LIBOPNA_CHAN_FM_3;
+  fp->masked[FMDRIVER_TRACK_FM_3_EX_3] = mask & LIBOPNA_CHAN_FM_3;
+  fp->masked[FMDRIVER_TRACK_FM_4] = mask & LIBOPNA_CHAN_FM_4;
+  fp->masked[FMDRIVER_TRACK_FM_5] = mask & LIBOPNA_CHAN_FM_5;
+  fp->masked[FMDRIVER_TRACK_FM_6] = mask & LIBOPNA_CHAN_FM_6;
+  fp->masked[FMDRIVER_TRACK_SSG_1] = mask & LIBOPNA_CHAN_SSG_1;
+  fp->masked[FMDRIVER_TRACK_SSG_2] = mask & LIBOPNA_CHAN_SSG_2;
+  fp->masked[FMDRIVER_TRACK_SSG_3] = mask & LIBOPNA_CHAN_SSG_3;
+  fp->masked[FMDRIVER_TRACK_ADPCM] = mask & LIBOPNA_CHAN_ADPCM;
+  fp->masked_rhythm = (mask & LIBOPNA_CHAN_DRUM_ALL) == LIBOPNA_CHAN_DRUM_ALL;
+  unsigned ppz8mask = 0;
+  if (fp->work && fp->work->ppz8) {
+    ppz8mask = ppz8_get_mask(fp->work->ppz8);
+  }
+  fp->masked[FMDRIVER_TRACK_PPZ8_1] = ppz8mask & (1u<<0);
+  fp->masked[FMDRIVER_TRACK_PPZ8_2] = ppz8mask & (1u<<1);
+  fp->masked[FMDRIVER_TRACK_PPZ8_3] = ppz8mask & (1u<<2);
+  fp->masked[FMDRIVER_TRACK_PPZ8_4] = ppz8mask & (1u<<3);
+  fp->masked[FMDRIVER_TRACK_PPZ8_5] = ppz8mask & (1u<<4);
+  fp->masked[FMDRIVER_TRACK_PPZ8_6] = ppz8mask & (1u<<5);
+  fp->masked[FMDRIVER_TRACK_PPZ8_7] = ppz8mask & (1u<<6);
+  fp->masked[FMDRIVER_TRACK_PPZ8_8] = ppz8mask & (1u<<7);
   if (fp->work) {
-    update_track_10(fp, track_disp_table_default, 0);
-    update_track_10(fp, track_disp_table_ppz8, 320);
+    switch (fp->lmode) {
+    case FMDSP_LEFT_MODE_OPNA:
+      update_track_10(fp, track_disp_table_opna, 0);
+      break;
+    case FMDSP_LEFT_MODE_OPN:
+      update_track_10(fp, track_disp_table_opn, 0);
+      break;
+    case FMDSP_LEFT_MODE_13:
+      update_track_13(fp, 0);
+      break;
+    case FMDSP_LEFT_MODE_PPZ8:
+      update_track_10(fp, track_disp_table_ppz8, 0);
+      break;
+    default:
+      break;
+    }
+    switch (fp->rmode) {
+    case FMDSP_RIGHT_MODE_DEFAULT:
+      break;
+    case FMDSP_RIGHT_MODE_TRACK_INFO:
+      break;
+    case FMDSP_RIGHT_MODE_PPZ8:
+      update_track_10(fp, track_disp_table_ppz8, 320);
+      break;
+    default:
+      break;
+    }
   }
   fp->pacc.begin_clear(fp->pc);
   fp->pacc.color(fp->pc, 1);
@@ -502,6 +703,7 @@ void fmdsp_pacc_render(struct fmdsp_pacc *fp) {
   fp->pacc.draw(fp->pc, fp->buf_key_left, pacc_mode_copy);
   fp->pacc.draw(fp->pc, fp->buf_key_bg, pacc_mode_copy);
   fp->pacc.draw(fp->pc, fp->buf_key_right, pacc_mode_copy);
+  fp->pacc.draw(fp->pc, fp->buf_logo, pacc_mode_copy);
   fp->pacc.color(fp->pc, 8);
   fp->pacc.draw(fp->pc, fp->buf_key_mask_sub, pacc_mode_color_trans);
   fp->pacc.color(fp->pc, 6);
@@ -511,4 +713,28 @@ void fmdsp_pacc_render(struct fmdsp_pacc *fp) {
 void fmdsp_pacc_set(struct fmdsp_pacc *fp, struct fmdriver_work *work, struct opna *opna) {
   fp->work = work;
   fp->opna = opna;
+}
+
+void fmdsp_pacc_palette(struct fmdsp_pacc *fp, int p) {
+  if (p < 0) return;
+  if (p >= PALETTE_NUM) return;
+  memcpy(fp->target_palette, s_palettes[p], sizeof(fp->target_palette));
+}
+
+enum fmdsp_left_mode fmdsp_pacc_left_mode(const struct fmdsp_pacc *fp) {
+  return fp->lmode;
+}
+
+enum fmdsp_right_mode fmdsp_pacc_right_mode(const struct fmdsp_pacc *fp) {
+  return fp->rmode;
+}
+
+void fmdsp_pacc_set_left_mode(struct fmdsp_pacc *fp, enum fmdsp_left_mode mode) {
+  fp->lmode = mode;
+  fp->mode_changed = true;
+}
+
+void fmdsp_pacc_set_right_mode(struct fmdsp_pacc *fp, enum fmdsp_right_mode mode) {
+  fp->rmode = mode;
+  fp->mode_changed = true;
 }
