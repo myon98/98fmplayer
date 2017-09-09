@@ -13,19 +13,28 @@
 
 /*
   OpenGL versions:
-  OpenGL 2.0
-  OpenGL 3.2 core (#define PACC_GL_3)
-  OpenGL ES 2.0 (#define PACC_GL_ES)
-  OpenGL ES 3.0 (#define PACC_GL_ES, #define PACC_GL_3)
-
-  Shader languages:
-  GLSL 1.10 / GLSL ES 1.00
+  OpenGL 2.0      / GLSL 1.10
+  OpenGL 3.2 core / GLSL 1.50 core (#define PACC_GL_3)
+  OpenGL ES 2.0   / GLSL ES 1.00   (#define PACC_GL_ES)
+  OpenGL ES 3.0   / GLSL ES 3.00   (#define PACC_GL_ES, #define PACC_GL_3)
 */
 
 #ifdef PACC_GL_ES
+
+#ifdef PACC_GL_3
+#include "glsl/es3header.inc"
+#else
 #include "glsl/esheader.inc"
+#endif
+
+#else
+
+#ifdef PACC_GL_3
+#include "glsl/ds3header.inc"
 #else
 #include "glsl/dsheader.inc"
+#endif
+
 #endif
 
 #include "glsl/blit.vert.inc"
@@ -89,9 +98,17 @@ static GLuint compile_shader(const uint8_t *ss, GLenum type) {
   if (!s) goto err;
   const char *sourcelist[2] = {
 #ifdef PACC_GL_ES
+#ifdef PACC_GL_3
+    (const char *)es3header,
+#else
     (const char *)esheader,
+#endif
+#else
+#ifdef PACC_GL_3
+    (const char *)ds3header,
 #else
     (const char *)dsheader,
+#endif
 #endif
     (const char *)ss
   };

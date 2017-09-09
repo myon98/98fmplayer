@@ -1,0 +1,7 @@
+#version 150 core
+#define VERT_IN in
+#define VERT_OUT out
+#define FRAG_IN in
+#define TEXTURE2D texture
+#define FRAGCOLOR_DECL out lowp vec4 _fragcolor;
+#define FRAGCOLOR _fragcolor

@@ -1,2 +1,7 @@
 #version 100
-
+#define VERT_IN attribute
+#define VERT_OUT varying
+#define FRAG_IN varying
+#define TEXTURE2D texture2D
+#define FRAGCOLOR_DECL
+#define FRAGCOLOR gl_FragColor
