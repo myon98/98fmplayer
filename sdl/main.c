@@ -51,7 +51,6 @@ static void openfile(const char *path) {
   g.fmfile = file;
   fmplayer_init_work_opna(&g.work, &g.ppz8, &g.opna, &g.timer, &g.adpcmram);
   fmplayer_file_load(&g.work, g.fmfile, 1);
-  fmdsp_pacc_set(g.fp, &g.work, &g.opna);
   SDL_UnlockAudioDevice(g.adev);
   SDL_PauseAudioDevice(g.adev, 0);
 }
@@ -141,6 +140,7 @@ int main(int argc, char **argv) {
     SDL_Quit();
     return 1;
   }
+  fmdsp_pacc_set(g.fp, &g.work, &g.opna);
 
   SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
 
