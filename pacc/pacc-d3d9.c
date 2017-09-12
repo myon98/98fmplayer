@@ -90,7 +90,6 @@ static struct pacc_buf *pacc_gen_buf(
   if (res != D3D_OK) goto err;
   return pb;
 err:
-  MessageBox(pc->hwnd, L"Hello", L"HI", 0);
   pacc_buf_delete(pb);
   return 0;
 }
@@ -479,7 +478,7 @@ struct pacc_ctx *pacc_init_d3d9(
   atomic_init(&pc->killthread, false);
   pc->rendermtx = CreateMutex(0, FALSE, 0);
   if (!pc->rendermtx) goto err;
-  pc->d3d9m = LoadLibrary(L"d3d9");
+  pc->d3d9m = LoadLibraryW(L"d3d9");
   if (!pc->d3d9m) goto err;
   IDirect3D9 * WINAPI (*d3d9create)(UINT) = (IDirect3D9 * WINAPI (*)(UINT))GetProcAddress(pc->d3d9m, "Direct3DCreate9");
   if (!d3d9create) goto err;

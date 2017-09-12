@@ -246,6 +246,7 @@ static void pacc_calc_off(
 static void pacc_buf_rect_off(
     const struct pacc_ctx *pc, struct pacc_buf *pb,
     int x, int y, int w, int h, int xoff, int yoff) {
+  if (!w && !h) return;
   float scale[2];
   float off[2];
   float tscale[2];
