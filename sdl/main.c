@@ -1,5 +1,6 @@
 #include <SDL.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 #include "pacc/pacc.h"
 #include "fmdsp/fmdsp-pacc.h"
 #include "libopna/opna.h"
@@ -7,6 +8,7 @@
 #include "fmdriver/fmdriver.h"
 #include "common/fmplayer_file.h"
 #include "common/fmplayer_common.h"
+#include "fft/fft.h"
 
 bool loadgl(void);
 
@@ -20,19 +22,29 @@ static struct {
   struct opna_timer timer;
   struct fmdriver_work work;
   struct fmplayer_file *fmfile;
+  struct fmplayer_fft_data fftdata;
+  struct fmplayer_fft_input_data fftin;
   const char *currpath;
   SDL_Window *win;
   SDL_AudioDeviceID adev;
   struct ppz8 ppz8;
   char adpcmram[OPNA_ADPCM_RAM_SIZE];
   struct fmdsp_pacc *fp;
-} g;
+  atomic_flag fftdata_flag;
+} g = {
+  .fftdata_flag = ATOMIC_FLAG_INIT,
+};
 
 static void audiocb(void *ptr, Uint8 *bufptr, int len) {
   int frames = len / (sizeof(int16_t)*2);
   int16_t *buf = (int16_t *)bufptr;
   memset(buf, 0, len);
   opna_timer_mix(&g.timer, buf, frames);
+  if (!atomic_flag_test_and_set_explicit(
+        &g.fftdata_flag, memory_order_acquire)) {
+    fft_write(&g.fftdata, buf, frames);
+    atomic_flag_clear_explicit(&g.fftdata_flag, memory_order_release);
+  }
 }
 
 static void openfile(const char *path) {
@@ -57,6 +69,7 @@ static void openfile(const char *path) {
 
 int main(int argc, char **argv) {
   if (__builtin_cpu_supports("sse2")) opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_sse2;
+  fft_init_table();
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
     SDL_Log("Cannot initialize SDL\n");
     return 1;
@@ -140,7 +153,7 @@ int main(int argc, char **argv) {
     SDL_Quit();
     return 1;
   }
-  fmdsp_pacc_set(g.fp, &g.work, &g.opna);
+  fmdsp_pacc_set(g.fp, &g.work, &g.opna, &g.fftin);
 
   SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
 
@@ -205,6 +218,11 @@ int main(int argc, char **argv) {
           }
         }
       }
+    }
+    if (!atomic_flag_test_and_set_explicit(
+          &g.fftdata_flag, memory_order_acquire)) {
+      memcpy(&g.fftin.fdata, &g.fftdata, sizeof(g.fftdata));
+      atomic_flag_clear_explicit(&g.fftdata_flag, memory_order_release);
     }
     fmdsp_pacc_render(g.fp);
     SDL_GL_SwapWindow(g.win);
