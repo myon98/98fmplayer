@@ -468,6 +468,10 @@ err:
   return 0;
 }
 
+static void pacc_viewport_scale(struct pacc_ctx *pc, int scale) {
+  glViewport(0, 0, pc->w*scale, pc->h*scale);
+}
+
 static struct pacc_vtable pacc_gl_vtable = {
   .pacc_delete = pacc_delete,
   .gen_buf = pacc_gen_buf,
@@ -485,6 +489,7 @@ static struct pacc_vtable pacc_gl_vtable = {
   .color = pacc_color,
   .begin_clear = pacc_begin_clear,
   .draw = pacc_draw,
+  .viewport_scale = pacc_viewport_scale,
 };
 
 struct pacc_ctx *pacc_init_gl(int w, int h, struct pacc_vtable *vt) {

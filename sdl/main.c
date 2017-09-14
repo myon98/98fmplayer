@@ -31,8 +31,10 @@ static struct {
   char adpcmram[OPNA_ADPCM_RAM_SIZE];
   struct fmdsp_pacc *fp;
   atomic_flag fftdata_flag;
+  int scale;
 } g = {
   .fftdata_flag = ATOMIC_FLAG_INIT,
+  .scale = 1,
 };
 
 static void audiocb(void *ptr, Uint8 *bufptr, int len) {
@@ -116,7 +118,7 @@ int main(int argc, char **argv) {
   g.win = SDL_CreateWindow(
       "FMPlayer SDL",
       SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-      640*2, 400*2,
+      PC98_W, PC98_H,
       SDL_WINDOW_OPENGL);
   if (!g.win) {
     SDL_Log("Cannot create window\n");
@@ -170,7 +172,8 @@ int main(int argc, char **argv) {
         SDL_free(e.drop.file);
         break;
       case SDL_KEYDOWN:
-        if (e.key.keysym.scancode == SDL_SCANCODE_F11) {
+        switch (e.key.keysym.scancode) {
+        case SDL_SCANCODE_F11:
           if (e.key.keysym.mod & KMOD_SHIFT) {
             fmdsp_pacc_set_right_mode(
                 g.fp,
@@ -180,6 +183,15 @@ int main(int argc, char **argv) {
                 g.fp,
                 (fmdsp_pacc_left_mode(g.fp) + 1) % FMDSP_LEFT_MODE_CNT);
           }
+          break;
+        case SDL_SCANCODE_F12:
+          g.scale++;
+          if (g.scale > 3) g.scale = 1;
+          SDL_SetWindowSize(g.win, PC98_W*g.scale, PC98_H*g.scale);
+          pacc.viewport_scale(pc, g.scale);
+          break;
+        default:
+          break;
         }
         if (e.key.keysym.mod & KMOD_CTRL) {
           switch (e.key.keysym.scancode) {

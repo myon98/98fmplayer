@@ -9,6 +9,7 @@ PROC(GENTEXTURES, GenTextures)
 PROC(TEXPARAMETERI, TexParameteri)
 PROC(PIXELSTOREI, PixelStorei)
 PROC(DRAWARRAYS, DrawArrays)
+PROC(VIEWPORT, Viewport)
 #endif // PROC_NO_GL_1_1
 PROC(ACTIVETEXTURE, ActiveTexture)
 #endif // PROC_NO_GL_1_3

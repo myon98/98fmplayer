@@ -46,6 +46,7 @@ struct pacc_vtable {
   void (*color)(struct pacc_ctx *ctx, uint8_t pal);
   void (*begin_clear)(struct pacc_ctx *ctx);
   void (*draw)(struct pacc_ctx *ctx, struct pacc_buf *buf, enum pacc_mode mode);
+  void (*viewport_scale)(struct pacc_ctx *ctx, int scale);
 };
 
 struct pacc_ctx *pacc_init_gl(int w, int h, struct pacc_vtable *vt);
