@@ -1,12 +1,15 @@
 #ifndef MYON_FMDSP_PACC_H_INCLUDED
 #define MYON_FMDSP_PACC_H_INCLUDED
 
+#include <stdbool.h>
+
 struct fmdsp_pacc;
 struct pacc_ctx;
 struct pacc_vtable;
 struct fmdriver_work work;
 struct opna opna;
 struct fmplayer_fft_input_data;
+struct fmdsp_font;
 
 enum {
   FMDSP_PALETTE_COLORS = 10,
@@ -47,5 +50,9 @@ enum fmdsp_left_mode fmdsp_pacc_left_mode(const struct fmdsp_pacc *fp);
 void fmdsp_pacc_set_left_mode(struct fmdsp_pacc *fp, enum fmdsp_left_mode mode);
 enum fmdsp_right_mode fmdsp_pacc_right_mode(const struct fmdsp_pacc *fp);
 void fmdsp_pacc_set_right_mode(struct fmdsp_pacc *fp, enum fmdsp_right_mode mode);
+
+void fmdsp_pacc_set_font16(struct fmdsp_pacc *fp, const struct fmdsp_font *font);
+void fmdsp_pacc_comment_reset(struct fmdsp_pacc *fp);
+void fmdsp_pacc_comment_scroll(struct fmdsp_pacc *fp, bool down);
 
 #endif // MYON_FMDSP_PACC_H_INCLUDED

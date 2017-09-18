@@ -3,12 +3,14 @@
 #include <stdatomic.h>
 #include "pacc/pacc.h"
 #include "fmdsp/fmdsp-pacc.h"
+#include "fmdsp/font.h"
 #include "libopna/opna.h"
 #include "libopna/opnatimer.h"
 #include "fmdriver/fmdriver.h"
 #include "common/fmplayer_file.h"
 #include "common/fmplayer_common.h"
 #include "fft/fft.h"
+#include "fmdsp/fontrom_shinonome.inc"
 
 bool loadgl(void);
 
@@ -32,6 +34,7 @@ static struct {
   struct fmdsp_pacc *fp;
   atomic_flag fftdata_flag;
   int scale;
+  struct fmdsp_font font16;
 } g = {
   .fftdata_flag = ATOMIC_FLAG_INIT,
   .scale = 1,
@@ -65,6 +68,7 @@ static void openfile(const char *path) {
   g.fmfile = file;
   fmplayer_init_work_opna(&g.work, &g.ppz8, &g.opna, &g.timer, &g.adpcmram);
   fmplayer_file_load(&g.work, g.fmfile, 1);
+  fmdsp_pacc_comment_reset(g.fp);
   SDL_UnlockAudioDevice(g.adev);
   SDL_PauseAudioDevice(g.adev, 0);
 }
@@ -156,6 +160,8 @@ int main(int argc, char **argv) {
     return 1;
   }
   fmdsp_pacc_set(g.fp, &g.work, &g.opna, &g.fftin);
+  fmdsp_font_from_font_rom(&g.font16, fmdsp_shinonome_font_rom);
+  fmdsp_pacc_set_font16(g.fp, &g.font16);
 
   SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
 
@@ -192,6 +198,18 @@ int main(int argc, char **argv) {
           break;
         default:
           break;
+        }
+        if (e.key.keysym.mod & KMOD_SHIFT) {
+          switch (e.key.keysym.scancode) {
+          case SDL_SCANCODE_UP:
+            fmdsp_pacc_comment_scroll(g.fp, false);
+            break;
+          case SDL_SCANCODE_DOWN:
+            fmdsp_pacc_comment_scroll(g.fp, true);
+            break;
+          default:
+            break;
+          }
         }
         if (e.key.keysym.mod & KMOD_CTRL) {
           switch (e.key.keysym.scancode) {

@@ -1,5 +1,6 @@
 #include "fmdriver_fmp.h"
 #include "fmdriver_common.h"
+#include <string.h>
 
 static uint8_t fmp_rand71(struct driver_fmp *fmp) {
   // on real PC-98, read from I/O port 0x71 (8253 Timer)
@@ -3200,6 +3201,48 @@ static void fmp_opna_interrupt(struct fmdriver_work *work) {
   }
 }
 
+static void fmp_title(
+    struct fmdriver_work *work,
+    struct driver_fmp *fmp,
+    uint16_t offset) {
+  int l = 0;
+  int li = 0;
+  for (int si = 0;; si++) {
+    if (l >= 3) {
+      // Z8X
+      fmp->pdzf.mode = 1;
+      return;
+    }
+    if ((offset + si) >= fmp->datalen) {
+      fmp->comment[l][0] = 0;
+      return;
+    }
+    if (li >= FMP_COMMENT_BUFLEN) {
+      fmp->comment[l][0] = 0;
+      return;
+    }
+    uint8_t c = fmp->data[offset+si];
+    if (c == '\r') {
+      continue;
+    } else if (c == '\n') {
+      fmp->comment[l][li] = 0;
+      li = 0;
+      l++;
+    } else {
+      fmp->comment[l][li] = c;
+      if (!c) return;
+      li++;
+    }
+  }
+}
+
+static void fmp_check_pdzf(struct driver_fmp *fmp) {
+  for (int l = 0; l < 3; l++) {
+    if (strstr((const char *)fmp->comment[l], "using PDZF")) fmp->pdzf.mode = 2;
+  }
+}
+
+/*
 // copy title string (CP932) to fmdriver_work struct,
 // and detect which PDZF(/Z8X) mode to use
 static void fmp_title(struct fmdriver_work *work,
@@ -3289,6 +3332,7 @@ static void fmp_title(struct fmdriver_work *work,
     }
   }
 }
+*/
 
 bool fmp_load(struct driver_fmp *fmp,
               uint8_t *data, uint16_t datalen)
@@ -3525,8 +3569,19 @@ bool fmp_load(struct driver_fmp *fmp,
   return true;
 }
 
+static const char *fmp_get_comment(struct fmdriver_work *work, int line) {
+  if (line < 0) return 0;
+  if (line >= 3) return 0;
+  struct driver_fmp *fmp = work->driver;
+  if (!fmp->comment[line][0]) return 0;
+  return (const char *)fmp->comment[line];
+}
+
 void fmp_init(struct fmdriver_work *work, struct driver_fmp *fmp) {
   fmp_title(work, fmp, read16le(fmp->data)+4);
+  fmp_check_pdzf(fmp);
+  work->comment_mode_pmd = false;
+  work->get_comment = fmp_get_comment;
   fmp_struct_init(work, fmp);
   fmp_init_parts(work, fmp);
   uint16_t fmtoneptr = fmp->datainfo.fmtoneptr;

@@ -39,6 +39,10 @@ enum {
 };
 
 enum {
+  FMP_COMMENT_BUFLEN = 256,
+};
+
+enum {
   FMP_DATA_FM_1,
   FMP_DATA_FM_2,
   FMP_DATA_FM_3,
@@ -536,6 +540,8 @@ struct driver_fmp {
     } rhythm[2];
     uint8_t rhythm_current_note;
   } pdzf;
+
+  uint8_t comment[3][FMP_COMMENT_BUFLEN];
 };
 
 // first: call fmp_load with zero_initialized struct driver_fmp and data

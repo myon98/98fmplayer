@@ -8,7 +8,7 @@ vpath %.c ../../fft
 SDLCONFIG:=sdl2-config
 OBJS:=main.o
 OBJS+=pacc-gl.o
-OBJS+=fmdsp-pacc.o font_fmdsp_small.o fmdsp_platform_unix.o
+OBJS+=fmdsp-pacc.o font_fmdsp_small.o fmdsp_platform_unix.o font_rom.o
 OBJS+=opna.o opnafm.o opnassg.o opnadrum.o opnaadpcm.o opnatimer.o opnassg-sinc-c.o opnassg-sinc-sse2.o
 OBJS+=fmdriver_pmd.o fmdriver_fmp.o ppz8.o fmdriver_common.o
 OBJS+=fmplayer_file.o fmplayer_work_opna.o fmplayer_file_unix.o fmplayer_drumrom_unix.o

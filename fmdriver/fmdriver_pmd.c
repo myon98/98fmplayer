@@ -5872,16 +5872,27 @@ void pmd_filenamecopy(char *dest, const char *src) {
   dest[0] = 0;
 }
 
+static const char *pmd_get_comment(struct fmdriver_work *work, int line) {
+  struct driver_pmd *pmd = work->driver;
+  if (line < 0) return 0;
+  const char *str = pmd_get_memo(pmd, line + 1);
+  if (str && !*str) return 0;
+  return str;
+}
+
 void pmd_init(struct fmdriver_work *work,
               struct driver_pmd *pmd) {
   // TODO: reset ppz8
 
   // 0f99
   work->driver = pmd;
+  work->comment_mode_pmd = true;
+  work->get_comment = pmd_get_comment;
   pmd_reset_opna(work, pmd);
   pmd_reset_timer(work, pmd);
   pmd->playing = true;
   work->driver_opna_interrupt = pmd_opna_interrupt;
+  /*
   static const int memotable[3] = {1, 4, 5};
   for (int i = 0; i < 3; i++) {
     const char *title = pmd_get_memo(pmd, memotable[i]);
@@ -5894,6 +5905,7 @@ void pmd_init(struct fmdriver_work *work,
     }
     work->comment[i][c] = 0;
   }
+  */
   const char *pcmfile = pmd_get_memo(pmd, -2);
   if (pcmfile) {
     pmd_filenamecopy(pmd->ppzfile, pcmfile);

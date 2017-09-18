@@ -89,9 +89,23 @@ struct fmdriver_work {
   const struct ppz8_functbl *ppz8_functbl;
   struct ppz8 *ppz8;
 
+  // if false, 3 line comment
+  // if true, PMD memo mode
+  bool comment_mode_pmd;
+
   // CP932 encoded
-  //const char *title;
-  char comment[3][FMDRIVER_TITLE_BUFLEN];
+  // may contain ANSI escape sequences
+  // if !comment_mode_pmd:
+  //   three lines, 0 <= line < 3
+  // if comment_mode_pmd:
+  //   line 0: #Title
+  //   line 1: #Composer
+  //   line 2: #Arranger
+  //   line 3: #Memo 1st line
+  //      :
+  //   line n: NULL
+  const char *(*get_comment)(struct fmdriver_work *work, int line);
+
   // only single-byte uppercase cp932
   char filename[FMDRIVER_TITLE_BUFLEN];
   // always 8 characters and pad with ' '

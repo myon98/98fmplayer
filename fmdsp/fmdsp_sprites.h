@@ -176,6 +176,11 @@ enum {
   LEVEL_TRACK_Y = LEVEL_Y-9,
   LEVEL_PROG_Y = PANPOT_Y+15,
   LEVEL_KEY_Y = LEVEL_PROG_Y+7,
+  COMMENT_TRI_W = 7,
+  COMMENT_TRI_H = 4,
+  COMMENT_TRI_X = 8,
+  COMMENT_TRI_U_Y = 349,
+  COMMENT_TRI_D_Y = 387,
 };
 
 enum {
@@ -980,5 +985,20 @@ static uint8_t s_panpot[6][PANPOT_W*PANPOT_H] = {
     0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,
     0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,
     0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,
+  },
+};
+
+static const uint8_t s_comment_tri[2][COMMENT_TRI_W*COMMENT_TRI_H] = {
+  {
+    0, 0, 0, 1, 0, 0, 0,
+    0, 0, 1, 1, 1, 0, 0,
+    0, 1, 1, 1, 1, 1, 0,
+    1, 1, 1, 1, 1, 1, 1,
+  },
+  {
+    1, 1, 1, 1, 1, 1, 1,
+    0, 1, 1, 1, 1, 1, 0,
+    0, 0, 1, 1, 1, 0, 0,
+    0, 0, 0, 1, 0, 0, 0,
   },
 };
