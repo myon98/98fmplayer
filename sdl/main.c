@@ -9,8 +9,8 @@
 #include "fmdriver/fmdriver.h"
 #include "common/fmplayer_file.h"
 #include "common/fmplayer_common.h"
+#include "common/fmplayer_fontrom.h"
 #include "fft/fft.h"
-#include "fmdsp/fontrom_shinonome.inc"
 
 bool loadgl(void);
 
@@ -160,7 +160,7 @@ int main(int argc, char **argv) {
     return 1;
   }
   fmdsp_pacc_set(g.fp, &g.work, &g.opna, &g.fftin);
-  fmdsp_font_from_font_rom(&g.font16, fmdsp_shinonome_font_rom);
+  fmplayer_font_rom_load(&g.font16);
   fmdsp_pacc_set_font16(g.fp, &g.font16);
 
   SDL_EventState(SDL_DROPFILE, SDL_ENABLE);

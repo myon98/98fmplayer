@@ -1794,9 +1794,38 @@ static void font_putline(
   int fh = font->height;
   int xo = 0;
 
+  enum {
+    STATE_NORMAL,
+    STATE_ESC,
+    STATE_CSI,
+    STATE_SYNC,
+  } esc_state = STATE_NORMAL;
+
   while (*cp932str) {
     if (!sjis_is2nd) {
       if (!sjis_is_mb_start(*cp932str)) {
+        if (esc_state != STATE_NORMAL || *cp932str == 0x1b) {
+          if (esc_state == STATE_SYNC) {
+            esc_state = STATE_NORMAL;
+          } else if (esc_state == STATE_ESC) {
+            if (*cp932str == '[') {
+              esc_state = STATE_CSI;
+            } else if (*cp932str == '!') {
+              esc_state = STATE_SYNC;
+            } else {
+              esc_state = STATE_NORMAL;
+            }
+          } else if (esc_state == STATE_CSI) {
+            if (('0' <= *cp932str && *cp932str <= '9') || *cp932str == ';') {
+            } else {
+              esc_state = STATE_NORMAL;
+            }
+          } else {
+            esc_state = STATE_ESC;
+          }
+          cp932str++;
+          continue;
+        }
         if (*cp932str == '\t') {
           xo += fw*8;
           xo -= (xo % (fw*8));

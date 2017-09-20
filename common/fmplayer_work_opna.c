@@ -1,4 +1,5 @@
 #include "fmplayer_common.h"
+#include "fmplayer_drumrom.h"
 #include "fmdriver/fmdriver.h"
 #include "fmdriver/ppz8.h"
 #include "libopna/opna.h"
