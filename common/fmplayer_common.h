@@ -18,8 +18,4 @@ void fmplayer_init_work_opna(
   void *adpcm_ram
 );
 
-struct opna_drum;
-bool fmplayer_drum_rom_load(struct opna_drum *drum);
-bool fmplayer_drum_loaded(void);
-
 #endif // MYON_FMPLAYER_COMMON_H_INCLUDED
