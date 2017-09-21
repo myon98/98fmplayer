@@ -2365,8 +2365,8 @@ static void pmd_cmdfb_tie(
   pmd->no_keyoff = true;
 }
 
-// 2371, 2376
-static void pmd_cmdfa_d5_det(
+// 2371
+static void pmd_cmdfa_det(
   struct fmdriver_work *work,
   struct driver_pmd *pmd,
   struct pmd_part *part
@@ -2375,6 +2375,18 @@ static void pmd_cmdfa_d5_det(
   uint16_t val = pmd_part_cmdload(pmd, part);
   val |= ((uint16_t)(pmd_part_cmdload(pmd, part)) << 8);
   part->detune = u16s16(val);
+}
+
+// 2376
+static void pmd_cmdd5_detrel(
+  struct fmdriver_work *work,
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+){
+  (void)work;
+  uint16_t val = pmd_part_cmdload(pmd, part);
+  val |= ((uint16_t)(pmd_part_cmdload(pmd, part)) << 8);
+  part->detune += u16s16(val);
 }
 
 // 237b
@@ -4181,7 +4193,7 @@ static const pmd_cmd_func pmd_cmd_table_fm[PMD_CMD_CNT] = {
   pmd_cmdfd_vol,
   pmd_cmdfc_tempo,
   pmd_cmdfb_tie,
-  pmd_cmdfa_d5_det,
+  pmd_cmdfa_det,
   pmd_cmdf9_repeat_reset,
   pmd_cmdf8_repeat,
   pmd_cmdf7_repeat_exit,
@@ -4218,7 +4230,7 @@ static const pmd_cmd_func pmd_cmd_table_fm[PMD_CMD_CNT] = {
   pmd_cmd_null_1,
   pmd_cmd_null_1,
   pmd_cmdd6_md,
-  pmd_cmdfa_d5_det,
+  pmd_cmdd5_detrel,
   pmd_cmdd4_ssgeff,
   pmd_cmdd3_fmeff,
   pmd_cmdd2_fadeout,
@@ -4263,7 +4275,7 @@ static const pmd_cmd_func pmd_cmd_table_ssg[PMD_CMD_CNT] = {
   pmd_cmdfd_vol,
   pmd_cmdfc_tempo,
   pmd_cmdfb_tie,
-  pmd_cmdfa_d5_det,
+  pmd_cmdfa_det,
   pmd_cmdf9_repeat_reset,
   pmd_cmdf8_repeat,
   pmd_cmdf7_repeat_exit,
@@ -4300,7 +4312,7 @@ static const pmd_cmd_func pmd_cmd_table_ssg[PMD_CMD_CNT] = {
   pmd_cmd_null_1,
   pmd_cmd_null_1,
   pmd_cmdd6_md,
-  pmd_cmdfa_d5_det,
+  pmd_cmdd5_detrel,
   pmd_cmdd4_ssgeff,
   pmd_cmdd3_fmeff,
   pmd_cmdd2_fadeout,
@@ -4345,7 +4357,7 @@ static const pmd_cmd_func pmd_cmd_table_rhythm[PMD_CMD_CNT] = {
   pmd_cmdfd_vol,
   pmd_cmdfc_tempo,
   pmd_cmdfb_tie,
-  pmd_cmdfa_d5_det,
+  pmd_cmdfa_det,
   pmd_cmdf9_repeat_reset,
   pmd_cmdf8_repeat,
   pmd_cmdf7_repeat_exit,
@@ -4382,7 +4394,7 @@ static const pmd_cmd_func pmd_cmd_table_rhythm[PMD_CMD_CNT] = {
   pmd_cmd_null_1,
   pmd_cmd_null_1,
   pmd_cmd_null_2,
-  pmd_cmdfa_d5_det,
+  pmd_cmdd5_detrel,
   pmd_cmdd4_ssgeff,
   pmd_cmdd3_fmeff,
   pmd_cmdd2_fadeout,
@@ -4427,7 +4439,7 @@ static const pmd_cmd_func pmd_cmd_table_adpcm[PMD_CMD_CNT] = {
   pmd_cmdfd_vol,
   pmd_cmdfc_tempo,
   pmd_cmdfb_tie,
-  pmd_cmdfa_d5_det,
+  pmd_cmdfa_det,
   pmd_cmdf9_repeat_reset,
   pmd_cmdf8_repeat,
   pmd_cmdf7_repeat_exit,
@@ -4464,7 +4476,7 @@ static const pmd_cmd_func pmd_cmd_table_adpcm[PMD_CMD_CNT] = {
   pmd_cmd_null_1,
   pmd_cmd_null_1,
   pmd_cmdd6_md,
-  pmd_cmdfa_d5_det,
+  pmd_cmdd5_detrel,
   pmd_cmdd4_ssgeff,
   pmd_cmdd3_fmeff,
   pmd_cmdd2_fadeout,
@@ -4509,7 +4521,7 @@ static const pmd_cmd_func pmd_cmd_table_ppz8[PMD_CMD_CNT] = {
   pmd_cmdfd_vol,
   pmd_cmdfc_tempo,
   pmd_cmdfb_tie,
-  pmd_cmdfa_d5_det,
+  pmd_cmdfa_det,
   pmd_cmdf9_repeat_reset,
   pmd_cmdf8_repeat,
   pmd_cmdf7_repeat_exit,
@@ -4546,7 +4558,7 @@ static const pmd_cmd_func pmd_cmd_table_ppz8[PMD_CMD_CNT] = {
   pmd_cmd_null_1,
   pmd_cmd_null_1,
   pmd_cmdd6_md,
-  pmd_cmdfa_d5_det,
+  pmd_cmdd5_detrel,
   pmd_cmdd4_ssgeff,
   pmd_cmdd3_fmeff,
   pmd_cmdd2_fadeout,
