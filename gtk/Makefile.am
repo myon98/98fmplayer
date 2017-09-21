@@ -13,11 +13,11 @@ FMDRIVER_SRC=../fmdriver/fmdriver_fmp.c \
              ../fmdriver/fmdriver_common.c \
              ../fmdriver/ppz8.c
 
-FMDSP_SRC=../fmdsp/fmdsp.c \
-          ../fmdsp/fmdsp-vramlookup-c.c \
+FMDSP_SRC=../fmdsp/fmdsp-pacc.c \
           ../fmdsp/font_rom.c \
           ../fmdsp/font_fmdsp_small.c \
-          ../fmdsp/fmdsp_platform_unix.c
+          ../fmdsp/fmdsp_platform_unix.c \
+          ../pacc/pacc-gl.c
 
 SOUNDOUT_SRC=../soundout/soundout.c
 
@@ -35,7 +35,8 @@ endif
 #CFLAGS=
 fmplayer_CPPFLAGS=-Wall -Wextra -pedantic \
                   -I$(top_srcdir)/.. -I$(top_srcdir)/../soundout \
-                  $(GTK3_CFLAGS) $(JACK_CFLAGS) $(PULSE_CFLAGS) $(ALSA_CFLAGS) $(SNDFILE_CFLAGS)
+                  $(GTK3_CFLAGS) $(JACK_CFLAGS) $(PULSE_CFLAGS) $(ALSA_CFLAGS) $(SNDFILE_CFLAGS) \
+                  -DPACC_GL_3
 fmplayer_LDADD=$(GTK3_LIBS) $(JACK_LIBS) $(PULSE_LIBS) $(ALSA_LIBS) $(SNDFILE_LIBS) -lm -lpthread
 
 if ENABLE_NEON
@@ -61,6 +62,7 @@ fmplayer_SOURCES=main.c \
                  ../common/fmplayer_file_gio.c \
                  ../common/fmplayer_work_opna.c \
                  ../common/fmplayer_drumrom_unix.c \
+                 ../common/fmplayer_fontrom_unix.c \
                  ../fft/fft.c \
                  $(LIBOPNA_SRC) \
                  $(FMDRIVER_SRC) \

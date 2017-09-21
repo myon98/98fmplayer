@@ -12,20 +12,22 @@
 #include "fmdriver/ppz8.h"
 #include "libopna/opna.h"
 #include "libopna/opnatimer.h"
-#include "fmdsp/fmdsp.h"
+#include "pacc/pacc.h"
+#include "fmdsp/fmdsp-pacc.h"
+#include "fmdsp/font.h"
 #include "toneview.h"
 #include "oscillo/oscillo.h"
 #include "oscilloview.h"
 #include "wavesave.h"
 #include "configdialog.h"
 #include "common/fmplayer_common.h"
+#include "common/fmplayer_fontrom.h"
 #include "fft/fft.h"
 
 #include "soundout.h"
 
 #include "fmplayer.xpm"
 #include "fmplayer32.xpm"
-#include "fmdsp/fontrom_shinonome.inc"
 
 #define DATADIR "/.local/share/fmplayer/"
 //#define FMDSP_2X
@@ -51,21 +53,20 @@ static struct {
   struct opna_timer opna_timer;
   struct ppz8 ppz8;
   struct fmdriver_work work;
-  struct fmdsp fmdsp;
   char adpcm_ram[OPNA_ADPCM_RAM_SIZE];
   struct fmplayer_file *fmfile;
   void *data;
   uint8_t vram[PC98_W*PC98_H];
   struct fmdsp_font font98;
-  uint8_t font98data[FONT_ROM_FILESIZE];
-  void *vram32;
-  int vram32_stride;
   const char *current_uri;
   bool oscillo_should_update;
   struct oscillodata oscillodata_audiothread[LIBOPNA_OSCILLO_TRACK_COUNT];
   atomic_flag at_fftdata_flag;
   struct fmplayer_fft_data at_fftdata;
   struct fmplayer_fft_input_data fftdata;
+  struct pacc_vtable pacc;
+  struct pacc_ctx *pc;
+  struct fmdsp_pacc *fp;
 } g = {
   .oscillo_should_update = true,
   .opna_flag = ATOMIC_FLAG_INIT,
@@ -166,40 +167,6 @@ static void soundout_cb(void *userptr, int16_t *buf, unsigned frames) {
   }
 }
 
-static void load_fontrom(void) {
-  const char *path = "font.rom";
-  const char *home = getenv("HOME");
-  char *dpath = 0;
-  fmdsp_font_from_font_rom(&g.font98, g.font98data);
-  if (home) {
-    const char *datadir = DATADIR;
-    dpath = malloc(strlen(home)+strlen(datadir)+strlen(path) + 1);
-    if (dpath) {
-      strcpy(dpath, home);
-      strcat(dpath, datadir);
-      strcat(dpath, path);
-      path = dpath;
-    }
-  }
-  FILE *font = fopen(path, "r");
-  free(dpath);
-  if (!font) goto err;
-  if (fseek(font, 0, SEEK_END) != 0) goto err_file;
-  long size = ftell(font);
-  if (size != FONT_ROM_FILESIZE) goto err_file;
-  if (fseek(font, 0, SEEK_SET) != 0) goto err_file;
-  if (fread(g.font98data, 1, FONT_ROM_FILESIZE, font) != FONT_ROM_FILESIZE) {
-    goto err_file;
-  }
-  fclose(font);
-  return;
-err_file:
-  fclose(font);
-err:
-  fmdsp_font_from_font_rom(&g.font98, fmdsp_shinonome_font_rom);
-  return;
-}
-
 static bool openfile(const char *uri) {
   struct fmplayer_file *fmfile = 0;
   enum fmplayer_file_error error;
@@ -241,7 +208,7 @@ static bool openfile(const char *uri) {
     strncpy(g.work.filename, uri, sizeof(g.work.filename)-1);
   }
   fmplayer_file_load(&g.work, g.fmfile, 1);
-  fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
+  fmdsp_pacc_comment_reset(g.fp);
   g.ss->pause(g.ss, 0, 1);
   g.sound_paused = false;
   g.work.paused = false;
@@ -297,6 +264,50 @@ static GtkWidget *create_menubar() {
   return menubar;
 }
 
+static void realize_cb(GtkWidget *w, gpointer ptr) {
+  GtkGLArea *glarea = GTK_GL_AREA(w);
+  (void)ptr;
+  gtk_gl_area_make_current(glarea);
+  if (gtk_gl_area_get_error(glarea)) {
+    msgbox_err("cannot make OpenGL context current");
+    quit();
+  }
+  g.pc = pacc_init_gl(PC98_W, PC98_H, &g.pacc);
+  if (!g.pc) {
+    msgbox_err("cannot initialize OpenGL context");
+    quit();
+  }
+  if (!fmdsp_pacc_init(g.fp, g.pc, &g.pacc)) {
+    msgbox_err("cannot initialize fmdsp");
+    quit();
+  }
+  fmdsp_pacc_set_font16(g.fp, &g.font98);
+  fmdsp_pacc_set(g.fp, &g.work, &g.opna, &g.fftdata);
+}
+
+static void unrealize_cb(GtkWidget *w, gpointer ptr) {
+  GtkGLArea *glarea = GTK_GL_AREA(w);
+  (void)ptr;
+  gtk_gl_area_make_current(glarea);
+  fmdsp_pacc_deinit(g.fp);
+  g.pacc.pacc_delete(g.pc);
+  g.pc = 0;
+}
+
+static gboolean render_cb(GtkGLArea *glarea, GdkGLContext *glctx, gpointer ptr) {
+  (void)glarea;
+  (void)glctx;
+  (void)ptr;
+  if (!atomic_flag_test_and_set_explicit(
+    &g.at_fftdata_flag, memory_order_acquire)) {
+    memcpy(&g.fftdata.fdata, &g.at_fftdata, sizeof(g.fftdata));
+    atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
+  }
+  fmdsp_pacc_render(g.fp);
+  return TRUE;
+}
+
+/*
 static gboolean draw_cb(GtkWidget *w,
                  cairo_t *cr,
                  gpointer p) {
@@ -307,7 +318,7 @@ static gboolean draw_cb(GtkWidget *w,
     memcpy(&g.fftdata.fdata, &g.at_fftdata, sizeof(g.fftdata));
     atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
   }
-  fmdsp_update(&g.fmdsp, &g.work, &g.opna, g.vram, &g.fftdata);
+  //fmdsp_update(&g.fmdsp, &g.work, &g.opna, g.vram, &g.fftdata);
   fmdsp_vrampalette(&g.fmdsp, g.vram, g.vram32, g.vram32_stride);
   cairo_surface_t *s = cairo_image_surface_create_for_data(
     g.vram32, CAIRO_FORMAT_RGB24, PC98_W, PC98_H, g.vram32_stride);
@@ -319,18 +330,23 @@ static gboolean draw_cb(GtkWidget *w,
   return FALSE;
 }
 
+*/
+
 static gboolean tick_cb(GtkWidget *w,
                         GdkFrameClock *frame_clock,
                         gpointer p) {
   (void)w;
   (void)frame_clock;
-  gtk_widget_queue_draw(GTK_WIDGET(p));
+  (void)p;
+  gtk_widget_queue_draw(g.fmdsp_widget);
   return G_SOURCE_CONTINUE;
 }
 
+/*
 static void destroynothing(gpointer p) {
   (void)p;
 }
+*/
 
 static void mask_set(int p, bool shift, bool control) {
   if (!control) {
@@ -394,7 +410,7 @@ static gboolean key_press_cb(GtkWidget *w,
   const GdkModifierType ALLACCELS = GDK_CONTROL_MASK | GDK_SHIFT_MASK | GDK_MOD1_MASK;
   if (GDK_KEY_F1 <= e->key.keyval && e->key.keyval <= GDK_KEY_F10) {
     if ((e->key.state & ALLACCELS) == GDK_CONTROL_MASK) {
-      fmdsp_palette_set(&g.fmdsp, e->key.keyval - GDK_KEY_F1);
+      fmdsp_pacc_palette(g.fp, e->key.keyval - GDK_KEY_F1);
       return TRUE;
     }
   }
@@ -418,7 +434,15 @@ static gboolean key_press_cb(GtkWidget *w,
     g.ss->pause(g.ss, g.sound_paused, 0);
     break;
   case GDK_KEY_F11:
-    fmdsp_dispstyle_set(&g.fmdsp, (g.fmdsp.style+1) % FMDSP_DISPSTYLE_CNT);
+    if (shift) {
+      fmdsp_pacc_set_right_mode(
+          g.fp,
+          (fmdsp_pacc_right_mode(g.fp)+1) % FMDSP_RIGHT_MODE_CNT);
+    } else {
+      fmdsp_pacc_set_left_mode(
+          g.fp,
+          (fmdsp_pacc_left_mode(g.fp)+1) % FMDSP_LEFT_MODE_CNT);
+    }
     break;
   case GDK_KEY_F12:
     g.fmdsp_2x ^= 1;
@@ -468,6 +492,14 @@ static gboolean key_press_cb(GtkWidget *w,
     opna_set_mask(&g.opna, 0);
     ppz8_set_mask(&g.ppz8, 0);
     break;
+  case GDK_KEY_Up:
+  case GDK_KEY_Down:
+    if (shift) {
+      fmdsp_pacc_comment_scroll(g.fp, keyval == GDK_KEY_Down);
+    } else {
+      return FALSE;
+    }
+    break;
   default:
     return FALSE;
   }
@@ -496,14 +528,12 @@ static void drag_data_recv_cb(
 int main(int argc, char **argv) {
 #ifdef ENABLE_NEON
   opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_neon;
-  fmdsp_vramlookup_func = fmdsp_vramlookup_neon;
 #endif
 #ifdef ENABLE_SSE
   if (__builtin_cpu_supports("sse2")) opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_sse2;
-  if (__builtin_cpu_supports("ssse3")) fmdsp_vramlookup_func = fmdsp_vramlookup_ssse3;
 #endif
   fft_init_table();
-  load_fontrom();
+  fmplayer_font_rom_load(&g.font98);
   gtk_init(&argc, &argv);
   {
     GList *iconlist = 0;
@@ -523,18 +553,36 @@ int main(int argc, char **argv) {
   GtkWidget *menubar = create_menubar();
   gtk_box_pack_start(GTK_BOX(g.root_box_widget), menubar, FALSE, TRUE, 0);
 
-  g.fmdsp_widget = gtk_drawing_area_new();
-  g_signal_connect(g.fmdsp_widget, "draw", G_CALLBACK(draw_cb), 0);
+  g.fmdsp_widget = gtk_gl_area_new();
+  g.fp = fmdsp_pacc_alloc();
+  if (!g.fp) {
+    msgbox_err("cannot alloc fmdsp");
+    quit();
+  }
+#ifdef PACC_GL_ES
+  gtk_gl_area_set_use_es(GTK_GL_AREA(g.fmdsp_widget), TRUE);
+#ifdef PACC_GL_3
+  gtk_gl_area_set_required_version(GTK_GL_AREA(g.fmdsp_widget), 2, 0);
+#else
+  gtk_gl_area_set_required_version(GTK_GL_AREA(g.fmdsp_widget), 2, 0);
+#endif
+#else // PACC_GL_ES
+  gtk_gl_area_set_use_es(GTK_GL_AREA(g.fmdsp_widget), FALSE);
+#ifdef PACC_GL_3
+  gtk_gl_area_set_required_version(GTK_GL_AREA(g.fmdsp_widget), 3, 2);
+#else
+  gtk_gl_area_set_required_version(GTK_GL_AREA(g.fmdsp_widget), 2, 0);
+#endif
+#endif // PACC_GL_ES
+  gtk_widget_add_tick_callback(g.fmdsp_widget, tick_cb, 0, 0);
+  g_signal_connect(g.fmdsp_widget, "render", G_CALLBACK(render_cb), 0);
+  g_signal_connect(g.fmdsp_widget, "realize", G_CALLBACK(realize_cb), 0);
+  g_signal_connect(g.fmdsp_widget, "unrealize", G_CALLBACK(unrealize_cb), 0);
 
   g.filechooser_widget = gtk_file_chooser_widget_new(GTK_FILE_CHOOSER_ACTION_OPEN);
   g_signal_connect(g.filechooser_widget, "file-activated", G_CALLBACK(on_file_activated), 0);
 
   create_box();
-
-  fmdsp_init(&g.fmdsp, &g.font98);
-  fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
-  g.vram32_stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, PC98_W);
-  g.vram32 = malloc((g.vram32_stride*PC98_H)*4);
 
   g_signal_connect(w, "key-press-event", G_CALLBACK(key_press_cb), 0);
   gtk_drag_dest_set(
@@ -544,7 +592,6 @@ int main(int argc, char **argv) {
   g_signal_connect(w, "drag-data-received", G_CALLBACK(drag_data_recv_cb), 0);
   gtk_widget_add_events(w, GDK_KEY_PRESS_MASK);
   gtk_widget_show_all(w);
-  gtk_widget_add_tick_callback(w, tick_cb, g.fmdsp_widget, destroynothing);
   gtk_main();
   return 0;
 }
