@@ -136,6 +136,7 @@ struct fmdsp_pacc {
   struct pacc_tex *tex_panpot;
   struct pacc_tex *tex_comment;
   struct pacc_tex *tex_comment_tri;
+  struct pacc_tex *tex_playing;
   struct pacc_buf *buf_font_7;
   struct pacc_buf *buf_font_2, *buf_font_2_d;
   struct pacc_buf *buf_font_1, *buf_font_1_d;
@@ -166,11 +167,14 @@ struct fmdsp_pacc {
   struct pacc_buf *buf_panpot_1_d, *buf_panpot_5_d;
   struct pacc_buf *buf_comment;
   struct pacc_buf *buf_comment_tri_d;
+  struct pacc_buf *buf_playing;
   struct opna *opna;
   struct fmdriver_work *work;
   struct fmplayer_fft_input_data *fftin;
   uint8_t curr_palette[FMDSP_PALETTE_COLORS*3];
   uint8_t target_palette[FMDSP_PALETTE_COLORS*3];
+  uint8_t comment_tex_buf[PC98_W*CHECKER_H];
+  bool comment_tex_buf_changed;
   enum fmdsp_left_mode lmode;
   enum fmdsp_right_mode rmode;
   bool mode_changed;
@@ -209,82 +213,167 @@ static struct pacc_tex *tex_from_font(
   return tex;
 }
 
+static void fmdsp_pacc_deinit_buf(struct fmdsp_pacc *fp) {
+  fp->pacc.buf_delete(fp->buf_font_1);
+  fp->buf_font_1 = 0;
+  fp->pacc.buf_delete(fp->buf_font_1_d);
+  fp->buf_font_1_d = 0;
+  fp->pacc.buf_delete(fp->buf_font_2);
+  fp->buf_font_2 = 0;
+  fp->pacc.buf_delete(fp->buf_font_2_d);
+  fp->buf_font_2_d = 0;
+  fp->pacc.buf_delete(fp->buf_font_7);
+  fp->buf_font_7 = 0;
+  fp->pacc.buf_delete(fp->buf_checker);
+  fp->buf_checker = 0;
+  fp->pacc.buf_delete(fp->buf_checker_1);
+  fp->buf_checker_1 = 0;
+  fp->pacc.buf_delete(fp->buf_key_left);
+  fp->buf_key_left = 0;
+  fp->pacc.buf_delete(fp->buf_key_right);
+  fp->buf_key_right = 0;
+  fp->pacc.buf_delete(fp->buf_key_mask);
+  fp->buf_key_mask = 0;
+  fp->pacc.buf_delete(fp->buf_key_mask_sub);
+  fp->buf_key_mask_sub = 0;
+  fp->pacc.buf_delete(fp->buf_key_bg);
+  fp->buf_key_bg = 0;
+  fp->pacc.buf_delete(fp->buf_num);
+  fp->buf_num = 0;
+  fp->pacc.buf_delete(fp->buf_dt_sign);
+  fp->buf_dt_sign = 0;
+  fp->pacc.buf_delete(fp->buf_solid_2);
+  fp->buf_solid_2 = 0;
+  fp->pacc.buf_delete(fp->buf_solid_2_d);
+  fp->buf_solid_2_d = 0;
+  fp->pacc.buf_delete(fp->buf_solid_3);
+  fp->buf_solid_3 = 0;
+  fp->pacc.buf_delete(fp->buf_solid_3_d);
+  fp->buf_solid_3_d = 0;
+  fp->pacc.buf_delete(fp->buf_solid_7);
+  fp->buf_solid_7 = 0;
+  fp->pacc.buf_delete(fp->buf_solid_7_d);
+  fp->buf_solid_7_d = 0;
+  fp->pacc.buf_delete(fp->buf_vertical_2);
+  fp->buf_vertical_2 = 0;
+  fp->pacc.buf_delete(fp->buf_vertical_3);
+  fp->buf_vertical_3 = 0;
+  fp->pacc.buf_delete(fp->buf_vertical_7);
+  fp->buf_vertical_7 = 0;
+  fp->pacc.buf_delete(fp->buf_horizontal_2_d);
+  fp->buf_horizontal_2_d = 0;
+  fp->pacc.buf_delete(fp->buf_horizontal_3);
+  fp->buf_horizontal_3 = 0;
+  fp->pacc.buf_delete(fp->buf_horizontal_7_d);
+  fp->buf_horizontal_7_d = 0;
+  fp->pacc.buf_delete(fp->buf_logo);
+  fp->buf_logo = 0;
+  fp->pacc.buf_delete(fp->buf_ver);
+  fp->buf_ver = 0;
+  fp->pacc.buf_delete(fp->buf_text);
+  fp->buf_text = 0;
+  fp->pacc.buf_delete(fp->buf_tri);
+  fp->buf_tri = 0;
+  fp->pacc.buf_delete(fp->buf_tri_7);
+  fp->buf_tri_7 = 0;
+  fp->pacc.buf_delete(fp->buf_curl_left);
+  fp->buf_curl_left = 0;
+  fp->pacc.buf_delete(fp->buf_curl_right);
+  fp->buf_curl_right = 0;
+  fp->pacc.buf_delete(fp->buf_play);
+  fp->buf_play = 0;
+  fp->pacc.buf_delete(fp->buf_stop);
+  fp->buf_stop = 0;
+  fp->pacc.buf_delete(fp->buf_pause);
+  fp->buf_pause = 0;
+  fp->pacc.buf_delete(fp->buf_fade);
+  fp->buf_fade = 0;
+  fp->pacc.buf_delete(fp->buf_ff);
+  fp->buf_ff = 0;
+  fp->pacc.buf_delete(fp->buf_rew);
+  fp->buf_rew = 0;
+  fp->pacc.buf_delete(fp->buf_floppy);
+  fp->buf_floppy = 0;
+  fp->pacc.buf_delete(fp->buf_circle);
+  fp->buf_circle = 0;
+  fp->pacc.buf_delete(fp->buf_panpot_1_d);
+  fp->buf_panpot_1_d = 0;
+  fp->pacc.buf_delete(fp->buf_panpot_5_d);
+  fp->buf_panpot_5_d = 0;
+  fp->pacc.buf_delete(fp->buf_comment);
+  fp->buf_comment = 0;
+  fp->pacc.buf_delete(fp->buf_comment_tri_d);
+  fp->buf_comment_tri_d = 0;
+  fp->pacc.buf_delete(fp->buf_playing);
+  fp->buf_playing = 0;
+}
+
+static void fmdsp_pacc_deinit_tex(struct fmdsp_pacc *fp) {
+  fp->pacc.tex_delete(fp->tex_font);
+  fp->tex_font = 0;
+  fp->pacc.tex_delete(fp->tex_checker);
+  fp->tex_checker = 0;
+  fp->pacc.tex_delete(fp->tex_key_left);
+  fp->tex_key_left = 0;
+  fp->pacc.tex_delete(fp->tex_key_right);
+  fp->tex_key_right = 0;
+  fp->pacc.tex_delete(fp->tex_key_mask);
+  fp->tex_key_mask = 0;
+  fp->pacc.tex_delete(fp->tex_key_bg);
+  fp->tex_key_bg = 0;
+  fp->pacc.tex_delete(fp->tex_num);
+  fp->tex_num = 0;
+  fp->pacc.tex_delete(fp->tex_dt_sign);
+  fp->tex_dt_sign = 0;
+  fp->pacc.tex_delete(fp->tex_solid);
+  fp->tex_solid = 0;
+  fp->pacc.tex_delete(fp->tex_vertical);
+  fp->tex_vertical = 0;
+  fp->pacc.tex_delete(fp->tex_horizontal);
+  fp->tex_horizontal = 0;
+  fp->pacc.tex_delete(fp->tex_logo);
+  fp->tex_logo = 0;
+  fp->pacc.tex_delete(fp->tex_ver);
+  fp->tex_ver = 0;
+  fp->pacc.tex_delete(fp->tex_text);
+  fp->tex_text = 0;
+  fp->pacc.tex_delete(fp->tex_tri);
+  fp->tex_tri = 0;
+  fp->pacc.tex_delete(fp->tex_curl_left);
+  fp->tex_curl_left = 0;
+  fp->pacc.tex_delete(fp->tex_curl_right);
+  fp->tex_curl_right = 0;
+  fp->pacc.tex_delete(fp->tex_play);
+  fp->tex_play = 0;
+  fp->pacc.tex_delete(fp->tex_stop);
+  fp->tex_stop = 0;
+  fp->pacc.tex_delete(fp->tex_pause);
+  fp->tex_pause = 0;
+  fp->pacc.tex_delete(fp->tex_fade);
+  fp->tex_fade = 0;
+  fp->pacc.tex_delete(fp->tex_ff);
+  fp->tex_ff = 0;
+  fp->pacc.tex_delete(fp->tex_rew);
+  fp->tex_rew = 0;
+  fp->pacc.tex_delete(fp->tex_floppy);
+  fp->tex_floppy = 0;
+  fp->pacc.tex_delete(fp->tex_circle);
+  fp->tex_circle = 0;
+  fp->pacc.tex_delete(fp->tex_panpot);
+  fp->tex_panpot = 0;
+  fp->pacc.tex_delete(fp->tex_comment);
+  fp->tex_comment = 0;
+  fp->pacc.tex_delete(fp->tex_comment_tri);
+  fp->tex_comment_tri = 0;
+  fp->pacc.tex_delete(fp->tex_playing);
+  fp->tex_playing = 0;
+}
+
 void fmdsp_pacc_release(struct fmdsp_pacc *fp) {
   if (fp) {
     if (fp->pc) {
-      fp->pacc.buf_delete(fp->buf_font_1);
-      fp->pacc.buf_delete(fp->buf_font_1_d);
-      fp->pacc.buf_delete(fp->buf_font_2);
-      fp->pacc.buf_delete(fp->buf_font_2_d);
-      fp->pacc.buf_delete(fp->buf_font_7);
-      fp->pacc.buf_delete(fp->buf_checker);
-      fp->pacc.buf_delete(fp->buf_checker_1);
-      fp->pacc.buf_delete(fp->buf_key_left);
-      fp->pacc.buf_delete(fp->buf_key_right);
-      fp->pacc.buf_delete(fp->buf_key_mask);
-      fp->pacc.buf_delete(fp->buf_key_mask_sub);
-      fp->pacc.buf_delete(fp->buf_key_bg);
-      fp->pacc.buf_delete(fp->buf_num);
-      fp->pacc.buf_delete(fp->buf_dt_sign);
-      fp->pacc.buf_delete(fp->buf_solid_2);
-      fp->pacc.buf_delete(fp->buf_solid_2_d);
-      fp->pacc.buf_delete(fp->buf_solid_3);
-      fp->pacc.buf_delete(fp->buf_solid_3_d);
-      fp->pacc.buf_delete(fp->buf_solid_7);
-      fp->pacc.buf_delete(fp->buf_solid_7_d);
-      fp->pacc.buf_delete(fp->buf_vertical_2);
-      fp->pacc.buf_delete(fp->buf_vertical_3);
-      fp->pacc.buf_delete(fp->buf_vertical_7);
-      fp->pacc.buf_delete(fp->buf_horizontal_2_d);
-      fp->pacc.buf_delete(fp->buf_horizontal_3);
-      fp->pacc.buf_delete(fp->buf_horizontal_7_d);
-      fp->pacc.buf_delete(fp->buf_logo);
-      fp->pacc.buf_delete(fp->buf_ver);
-      fp->pacc.buf_delete(fp->buf_text);
-      fp->pacc.buf_delete(fp->buf_tri);
-      fp->pacc.buf_delete(fp->buf_tri_7);
-      fp->pacc.buf_delete(fp->buf_curl_left);
-      fp->pacc.buf_delete(fp->buf_curl_right);
-      fp->pacc.buf_delete(fp->buf_play);
-      fp->pacc.buf_delete(fp->buf_stop);
-      fp->pacc.buf_delete(fp->buf_pause);
-      fp->pacc.buf_delete(fp->buf_fade);
-      fp->pacc.buf_delete(fp->buf_ff);
-      fp->pacc.buf_delete(fp->buf_rew);
-      fp->pacc.buf_delete(fp->buf_floppy);
-      fp->pacc.buf_delete(fp->buf_circle);
-      fp->pacc.buf_delete(fp->buf_panpot_1_d);
-      fp->pacc.buf_delete(fp->buf_panpot_5_d);
-      fp->pacc.buf_delete(fp->buf_comment);
-      fp->pacc.buf_delete(fp->buf_comment_tri_d);
-      fp->pacc.tex_delete(fp->tex_font);
-      fp->pacc.tex_delete(fp->tex_checker);
-      fp->pacc.tex_delete(fp->tex_key_left);
-      fp->pacc.tex_delete(fp->tex_key_right);
-      fp->pacc.tex_delete(fp->tex_key_mask);
-      fp->pacc.tex_delete(fp->tex_key_bg);
-      fp->pacc.tex_delete(fp->tex_num);
-      fp->pacc.tex_delete(fp->tex_dt_sign);
-      fp->pacc.tex_delete(fp->tex_solid);
-      fp->pacc.tex_delete(fp->tex_vertical);
-      fp->pacc.tex_delete(fp->tex_horizontal);
-      fp->pacc.tex_delete(fp->tex_logo);
-      fp->pacc.tex_delete(fp->tex_ver);
-      fp->pacc.tex_delete(fp->tex_text);
-      fp->pacc.tex_delete(fp->tex_tri);
-      fp->pacc.tex_delete(fp->tex_curl_left);
-      fp->pacc.tex_delete(fp->tex_curl_right);
-      fp->pacc.tex_delete(fp->tex_play);
-      fp->pacc.tex_delete(fp->tex_stop);
-      fp->pacc.tex_delete(fp->tex_pause);
-      fp->pacc.tex_delete(fp->tex_fade);
-      fp->pacc.tex_delete(fp->tex_ff);
-      fp->pacc.tex_delete(fp->tex_rew);
-      fp->pacc.tex_delete(fp->tex_floppy);
-      fp->pacc.tex_delete(fp->tex_circle);
-      fp->pacc.tex_delete(fp->tex_panpot);
-      fp->pacc.tex_delete(fp->tex_comment);
-      fp->pacc.tex_delete(fp->tex_comment_tri);
+      fmdsp_pacc_deinit_buf(fp);
+      fmdsp_pacc_deinit_tex(fp);
     }
     free(fp);
   }
@@ -535,14 +624,7 @@ static void update_track_10(struct fmdsp_pacc *fp, const uint8_t *track_table, i
   }
 }
 
-struct fmdsp_pacc *fmdsp_pacc_init(
-    struct pacc_ctx *pc, const struct pacc_vtable *vtable) {
-  struct fmdsp_pacc *fp = malloc(sizeof(*fp));
-  if (!fp) goto err;
-  *fp = (struct fmdsp_pacc) {
-    .pc = pc,
-    .pacc = *vtable,
-  };
+static bool fmdsp_pacc_init_tex(struct fmdsp_pacc *fp) {
   fp->tex_font = tex_from_font(fp->pc, &fp->pacc, &font_fmdsp_small);
   if (!fp->tex_font) goto err;
   fp->tex_checker = fp->pacc.gen_tex(fp->pc, 2, 2);
@@ -595,10 +677,12 @@ struct fmdsp_pacc *fmdsp_pacc_init(
   if (!fp->tex_circle) goto err;
   fp->tex_panpot = fp->pacc.gen_tex(fp->pc, PANPOT_W, PANPOT_H*6);
   if (!fp->tex_panpot) goto err;
-  fp->tex_comment = fp->pacc.gen_tex(fp->pc, PC98_W, COMMENT_H*3);
+  fp->tex_comment = fp->pacc.gen_tex(fp->pc, PC98_W, CHECKER_H);
   if (!fp->tex_comment) goto err;
   fp->tex_comment_tri = fp->pacc.gen_tex(fp->pc, COMMENT_TRI_W, COMMENT_TRI_H*2);
   if (!fp->tex_comment_tri) goto err;
+  fp->tex_playing = fp->pacc.gen_tex(fp->pc, PLAYING_W, PLAYING_H);
+  if (!fp->tex_playing) goto err;
 
   uint8_t *buf;
   buf = fp->pacc.tex_lock(fp->tex_checker);
@@ -666,6 +750,9 @@ struct fmdsp_pacc *fmdsp_pacc_init(
   buf = fp->pacc.tex_lock(fp->tex_comment_tri);
   memcpy(buf, s_comment_tri, COMMENT_TRI_W*COMMENT_TRI_H*2);
   fp->pacc.tex_unlock(fp->tex_comment_tri);
+  buf = fp->pacc.tex_lock(fp->tex_playing);
+  memcpy(buf, s_playing, PLAYING_W*PLAYING_H);
+  fp->pacc.tex_unlock(fp->tex_playing);
   buf = fp->pacc.tex_lock(fp->tex_solid);
   buf[0] = 1;
   fp->pacc.tex_unlock(fp->tex_solid);
@@ -715,7 +802,13 @@ struct fmdsp_pacc *fmdsp_pacc_init(
     }
   }
   fp->pacc.tex_unlock(fp->tex_circle);
+  return true;
+err:
+  fmdsp_pacc_deinit_tex(fp);
+  return false;
+}
 
+static bool fmdsp_pacc_init_buf(struct fmdsp_pacc *fp) {
   fp->buf_font_1 = fp->pacc.gen_buf(fp->pc, fp->tex_font, pacc_buf_mode_static);
   if (!fp->buf_font_1) goto err;
   fp->buf_font_1_d = fp->pacc.gen_buf(fp->pc, fp->tex_font, pacc_buf_mode_stream);
@@ -806,12 +899,41 @@ struct fmdsp_pacc *fmdsp_pacc_init(
   if (!fp->buf_comment) goto err;
   fp->buf_comment_tri_d = fp->pacc.gen_buf(fp->pc, fp->tex_comment_tri, pacc_buf_mode_stream);
   if (!fp->buf_comment_tri_d) goto err;
+  fp->buf_playing = fp->pacc.gen_buf(fp->pc, fp->tex_playing, pacc_buf_mode_static);
+  if (!fp->buf_playing) goto err;
+  return true;
+err:
+  fmdsp_pacc_deinit_buf(fp);
+  return false;
+}
 
-  fp->pacc.buf_rect_off(fp->pc, fp->buf_checker, 1, CHECKER_Y, PC98_W-1, CHECKER_H, 1, 0);
-  fp->pacc.buf_rect(fp->pc, fp->buf_checker, 0, CHECKER_Y+2, 1, CHECKER_H-4);
-  fp->pacc.buf_rect(fp->pc, fp->buf_comment, 0, COMMENT_Y, PC98_W, COMMENT_H*3);
-  memcpy(fp->target_palette, s_palettes[0], sizeof(fp->target_palette));
+bool fmdsp_pacc_init(struct fmdsp_pacc *fp, struct pacc_ctx *pc, const struct pacc_vtable *pacc) {
+  fp->pc = pc;
+  fp->pacc = *pacc;
+  if (!fmdsp_pacc_init_tex(fp)) goto err;
+  if (!fmdsp_pacc_init_buf(fp)) goto err;
+  fp->pacc.palette(fp->pc, fp->curr_palette, FMDSP_PALETTE_COLORS);
   fp->mode_changed = true;
+  return true;
+err:
+  fp->pc = 0;
+  return false;
+}
+
+void fmdsp_pacc_deinit(struct fmdsp_pacc *fp) {
+  if (fp->pc) {
+    fmdsp_pacc_deinit_buf(fp);
+    fmdsp_pacc_deinit_tex(fp);
+    fp->pc = 0;
+  }
+}
+
+struct fmdsp_pacc *fmdsp_pacc_alloc(void) {
+  struct fmdsp_pacc *fp = malloc(sizeof(*fp));
+  if (!fp) goto err;
+  *fp = (struct fmdsp_pacc) {0};
+
+  memcpy(fp->target_palette, s_palettes[0], sizeof(fp->target_palette));
   return fp;
 err:
   fmdsp_pacc_release(fp);
@@ -1299,9 +1421,11 @@ static void update_default(struct fmdsp_pacc *fp) {
   fp->pacc.buf_rect(
       fp->pc, fp->buf_vertical_3,
       352, 70, 144, 4);
-  fp->pacc.buf_rect(
-      fp->pc, fp->buf_vertical_2,
-      352 + pos*2, 70, 8, 4);
+  if (fp->work->playing) {
+    fp->pacc.buf_rect(
+        fp->pc, fp->buf_vertical_2,
+        352 + pos*2, 70, 8, 4);
+  }
   fp->pacc.buf_rect(
       fp->pc, fp->work->loop_cnt ? fp->buf_solid_7_d : fp->buf_solid_3_d,
       496, 70, 16, 4);
@@ -1309,7 +1433,7 @@ static void update_default(struct fmdsp_pacc *fp) {
   // circle
   int clock = 8;
   if (fp->work->playing) {
-    if (fp->work->paused && (fp->framecnt % 32) < 16) {
+    if (fp->work->paused && (fp->framecnt % 32) >= 16) {
       clock = 8;
     } else {
       clock = (fp->work->timerb_cnt / 8) % 8;
@@ -1470,10 +1594,26 @@ static void update_default(struct fmdsp_pacc *fp) {
           fp->pc, fp->buf_font_1_d,
           LEVEL_X + LEVEL_W*c, LEVEL_PROG_Y,
           "%03d", levels[c].prog);
+    } else {
+      fp->pacc.buf_printf(
+          fp->pc, fp->buf_font_1_d,
+          LEVEL_X + LEVEL_W*c, LEVEL_PROG_Y,
+          "%c%c%c",
+          fp->opna->drum.drums[0].playing ? 'B' : ' ',
+          fp->opna->drum.drums[1].playing ? 'S' : ' ',
+          fp->opna->drum.drums[2].playing ? 'T' : ' ');
     }
     uint8_t oct = levels[c].key >> 4;
     uint8_t n = levels[c].key & 0xf;
-    if (c != 9 && levels[c].playing && n < 12) {
+    if (c == 9) {
+      fp->pacc.buf_printf(
+          fp->pc, fp->buf_font_1_d,
+          LEVEL_X + LEVEL_W*c, LEVEL_KEY_Y,
+          "%c%c%c",
+          fp->opna->drum.drums[3].playing ? 'H' : ' ',
+          fp->opna->drum.drums[4].playing ? 'T' : ' ',
+          fp->opna->drum.drums[5].playing ? 'R' : ' ');
+    } else if (levels[c].playing && n < 12) {
       fp->pacc.buf_printf(
           fp->pc, fp->buf_font_1_d,
           LEVEL_X + LEVEL_W*c, LEVEL_KEY_Y,
@@ -1514,8 +1654,32 @@ static void mode_update(struct fmdsp_pacc *fp) {
   fp->pacc.buf_clear(fp->buf_ff);
   fp->pacc.buf_clear(fp->buf_rew);
   fp->pacc.buf_clear(fp->buf_floppy);
+  fp->pacc.buf_clear(fp->buf_comment);
+  fp->pacc.buf_clear(fp->buf_playing);
+
   fp->pacc.buf_rect_off(fp->pc, fp->buf_checker, 1, CHECKER_Y, PC98_W-1, CHECKER_H, 1, 0);
   fp->pacc.buf_rect(fp->pc, fp->buf_checker, 0, CHECKER_Y+2, 1, CHECKER_H-4);
+  fp->pacc.buf_rect(fp->pc, fp->buf_comment, 0, CHECKER_Y, PC98_W, CHECKER_H);
+  fp->pacc.buf_rect(fp->pc, fp->buf_playing,
+      PLAYING_X, PLAYING_Y, PLAYING_W, PLAYING_H);
+  fp->pacc.buf_rect(fp->pc, fp->buf_solid_7, 74, 332, PC98_W-74, 1);
+  fp->pacc.buf_rect(fp->pc, fp->buf_solid_2, 78, 324, 2, 7);
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2, FILEBAR_MUS_X, PLAYING_Y+1,
+      "MUS");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2, FILEBAR_IC_X, PLAYING_Y+1,
+      "IC");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2, FILEBAR_F_X, PLAYING_Y+1,
+      "F");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_2, FILEBAR_ILE_X, PLAYING_Y+1,
+      "ILE");
+  fp->pacc.buf_rect(
+      fp->pc, fp->buf_tri,
+      FILEBAR_TRI_X, FILEBAR_TRI_Y, FILEBAR_TRI_W, FILEBAR_TRI_H);
+
   switch (fp->lmode) {
   case FMDSP_LEFT_MODE_OPNA:
     init_track_10(fp, track_disp_table_opna, 0);
@@ -1547,6 +1711,12 @@ static void mode_update(struct fmdsp_pacc *fp) {
 }
 
 void fmdsp_pacc_render(struct fmdsp_pacc *fp) {
+  if (!fp->pc) return;
+  if (fp->comment_tex_buf_changed) {
+    void *buf = fp->pacc.tex_lock(fp->tex_comment);
+    memcpy(buf, fp->comment_tex_buf, sizeof(fp->comment_tex_buf));
+    fp->pacc.tex_unlock(fp->tex_comment);
+  }
   if (memcmp(fp->curr_palette, fp->target_palette, sizeof(fp->target_palette))) {
     for (int i = 0; i < FMDSP_PALETTE_COLORS*3; i++) {
       uint8_t p = fp->curr_palette[i];
@@ -1706,6 +1876,7 @@ void fmdsp_pacc_render(struct fmdsp_pacc *fp) {
   fp->pacc.draw(fp->pc, fp->buf_curl_left, pacc_mode_copy);
   fp->pacc.draw(fp->pc, fp->buf_curl_right, pacc_mode_copy);
   fp->pacc.draw(fp->pc, fp->buf_circle, pacc_mode_copy);
+  fp->pacc.draw(fp->pc, fp->buf_playing, pacc_mode_copy);
   fp->pacc.color(fp->pc, 2);
   fp->pacc.draw(fp->pc, fp->buf_comment, pacc_mode_color_trans);
   fp->pacc.draw(fp->pc, fp->buf_comment_tri_d, pacc_mode_color_trans);
@@ -1786,13 +1957,14 @@ static void font_putline(
     const char *strptr,
     uint8_t *tex, int texwidth,
     const struct fmdsp_font *font,
-    int x, int y) {
+    int x, int y, int maxwidth) {
   const uint8_t *cp932str = (const uint8_t *)strptr;
   bool sjis_is2nd = false;
   uint8_t sjis_1st;
   int fw = font->width_half;
   int fh = font->height;
   int xo = 0;
+  if (!maxwidth) maxwidth = texwidth - x;
 
   enum {
     STATE_NORMAL,
@@ -1831,7 +2003,7 @@ static void font_putline(
           xo -= (xo % (fw*8));
           cp932str++;
         } else {
-          if ((x+xo+fw) > texwidth) return;
+          if ((xo+fw) > maxwidth) return;
           const void *fp = font->get(font, *cp932str++, FMDSP_FONT_ANK);
           if (fp) {
             font_putchar(tex, texwidth, fp, x+xo, y, fw, fh);
@@ -1846,7 +2018,7 @@ static void font_putline(
       uint8_t sjis_2nd = *cp932str++;
       uint16_t jis = sjis2jis(sjis_1st, sjis_2nd);
       bool half = jis_is_halfwidth(jis);
-      if ((x+xo+fw*(half ? 1 : 2)) > texwidth) return;
+      if ((xo+fw*(half ? 1 : 2)) > maxwidth) return;
       const void *fp = font->get(font, jis, FMDSP_FONT_JIS_LEFT);
       if (fp) {
         font_putchar(tex, texwidth, fp, x+xo, y, fw, fh);
@@ -1879,8 +2051,7 @@ static void draw_tri(uint8_t *buf, int width, int x, int y) {
 static void fmdsp_pacc_comment_draw(struct fmdsp_pacc *fp) {
   if (!fp->font16) return;
   if (!fp->work) return;
-  uint8_t *buf = fp->pacc.tex_lock(fp->tex_comment);
-  memset(buf, 0, PC98_W*COMMENT_H*3);
+  memset(fp->comment_tex_buf, 0, PC98_W*CHECKER_H);
   const char *str;
   if (fp->work->comment_mode_pmd) {
     fp->comment_prev_avail = fp->comment_offset;
@@ -1891,39 +2062,45 @@ static void fmdsp_pacc_comment_draw(struct fmdsp_pacc *fp) {
       if (n == 0) {
         str = fp->work->get_comment(fp->work, 0);
         if (str) {
-          font_putline("MUS", buf, PC98_W, &font_fmdsp_small,
-              14, COMMENT_H*i+7);
-          font_putline("IC", buf, PC98_W, &font_fmdsp_small,
-              28, COMMENT_H*i+7);
-          font_putline("T", buf, PC98_W, &font_fmdsp_small,
-              40, COMMENT_H*i+7);
-          font_putline("ITLE", buf, PC98_W, &font_fmdsp_small,
-              44, COMMENT_H*i+7);
-          draw_tri(buf, PC98_W, 65, COMMENT_H*i+10);
-          font_putline(str, buf, PC98_W, fp->font16, 81, COMMENT_H*i);
+          font_putline("MUS", fp->comment_tex_buf, PC98_W, &font_fmdsp_small,
+              14, COMMENT_H*i+12, 0);
+          font_putline("IC", fp->comment_tex_buf, PC98_W, &font_fmdsp_small,
+              28, COMMENT_H*i+12, 0);
+          font_putline("T", fp->comment_tex_buf, PC98_W, &font_fmdsp_small,
+              40, COMMENT_H*i+12, 0);
+          font_putline("ITLE", fp->comment_tex_buf, PC98_W, &font_fmdsp_small,
+              44, COMMENT_H*i+12, 0);
+          draw_tri(fp->comment_tex_buf, PC98_W, 65, COMMENT_H*i+15);
+          font_putline(str, fp->comment_tex_buf,
+              PC98_W, fp->font16, 80, COMMENT_H*i+4, 0);
         }
       } else if (n == 1) {
         str = fp->work->get_comment(fp->work, 1);
         if (str) {
-          font_putline("COMPOSER", buf, PC98_W, &font_fmdsp_small,
-              24, COMMENT_H*i+7);
-          draw_tri(buf, PC98_W, 65, COMMENT_H*i+10);
-          font_putline(str, buf, PC98_W, fp->font16, 81, COMMENT_H*i);
+          font_putline("COMPOSER",
+              fp->comment_tex_buf, PC98_W, &font_fmdsp_small,
+              24, COMMENT_H*i+12, 0);
+          draw_tri(fp->comment_tex_buf, PC98_W, 65, COMMENT_H*i+15);
+          font_putline(str, fp->comment_tex_buf,
+              PC98_W, fp->font16, 80, COMMENT_H*i+4, 224);
         }
         str = fp->work->get_comment(fp->work, 2);
         if (str) {
-          font_putline("ARRANGER", buf, PC98_W, &font_fmdsp_small,
-              312, COMMENT_H*i+7);
-          draw_tri(buf, PC98_W, 353, COMMENT_H*i+10);
-          font_putline(str, buf, PC98_W, fp->font16, 371, COMMENT_H*i);
+          font_putline("ARRANGER",
+              fp->comment_tex_buf, PC98_W, &font_fmdsp_small,
+              312, COMMENT_H*i+12, 0);
+          draw_tri(fp->comment_tex_buf, PC98_W, 353, COMMENT_H*i+15);
+          font_putline(str, fp->comment_tex_buf,
+              PC98_W, fp->font16, 368, COMMENT_H*i+4, 0);
         }
       } else {
         str = fp->work->get_comment(fp->work, n+1);
         if (str) {
-          font_putline("MEMO", buf, PC98_W, &font_fmdsp_small,
-              44, COMMENT_H*i+7);
-          draw_tri(buf, PC98_W, 65, COMMENT_H*i+10);
-          font_putline(str, buf, PC98_W, fp->font16, 81, COMMENT_H*i);
+          font_putline("MEMO", fp->comment_tex_buf, PC98_W, &font_fmdsp_small,
+              44, COMMENT_H*i+12, 0);
+          draw_tri(fp->comment_tex_buf, PC98_W, 65, COMMENT_H*i+15);
+          font_putline(str, fp->comment_tex_buf,
+              PC98_W, fp->font16, 80, COMMENT_H*i+4, 0);
         }
       }
     }
@@ -1932,10 +2109,11 @@ static void fmdsp_pacc_comment_draw(struct fmdsp_pacc *fp) {
     fp->comment_next_avail = false;
     for (int i = 0; i < 3; i++) {
       const char *str = fp->work->get_comment(fp->work, i);
-      if (str) font_putline(str, buf, PC98_W, fp->font16, 0, i*COMMENT_H);
+      if (str) font_putline(str, fp->comment_tex_buf,
+          PC98_W, fp->font16, 0, COMMENT_H*i+5, 0);
     }
   }
-  fp->pacc.tex_unlock(fp->tex_comment);
+  fp->comment_tex_buf_changed = true;
 }
 
 void fmdsp_pacc_comment_reset(struct fmdsp_pacc *fp) {
