@@ -567,7 +567,6 @@ int main(int argc, char **argv) {
   gtk_gl_area_set_required_version(GTK_GL_AREA(g.fmdsp_widget), 2, 0);
 #endif
 #else // PACC_GL_ES
-  gtk_gl_area_set_use_es(GTK_GL_AREA(g.fmdsp_widget), FALSE);
 #ifdef PACC_GL_3
   gtk_gl_area_set_required_version(GTK_GL_AREA(g.fmdsp_widget), 3, 2);
 #else
