@@ -3208,20 +3208,20 @@ static void fmp_title(
   int l = 0;
   int li = 0;
   for (int si = 0;; si++) {
-    if (l >= 3) {
-      // Z8X
-      fmp->pdzf.mode = 1;
-      return;
-    }
     if ((offset + si) >= fmp->datalen) {
-      fmp->comment[l][0] = 0;
+      if (l < 3) fmp->comment[l][0] = 0;
       return;
     }
     if (li >= FMP_COMMENT_BUFLEN) {
-      fmp->comment[l][0] = 0;
+      if (l < 3) fmp->comment[l][0] = 0;
       return;
     }
     uint8_t c = fmp->data[offset+si];
+    if (l >= 3) {
+      // Z8X
+      if (c) fmp->pdzf.mode = 1;
+      return;
+    }
     if (c == '\r') {
       continue;
     } else if (c == '\n') {
