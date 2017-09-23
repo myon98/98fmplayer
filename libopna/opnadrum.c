@@ -94,6 +94,7 @@ void opna_drum_mix(struct opna_drum *drum, int16_t *buf, int samples) {
         co *= 15 - (level&7);
         co >>= 1+(level>>3);
         unsigned outlevel = co > 0 ? co : -co;
+        if (!drum->drums[d].left && !drum->drums[d].right) outlevel = 0;
         if (outlevel > levels[d]) levels[d] = outlevel;
         if (!(drum->mask & (1u << d))) {
           if (drum->drums[d].left) lo += co;
