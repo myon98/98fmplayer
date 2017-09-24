@@ -300,7 +300,7 @@ static gboolean render_cb(GtkGLArea *glarea, GdkGLContext *glctx, gpointer ptr) 
   (void)ptr;
   if (!atomic_flag_test_and_set_explicit(
     &g.at_fftdata_flag, memory_order_acquire)) {
-    memcpy(&g.fftdata.fdata, &g.at_fftdata, sizeof(g.fftdata));
+    memcpy(&g.fftdata.fdata, &g.at_fftdata, sizeof(g.fftdata.fdata));
     atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
   }
   fmdsp_pacc_render(g.fp);
