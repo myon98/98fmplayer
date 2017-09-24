@@ -12,18 +12,21 @@
 #include "common/fmplayer_file.h"
 #include "libopna/opna.h"
 #include "libopna/opnatimer.h"
-#include "fmdsp/fmdsp.h"
 #include "soundout.h"
-#include "winfont.h"
 #include "version.h"
 #include "toneview.h"
 #include "oscillo/oscillo.h"
 #include "oscilloview.h"
 #include "about.h"
 #include "common/fmplayer_common.h"
+#include "common/fmplayer_drumrom.h"
+#include "common/fmplayer_fontrom.h"
 #include "wavesave.h"
 #include "fft/fft.h"
 #include "configdialog.h"
+#include "fmdsp/font.h"
+#include "pacc/pacc-win.h"
+#include "fmdsp/fmdsp-pacc.h"
 
 enum {
   ID_OPENFILE = 0x10,
@@ -58,29 +61,26 @@ static struct {
   struct ppz8 ppz8;
   struct fmdriver_work work;
   struct fmplayer_file *fmfile;
-  struct fmdsp fmdsp;
-  uint8_t vram[PC98_W*PC98_H];
-  //uint8_t *vram;
   struct fmdsp_font font;
-  uint8_t fontrom[FONT_ROM_FILESIZE];
-  bool font_loaded;
   uint8_t opna_adpcm_ram[OPNA_ADPCM_RAM_SIZE];
   bool paused;
   HWND mainwnd;
+  HWND fmdspwnd;
   WNDPROC btn_defproc;
   HWND button_2x, button_toneview, button_oscilloview, button_about, button_config;
   bool toneview_on, oscilloview_on, about_on, config_on;
   const wchar_t *lastopenpath;
   bool fmdsp_2x;
   struct oscillodata oscillodata_audiothread[LIBOPNA_OSCILLO_TRACK_COUNT];
-  UINT mmtimer;
-  HBITMAP bitmap_vram;
-  uint8_t *vram32;
   bool drum_loaded;
   atomic_flag at_fftdata_flag;
   struct fmplayer_fft_data at_fftdata;
   struct fmplayer_fft_input_data fftdata;
   atomic_flag opna_flag;
+  struct pacc_ctx *pc;
+  struct pacc_vtable pacc;
+  struct pacc_win_vtable pacc_win;
+  struct fmdsp_pacc *fp;
 } g = {
   .at_fftdata_flag = ATOMIC_FLAG_INIT,
   .opna_flag = ATOMIC_FLAG_INIT,
@@ -108,44 +108,6 @@ static void sound_cb(void *p, int16_t *buf, unsigned frames) {
     &g.at_fftdata_flag, memory_order_acquire)) {
     fft_write(&g.at_fftdata, buf, frames);
     atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
-  }
-}
-
-static bool loadfontrom(void) {
-  const wchar_t *path = L"font.rom";
-  wchar_t exepath[MAX_PATH];
-  if (GetModuleFileName(0, exepath, MAX_PATH)) {
-    PathRemoveFileSpec(exepath);
-    if ((lstrlen(exepath) + lstrlen(path) + 1) < MAX_PATH) {
-      lstrcat(exepath, L"\\");
-      lstrcat(exepath, path);
-      path = exepath;
-    }
-  }
-  HANDLE file = CreateFile(path, GENERIC_READ,
-                            0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-  if (file == INVALID_HANDLE_VALUE) goto err;
-  DWORD filesize = GetFileSize(file, 0);
-  if (filesize != FONT_ROM_FILESIZE) goto err_file;
-  DWORD readbytes;
-  if (!ReadFile(file, g.fontrom, FONT_ROM_FILESIZE, &readbytes, 0)
-      || readbytes != FONT_ROM_FILESIZE) goto err_file;
-  CloseHandle(file);
-  fmdsp_font_from_font_rom(&g.font, g.fontrom);
-  g.font_loaded = true;
-  about_set_fontrom_loaded(true);
-  return true;
-err_file:
-  CloseHandle(file);
-err:
-  return false;
-}
-
-static void loadfont(void) {
-  if (loadfontrom()) return;
-
-  if (fmdsp_font_win(&g.font)) {
-    g.font_loaded = true;
   }
 }
 
@@ -183,12 +145,12 @@ static void openfile(HWND hwnd, const wchar_t *path) {
   opna_fm_set_hires_env(&g.opna.fm, fmplayer_config.fm_hires_env);
   WideCharToMultiByte(932, WC_NO_BEST_FIT_CHARS, path, -1, g.work.filename, sizeof(g.work.filename), 0, 0);
   fmplayer_file_load(&g.work, g.fmfile, 1);
+  fmdsp_pacc_comment_reset(g.fp);
   if (!g.sound) {
     g.sound = sound_init(hwnd, SRATE, SECTLEN,
                          sound_cb, &g.opna_timer);
     about_setsoundapiname(g.sound->apiname);
   }
-  fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
   if (!g.sound) goto err;
   g.sound->pause(g.sound, 0);
   g.paused = false;
@@ -337,6 +299,10 @@ static void toggle_2x(HWND hwnd) {
   AdjustWindowRectEx(&wr, style, 0, exstyle);
   SetWindowPos(hwnd, HWND_TOP, 0, 0, wr.right-wr.left, wr.bottom-wr.top,
                 SWP_NOZORDER | SWP_NOMOVE);
+  SetWindowPos(
+      g.fmdspwnd, HWND_TOP,
+      0, 80, PC98_W*(g.fmdsp_2x+1), PC98_H*(g.fmdsp_2x+1),
+      SWP_NOZORDER);
   Button_SetCheck(g.button_2x, g.fmdsp_2x);
 }
 
@@ -344,7 +310,7 @@ static bool proc_key(UINT vk, bool down, int repeat) {
   if (down) {
     if (VK_F1 <= vk && vk <= VK_F12) {
       if (GetKeyState(VK_CONTROL) & 0x8000U) {
-        fmdsp_palette_set(&g.fmdsp, vk - VK_F1);
+        fmdsp_pacc_palette(g.fp, vk - VK_F1);
         return true;
       } else {
         switch (vk) {
@@ -361,7 +327,13 @@ static bool proc_key(UINT vk, bool down, int repeat) {
           }
           return true;
         case VK_F11:
-          fmdsp_dispstyle_set(&g.fmdsp, (g.fmdsp.style+1) % FMDSP_DISPSTYLE_CNT);
+          if (GetKeyState(VK_SHIFT) & 0x8000u) {
+            fmdsp_pacc_set_right_mode(
+                g.fp, (fmdsp_pacc_right_mode(g.fp)+1) % FMDSP_RIGHT_MODE_CNT);
+          } else {
+            fmdsp_pacc_set_left_mode(
+                g.fp, (fmdsp_pacc_left_mode(g.fp)+1) % FMDSP_LEFT_MODE_CNT);
+          }
           return true;
         case VK_F12:
           toggle_2x(g.mainwnd);
@@ -412,6 +384,16 @@ static bool proc_key(UINT vk, bool down, int repeat) {
         opna_set_mask(&g.opna, 0);
         ppz8_set_mask(&g.ppz8, 0);
         return true;
+      case VK_UP:
+      case VK_DOWN:
+    //    MessageBox(g.mainwnd, L"A", L"B", 0);
+        if (shift) {
+          fmdsp_pacc_comment_scroll(g.fp, vk == VK_DOWN);
+          return true;
+        }
+        break;
+      default:
+        break;
       }
     }
   }
@@ -426,32 +408,23 @@ static LRESULT CALLBACK btn_wndproc(
   case WM_KEYUP:
     if (proc_key((UINT)wParam, msg == WM_KEYDOWN, (int)(short)LOWORD(lParam))) return 0;
     break;
+  case WM_GETDLGCODE:
+    if ((wParam == VK_UP) || (wParam == VK_DOWN)) {
+      return DLGC_WANTMESSAGE;
+    }
+    break;
   }
   return CallWindowProc(g.btn_defproc, hwnd, msg, wParam, lParam);
 }
 
-static void CALLBACK mmtimer_cb(UINT timerid, UINT msg,
-                                DWORD_PTR userptr,
-                                DWORD_PTR dw1, DWORD_PTR dw2) {
-  PostMessage(g.mainwnd, WM_USER, 0, 0);
-}
-
 static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   (void)cs;
-  struct bitmap_info_fmdsp {
-    BITMAPINFOHEADER head;
-    RGBQUAD colors[FMDSP_PALETTE_COLORS];
-  } bmi = {0};
-  bmi.head.biSize = sizeof(bmi.head);
-  bmi.head.biWidth = PC98_W;
-  bmi.head.biHeight = -PC98_H;
-  bmi.head.biPlanes = 1;
-  bmi.head.biBitCount = 32;
-  bmi.head.biCompression = BI_RGB;
-  //bmi.head.biClrUsed = FMDSP_PALETTE_COLORS;
-  g.bitmap_vram = CreateDIBSection(
-    0, (BITMAPINFO *)&bmi, DIB_RGB_COLORS, (void **)&g.vram32, 0, 0
-  );
+  g.fmdspwnd = CreateWindowEx(
+      0, L"static", 0,
+      WS_VISIBLE | WS_CHILD,
+      0, 80,
+      PC98_W, PC98_H,
+      hwnd, 0, g.hinst, 0);
   HWND button = CreateWindowEx(
     0,
     L"BUTTON",
@@ -545,11 +518,6 @@ static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   SetWindowFont(g.button_oscilloview, font, TRUE);
   SetWindowFont(g.button_about, font, TRUE);
   SetWindowFont(g.button_config, font, TRUE);
-  loadfont();
-  fmdsp_init(&g.fmdsp, g.font_loaded ? &g.font : 0);
-  fmdsp_vram_init(&g.fmdsp, &g.work, g.vram);
-  //SetTimer(hwnd, TIMER_FMDSP, 16, 0);
-  g.mmtimer = timeSetEvent(16, 16, mmtimer_cb, 0, TIME_PERIODIC);
 #ifdef ENABLE_WM_DROPFILES
   DragAcceptFiles(hwnd, TRUE);
 #endif
@@ -668,40 +636,9 @@ static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
 
 static void on_destroy(HWND hwnd) {
   (void)hwnd;
-  timeKillEvent(g.mmtimer);
   if (g.sound) g.sound->free(g.sound);
   fmplayer_file_free(g.fmfile);
   PostQuitMessage(0);
-}
-
-static void on_paint(HWND hwnd) {
-  if (!atomic_flag_test_and_set_explicit(
-    &g.at_fftdata_flag, memory_order_acquire)) {
-    memcpy(&g.fftdata.fdata, &g.at_fftdata, sizeof(g.fftdata));
-    atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
-  }
-  fmdsp_update(&g.fmdsp, &g.work, &g.opna, g.vram, &g.fftdata);
-  fmdsp_vrampalette(&g.fmdsp, g.vram, g.vram32, PC98_W*4);
-  PAINTSTRUCT ps;
-  HDC dc = BeginPaint(hwnd, &ps);
-  HDC mdc = CreateCompatibleDC(dc);
-  SelectObject(mdc, g.bitmap_vram);
-  /*
-  RGBQUAD palette[FMDSP_PALETTE_COLORS];
-  for (int p = 0; p < FMDSP_PALETTE_COLORS; p++) {
-    palette[p].rgbRed = g.fmdsp.palette[p*3+0];
-    palette[p].rgbGreen = g.fmdsp.palette[p*3+1];
-    palette[p].rgbBlue = g.fmdsp.palette[p*3+2];
-  }
-  SetDIBColorTable(mdc, 0, FMDSP_PALETTE_COLORS, palette);
-  */
-  if (g.fmdsp_2x) {
-    StretchBlt(dc, 0, 80, 1280, 800, mdc, 0, 0, 640, 400, SRCCOPY);
-  } else {
-    BitBlt(dc, 0, 80, 640, 400, mdc, 0, 0, SRCCOPY);
-  }
-  DeleteDC(mdc);
-  EndPaint(hwnd, &ps);
 }
 
 static LRESULT on_copydata(HWND hwnd, HWND hwndfrom, COPYDATASTRUCT *cds) {
@@ -715,7 +652,7 @@ static void on_syskey(HWND hwnd, UINT vk, BOOL down, int repeat, UINT scan) {
   if (down) {
     if (vk == VK_F10) {
       if (GetKeyState(VK_CONTROL) & 0x8000U) {
-        fmdsp_palette_set(&g.fmdsp, 9);
+        fmdsp_pacc_palette(g.fp, 9);
         return;
       }
     }
@@ -740,15 +677,6 @@ static void on_activate(HWND hwnd, bool activate, HWND targetwnd, WINBOOL state)
   else g_currentdlg = 0;
 }
 
-static bool on_erasebkgnd(HWND hwnd, HDC dc) {
-  RECT cr;
-  GetClientRect(hwnd, &cr);
-  // separate fmdsp drawing area to another window and remove this hack
-  cr.bottom -= 400 * (g.fmdsp_2x + 1);
-  FillRect(dc, &cr, (HBRUSH)(COLOR_BTNFACE+1));
-  return true;
-}
-
 static LRESULT CALLBACK wndproc(
   HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 ) {
@@ -756,8 +684,6 @@ static LRESULT CALLBACK wndproc(
   HANDLE_MSG(hwnd, WM_DESTROY, on_destroy);
   HANDLE_MSG(hwnd, WM_CREATE, on_create);
   HANDLE_MSG(hwnd, WM_COMMAND, on_command);
-  HANDLE_MSG(hwnd, WM_PAINT, on_paint);
-  HANDLE_MSG(hwnd, WM_ERASEBKGND, on_erasebkgnd);
   case WM_COPYDATA:
     return on_copydata(hwnd, (HWND)wParam, (COPYDATASTRUCT *)lParam);
 #ifdef ENABLE_WM_DROPFILES
@@ -768,21 +694,11 @@ static LRESULT CALLBACK wndproc(
   HANDLE_MSG(hwnd, WM_SYSKEYDOWN, on_syskey);
   HANDLE_MSG(hwnd, WM_SYSKEYUP, on_syskey);
   HANDLE_MSG(hwnd, WM_ACTIVATE, on_activate);
-  case WM_USER:
-    {
-      RECT r = {
-        .left = 0,
-        .top = 80,
-        .right = 640,
-        .bottom = 480,
-      };
-      if (g.fmdsp_2x) {
-        r.right = 1280;
-        r.bottom = 880;
-      }
-      InvalidateRect(hwnd, &r, FALSE);
-      return 0;
+  case WM_GETDLGCODE:
+    if ((wParam == VK_UP) || (wParam == VK_DOWN)) {
+      return DLGC_WANTMESSAGE;
     }
+    break;
   }
   return DefWindowProc(hwnd, msg, wParam, lParam);
 }
@@ -799,15 +715,25 @@ static ATOM register_class(HINSTANCE hinst) {
   return RegisterClass(&wc);
 }
 
+static void render_cb(void *ptr) {
+  (void)ptr;
+  if (!atomic_flag_test_and_set_explicit(
+        &g.at_fftdata_flag, memory_order_acquire)) {
+    memcpy(&g.fftdata.fdata, &g.at_fftdata, sizeof(g.fftdata.fdata));
+    atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
+  }
+  fmdsp_pacc_render(g.fp);
+}
+
 int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
                       wchar_t *cmdline_, int cmdshow) {
   (void)hpinst;
   (void)cmdline_;
 
   if (__builtin_cpu_supports("sse2")) opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_sse2;
-  if (__builtin_cpu_supports("ssse3")) fmdsp_vramlookup_func = fmdsp_vramlookup_ssse3;
 
   fft_init_table();
+  fmplayer_font_rom_load(&g.font);
 
   const wchar_t *argfile = 0;
   {
@@ -859,12 +785,28 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
     wr.right-wr.left, wr.bottom-wr.top,
     0, 0, g.hinst, 0
   );
+  g.pc = pacc_init_d3d9(g.fmdspwnd, render_cb, 0, &g.pacc, &g.pacc_win);
+  if (!g.pc) {
+    MessageBox(g.mainwnd, L"Error", L"Cannot initialize Direct3D", MB_ICONSTOP);
+    return 0;
+  }
+  g.fp = fmdsp_pacc_alloc();
+  if (!g.fp) {
+    MessageBox(g.mainwnd, L"Error", L"Cannot allocate fmdsp-pacc", MB_ICONSTOP);
+    return 0;
+  }
   ShowWindow(g.mainwnd, cmdshow);
+  if (!fmdsp_pacc_init(g.fp, g.pc, &g.pacc)) {
+    MessageBox(g.mainwnd, L"Error", L"Cannot initialize fmdsp-pacc", MB_ICONSTOP);
+    return 0;
+  }
+  fmdsp_pacc_set_font16(g.fp, &g.font);
+  fmdsp_pacc_set(g.fp, &g.work, &g.opna, &g.fftdata);
+  g.pacc_win.renderctrl(g.pc, true);
 
   if (argfile) {
     openfile(g.mainwnd, argfile);
   }
-  timeBeginPeriod(1);
   MSG msg = {0};
   while (GetMessage(&msg, 0, 0, 0)) {
     if (!g_currentdlg || !IsDialogMessage(g_currentdlg, &msg)) {
@@ -872,7 +814,9 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
       DispatchMessage(&msg);
     }
   }
-  timeEndPeriod(1);
+  if (g.pc) g.pacc_win.renderctrl(g.pc, false);
+  if (g.fp) fmdsp_pacc_release(g.fp);
+  if (g.pc) g.pacc.pacc_delete(g.pc);
   return msg.wParam;
 }
 

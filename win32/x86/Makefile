@@ -5,6 +5,7 @@ vpath %.c ../../fmdsp
 vpath %.c ../../tonedata
 vpath %.c ../../common
 vpath %.c ../../fft
+vpath %.c ../../pacc
 vpath %.rc ..
 
 include ../fmplayer.mak

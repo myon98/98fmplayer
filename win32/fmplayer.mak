@@ -18,11 +18,10 @@ LIBOPNA_OBJS=opna \
              opnassg-sinc-c \
              opnadrum \
              opnaadpcm
-FMDSP_OBJS=fmdsp \
-           fmdsp-vramlookup-c \
-           font_rom \
-           font_fmdsp_small \
-           fmdsp_platform_win
+FMDSP_OBJS=fmdsp-pacc \
+	   pacc-d3d9 \
+	   fmdsp_platform_win \
+	   font_fmdsp_small
 TONEDATA_OBJS=tonedata
 SSEOBJBASE=opnassg-sinc-sse2 \
            fmdsp-vramlookup-ssse3
@@ -40,6 +39,8 @@ OBJBASE=main \
         fmplayer_file \
         fmplayer_file_win \
         fmplayer_drumrom_win \
+        fmplayer_fontrom_win \
+        font_rom \
         fmplayer_work_opna \
         about \
         $(FMDRIVER_OBJS) \
