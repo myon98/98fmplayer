@@ -70,7 +70,7 @@ static const void *winfont_get(const struct fmdsp_font *font,
   switch (type) {
   case FMDSP_FONT_ANK:
     text[0] = jis2unih(c);
-    TextOut(fw->dc, 0, 0, text, 1);
+    TextOutW(fw->dc, 0, 0, text, 1);
     break;
   case FMDSP_FONT_JIS_LEFT:
     {
@@ -86,11 +86,11 @@ static const void *winfont_get(const struct fmdsp_font *font,
         text[0] = jis2uni(c);
       }
     }
-    TextOut(fw->dc, 0, 0, text, 1);
+    TextOutW(fw->dc, 0, 0, text, 1);
     break;
   case FMDSP_FONT_JIS_RIGHT:
     text[0] = jis2uni(c);
-    TextOut(fw->dc, -8, 0, text, 1);
+    TextOutW(fw->dc, -8, 0, text, 1);
     break;
   }
   GdiFlush();
@@ -111,12 +111,12 @@ bool fmdsp_font_win(struct fmdsp_font *font) {
     GetProcessHeap(), 0, sizeof(struct font_win32)
   );
   if (!fw) goto err;
-  fw->font = CreateFont(16, 0, 0, 0, 
-                        FW_NORMAL, FALSE, FALSE, FALSE,
-                        SHIFTJIS_CHARSET,
-                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                        NONANTIALIASED_QUALITY, FIXED_PITCH,
-                        L"MS Gothic");
+  fw->font = CreateFontW(16, 0, 0, 0, 
+                         FW_NORMAL, FALSE, FALSE, FALSE,
+                         SHIFTJIS_CHARSET,
+                         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                         NONANTIALIASED_QUALITY, FIXED_PITCH,
+                         L"MS Gothic");
   if (!fw->font) goto err_fw;
   fw->dc = CreateCompatibleDC(0);
   if (!fw->dc) goto err_font;
@@ -137,7 +137,6 @@ bool fmdsp_font_win(struct fmdsp_font *font) {
     DIB_RGB_COLORS, (void **)&fw->data,
     0, 0);
   if (!fw->bitmap) {
-    MessageBox(0, L"a", L"b", 0);
     goto err_dc;
   }
   SelectObject(fw->dc, fw->bitmap);
