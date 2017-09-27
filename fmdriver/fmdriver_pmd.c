@@ -1650,13 +1650,14 @@ static void pmd_adpcm_vol_out(
         vol = 0;
         // -> 053f
       } else {
-        vol = (vol * (envvol+1)) >> 3;
-        if (vol & 1) {
-          vol >>= 1;
-          vol++;
+        int ivol = (vol * (envvol+1)) >> 3;
+        if (ivol & 1) {
+          ivol >>= 1;
+          ivol++;
         } else {
-          vol >>= 1;
+          ivol >>= 1;
         }
+        vol = ivol;
       }
     } else {
       // 04e8
@@ -1711,13 +1712,14 @@ static void pmd_ppz8_vol_out(
         vol = 0;
         // -> 0bd4
       } else {
-        vol = (vol * (envvol+1)) >> 3;
-        if (vol & 1) {
-          vol >>= 1;
-          vol++;
+        int ivol = (vol * (envvol+1)) >> 3;
+        if (ivol & 1) {
+          ivol >>= 1;
+          ivol++;
         } else {
-          vol >>= 1;
+          ivol >>= 1;
         }
+        vol = ivol;
       }
     } else {
       // 0b7d
