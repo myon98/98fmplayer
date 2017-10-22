@@ -5,6 +5,7 @@
 void fmplayer_file_free(const struct fmplayer_file *fmfileptr) {
   struct fmplayer_file *fmfile = (struct fmplayer_file *)fmfileptr;
   if (!fmfile) return;
+  free((void *)fmfile->filename_sjis);
   free(fmfile->path);
   free(fmfile->buf);
   free(fmfile->ppzbuf[0]);
@@ -109,6 +110,7 @@ struct fmplayer_file *fmplayer_file_alloc(const void *path, enum fmplayer_file_e
     if (error) *error = FMPLAYER_FILE_ERR_NOMEM;
     goto err;
   }
+  fmfile->filename_sjis = fmplayer_path_filename_sjis(path);
   size_t filesize;
   fmfile->buf = fmplayer_fileread(path, 0, 0, 0xffff, &filesize, error);
   if (!fmfile->buf) goto err;
@@ -139,17 +141,17 @@ static void loadppc(struct fmdriver_work *work, struct fmplayer_file *fmfile) {
   }
 }
 
-static bool loadppzpvi(struct fmdriver_work *work, struct fmplayer_file *fmfile, const char *name) {
+static bool loadppzpvi(struct fmdriver_work *work, struct fmplayer_file *fmfile, int bnum, const char *name) {
   size_t filesize;
   void *pvibuf = 0, *ppzbuf = 0;
   pvibuf = fmplayer_fileread(fmfile->path, name, ".PVI", 0, &filesize, 0);
   if (!pvibuf) goto err;
   ppzbuf = calloc(ppz8_pvi_decodebuf_samples(filesize), 2);
   if (!ppzbuf) goto err;
-  if (!ppz8_pvi_load(work->ppz8, 0, pvibuf, filesize, ppzbuf)) goto err;
+  if (!ppz8_pvi_load(work->ppz8, bnum, pvibuf, filesize, ppzbuf)) goto err;
   free(pvibuf);
-  free(fmfile->ppzbuf[0]);
-  fmfile->ppzbuf[0] = ppzbuf;
+  free(fmfile->ppzbuf[bnum]);
+  fmfile->ppzbuf[bnum] = ppzbuf;
   return true;
 err:
   free(ppzbuf);
@@ -157,17 +159,17 @@ err:
   return false;
 }
 
-static bool loadppzpzi(struct fmdriver_work *work, struct fmplayer_file *fmfile, const char *name) {
+static bool loadppzpzi(struct fmdriver_work *work, struct fmplayer_file *fmfile, int bnum, const char *name) {
   size_t filesize;
   void *pzibuf = 0, *ppzbuf = 0;
   pzibuf = fmplayer_fileread(fmfile->path, name, ".PZI", 0, &filesize, 0);
   if (!pzibuf) goto err;
   ppzbuf = calloc(ppz8_pzi_decodebuf_samples(filesize), 2);
   if (!ppzbuf) goto err;
-  if (!ppz8_pzi_load(work->ppz8, 0, pzibuf, filesize, ppzbuf)) goto err;
+  if (!ppz8_pzi_load(work->ppz8, bnum, pzibuf, filesize, ppzbuf)) goto err;
   free(pzibuf);
-  free(fmfile->ppzbuf[0]);
-  fmfile->ppzbuf[0] = ppzbuf;
+  free(fmfile->ppzbuf[bnum]);
+  fmfile->ppzbuf[bnum] = ppzbuf;
   return true;
 err:
   free(ppzbuf);
@@ -175,12 +177,13 @@ err:
   return false;
 }
 
-static void loadpmdppz(struct fmdriver_work *work, struct fmplayer_file *fmfile) {
-  const char *ppzfile = fmfile->driver.pmd.ppzfile;
-  if (!strlen(ppzfile)) return;
-  if (!loadppzpvi(work, fmfile, ppzfile) && !loadppzpzi(work, fmfile, ppzfile)) {
-    fmfile->pmd_ppz_err = true;
+// returns true if error
+static bool loadpmdppz(struct fmdriver_work *work, struct fmplayer_file *fmfile,int bnum, const char *ppzfile) {
+  if (!strlen(ppzfile)) false;
+  if (!loadppzpvi(work, fmfile, bnum, ppzfile) && !loadppzpzi(work, fmfile, bnum, ppzfile)) {
+    return true;
   }
+  return false;
 }
 
 static void loadpvi(struct fmdriver_work *work, struct fmplayer_file *fmfile) {
@@ -199,7 +202,7 @@ static void loadpvi(struct fmdriver_work *work, struct fmplayer_file *fmfile) {
 static void loadfmpppz(struct fmdriver_work *work, struct fmplayer_file *fmfile) {
   const char *pvifile = fmfile->driver.fmp.ppz_name;
   if (!strlen(pvifile)) return;
-  fmfile->fmp_ppz_err = !loadppzpvi(work, fmfile, pvifile);
+  fmfile->fmp_ppz_err = !loadppzpvi(work, fmfile, 0, pvifile);
 }
 
 void fmplayer_file_load(struct fmdriver_work *work, struct fmplayer_file *fmfile, int loopcnt) {
@@ -219,9 +222,9 @@ void fmplayer_file_load(struct fmdriver_work *work, struct fmplayer_file *fmfile
     }
     pmd_init(work, &fmfile->driver.pmd);
     loadppc(work, fmfile);
-    loadpmdppz(work, fmfile);
+    work->pcmerror[1] = loadpmdppz(work, fmfile, 0, fmfile->driver.pmd.ppzfile);
+    work->pcmerror[2] = loadpmdppz(work, fmfile, 1, fmfile->driver.pmd.ppzfile2);
     work->pcmerror[0] = fmfile->pmd_ppc_err;
-    work->pcmerror[1] = fmfile->pmd_ppz_err;
     break;
   case FMPLAYER_FILE_TYPE_FMP:
     {

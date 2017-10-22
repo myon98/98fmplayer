@@ -135,7 +135,7 @@ static void on_config(GtkMenuItem *menuitem, gpointer ptr) {
 static void msgbox_err(const char *msg) {
   GtkWidget *d = gtk_message_dialog_new(GTK_WINDOW(g.mainwin), GTK_DIALOG_MODAL,
                           GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE,
-                          msg);
+                          "%s", msg);
   gtk_dialog_run(GTK_DIALOG(d));
   gtk_widget_destroy(d);
 }
@@ -208,6 +208,10 @@ static bool openfile(const char *uri) {
     strncpy(g.work.filename, uri, sizeof(g.work.filename)-1);
   }
   fmplayer_file_load(&g.work, g.fmfile, 1);
+  if (g.fmfile->filename_sjis) {
+    fmdsp_pacc_set_filename_sjis(g.fp, g.fmfile->filename_sjis);
+  }
+  fmdsp_pacc_update_file(g.fp);
   fmdsp_pacc_comment_reset(g.fp);
   g.ss->pause(g.ss, 0, 1);
   g.sound_paused = false;

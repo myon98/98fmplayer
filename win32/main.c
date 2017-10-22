@@ -145,6 +145,10 @@ static void openfile(HWND hwnd, const wchar_t *path) {
   opna_fm_set_hires_env(&g.opna.fm, fmplayer_config.fm_hires_env);
   WideCharToMultiByte(932, WC_NO_BEST_FIT_CHARS, path, -1, g.work.filename, sizeof(g.work.filename), 0, 0);
   fmplayer_file_load(&g.work, g.fmfile, 1);
+  if (g.fmfile->filename_sjis) {
+    fmdsp_pacc_set_filename_sjis(g.fp, g.fmfile->filename_sjis);
+  }
+  fmdsp_pacc_update_file(g.fp);
   fmdsp_pacc_comment_reset(g.fp);
   if (!g.sound) {
     g.sound = sound_init(hwnd, SRATE, SECTLEN,

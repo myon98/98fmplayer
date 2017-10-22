@@ -1,5 +1,6 @@
 #include "common/fmplayer_file.h"
 #include <gio/gio.h>
+#include <glib.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -119,3 +120,34 @@ err:
 void *fmplayer_path_dup(const void *path) {
   return strdup(path);
 }
+
+char *fmplayer_path_filename_sjis(const void *pathptr) {
+  const char *uri = pathptr;
+  GFile *file = 0;
+  GFileInfo *finfo = 0;
+  const char *filename = 0;
+  char *filenamesjis = 0, *filenamebuf = 0;
+  file = g_file_new_for_uri(uri);
+  if (!file) goto err;
+  finfo = g_file_query_info(
+      file,
+      G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME,
+      G_FILE_QUERY_INFO_NONE,
+      0,
+      0);
+  if (!finfo) goto err;
+  filename = g_file_info_get_attribute_string(
+      finfo, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
+  filenamesjis = g_convert_with_fallback(
+      filename, -1,
+      "cp932", "utf-8", "?",
+      0, 0, 0);
+  if (!filenamesjis) goto err;
+  filenamebuf = strdup(filenamesjis);
+err:
+  if (filenamesjis) g_free(filenamesjis);
+  if (finfo) g_object_unref(G_OBJECT(finfo));
+  if (file) g_object_unref(G_OBJECT(file));
+  return filenamebuf;
+}
+

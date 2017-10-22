@@ -458,6 +458,7 @@ struct driver_pmd {
   bool ssgeff_noise_mix;
   bool ssgeff_on;
   char ppzfile[PMD_FILENAMELEN+1];
+  char ppzfile2[PMD_FILENAMELEN+1];
   char ppsfile[PMD_FILENAMELEN+1];
   char ppcfile[PMD_FILENAMELEN+1];
 };

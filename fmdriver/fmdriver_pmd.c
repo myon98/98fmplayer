@@ -1,6 +1,7 @@
 #include "fmdriver_pmd.h"
 #include "fmdriver_common.h"
 #include <stddef.h>
+#include <string.h>
 
 enum {
   SSG_ENV_STATE_OLD_AL,
@@ -5876,7 +5877,7 @@ const char *pmd_get_memo(
 void pmd_filenamecopy(char *dest, const char *src) {
   int i;
   for (i = 0; i < (PMD_FILENAMELEN+1); i++) {
-    if (src[i] == '.') {
+    if (src[i] == '.' || src[i] == ',') {
       dest[i] = 0;
       return;
     }
@@ -5906,6 +5907,7 @@ void pmd_init(struct fmdriver_work *work,
   pmd_reset_timer(work, pmd);
   pmd->playing = true;
   work->driver_opna_interrupt = pmd_opna_interrupt;
+
   /*
   static const int memotable[3] = {1, 4, 5};
   for (int i = 0; i < 3; i++) {
@@ -5923,6 +5925,10 @@ void pmd_init(struct fmdriver_work *work,
   const char *pcmfile = pmd_get_memo(pmd, -2);
   if (pcmfile) {
     pmd_filenamecopy(pmd->ppzfile, pcmfile);
+    const char *pcm2 = strchr(pcmfile, ',');
+    if (pcm2) {
+      pmd_filenamecopy(pmd->ppzfile2, pcm2+1);
+    }
   }
   pcmfile = pmd_get_memo(pmd, -1);
   if (pcmfile) {
@@ -5933,8 +5939,16 @@ void pmd_init(struct fmdriver_work *work,
     pmd_filenamecopy(pmd->ppcfile, pcmfile);
   }
   fmdriver_fillpcmname(work->pcmname[0], pmd->ppcfile);
+  strcpy(work->pcmtype[0], "PPC");
   fmdriver_fillpcmname(work->pcmname[1], pmd->ppzfile);
+  strcpy(work->pcmtype[1], "PPZ1");
+  fmdriver_fillpcmname(work->pcmname[2], pmd->ppzfile2);
+  strcpy(work->pcmtype[2], "PPZ2");
+  fmdriver_fillpcmname(work->pcmname[3], pmd->ppsfile);
+  strcpy(work->pcmtype[3], "PPS");
   work->playing = true;
+  // PPS currently unsupported
+  work->pcmerror[3] = true;
 }
 
 enum {

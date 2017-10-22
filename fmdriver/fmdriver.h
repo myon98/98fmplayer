@@ -32,6 +32,8 @@ enum {
 enum {
   // 1 line = 80 characters, may contain half-width doublebyte characters
   FMDRIVER_TITLE_BUFLEN = 80*2+1,
+
+  FMDRIVER_PCMCOUNT = 4,
 };
 
 enum fmdriver_track_type {
@@ -108,10 +110,20 @@ struct fmdriver_work {
 
   // only single-byte uppercase cp932
   char filename[FMDRIVER_TITLE_BUFLEN];
-  // always 8 characters and pad with ' '
-  char pcmname[2][9];
+
+  // PCM: 0    1    2    3
+  // PMD: PPC  PPZ1 PPZ2 PPC
+  // FMP: PVI  PPZ
+
+  // if (!strlen(pcmtype[i])) this pcm is not available on this driver
+  char pcmtype[FMDRIVER_PCMCOUNT][5];
+  // CP932 encoded
+  char pcmname[FMDRIVER_PCMCOUNT][9];
+  // not set by drivers, used by visualizer (FMDSP)
+  // set to true when for example the PCM file was not found
+  bool pcmerror[FMDRIVER_PCMCOUNT];
+
   // driver status (for display)
-  bool pcmerror[2];
   uint8_t ssg_noise_freq;
   struct fmdriver_track_status track_status[FMDRIVER_TRACK_NUM];
   uint8_t loop_cnt;

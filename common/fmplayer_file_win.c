@@ -114,3 +114,31 @@ void *fmplayer_path_dup(const void *pathptr) {
   return strdup(path);
 #endif
 }
+
+char *fmplayer_path_filename_sjis(const void *pathptr) {
+  wchar_t *u16_path = 0;
+  char *filename_sjis = 0;
+#if defined(FMPLAYER_FILE_WIN_UTF16)
+  const wchar_t *path = pathptr;
+  u16_path = wcsdup(path);
+#elif defined(FMPLAYER_FILE_WIN_UTF8)
+  const char *path = pathptr;
+  u16_path = u8tou16(path);
+#endif
+  if (!u16_path) goto err;
+  PathStripPath(u16_path);
+  int bufsize = WideCharToMultiByte(932, 0, u16_path, -1, 0, 0, 0, 0);
+  if (bufsize <= 0) goto err;
+  filename_sjis = malloc(bufsize);
+  if (!filename_sjis) goto err;
+  bufsize = WideCharToMultiByte(
+      932, 0, u16_path, -1, filename_sjis, bufsize, 0, 0);
+  if (!bufsize) goto err;
+  free(u16_path);
+  return filename_sjis;
+
+err:
+  free(filename_sjis);
+  free(u16_path);
+  return 0;
+}

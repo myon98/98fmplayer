@@ -109,6 +109,7 @@ struct fmdsp_pacc {
   struct pacc_ctx *pc;
   struct pacc_vtable pacc;
   struct pacc_tex *tex_font;
+  struct pacc_tex *tex_fontm;
   struct pacc_tex *tex_checker;
   struct pacc_tex *tex_key_left;
   struct pacc_tex *tex_key_right;
@@ -140,6 +141,7 @@ struct fmdsp_pacc {
   struct pacc_buf *buf_font_7;
   struct pacc_buf *buf_font_2, *buf_font_2_d;
   struct pacc_buf *buf_font_1, *buf_font_1_d;
+  struct pacc_buf *buf_fontm_2, *buf_fontm_3;
   struct pacc_buf *buf_checker, *buf_checker_1;
   struct pacc_buf *buf_key_left;
   struct pacc_buf *buf_key_right;
@@ -193,6 +195,7 @@ struct fmdsp_pacc {
   int comment_offset;
   bool comment_prev_avail;
   bool comment_next_avail;
+  char *filename;
 };
 
 static struct pacc_tex *tex_from_font(
@@ -224,6 +227,10 @@ static void fmdsp_pacc_deinit_buf(struct fmdsp_pacc *fp) {
   fp->buf_font_2_d = 0;
   fp->pacc.buf_delete(fp->buf_font_7);
   fp->buf_font_7 = 0;
+  fp->pacc.buf_delete(fp->buf_fontm_2);
+  fp->buf_fontm_2 = 0;
+  fp->pacc.buf_delete(fp->buf_fontm_3);
+  fp->buf_fontm_3 = 0;
   fp->pacc.buf_delete(fp->buf_checker);
   fp->buf_checker = 0;
   fp->pacc.buf_delete(fp->buf_checker_1);
@@ -311,6 +318,8 @@ static void fmdsp_pacc_deinit_buf(struct fmdsp_pacc *fp) {
 static void fmdsp_pacc_deinit_tex(struct fmdsp_pacc *fp) {
   fp->pacc.tex_delete(fp->tex_font);
   fp->tex_font = 0;
+  fp->pacc.tex_delete(fp->tex_fontm);
+  fp->tex_fontm = 0;
   fp->pacc.tex_delete(fp->tex_checker);
   fp->tex_checker = 0;
   fp->pacc.tex_delete(fp->tex_key_left);
@@ -375,6 +384,7 @@ void fmdsp_pacc_release(struct fmdsp_pacc *fp) {
       fmdsp_pacc_deinit_buf(fp);
       fmdsp_pacc_deinit_tex(fp);
     }
+    free(fp->filename);
     free(fp);
   }
 }
@@ -627,6 +637,8 @@ static void update_track_10(struct fmdsp_pacc *fp, const uint8_t *track_table, i
 static bool fmdsp_pacc_init_tex(struct fmdsp_pacc *fp) {
   fp->tex_font = tex_from_font(fp->pc, &fp->pacc, &font_fmdsp_small);
   if (!fp->tex_font) goto err;
+  fp->tex_fontm = tex_from_font(fp->pc, &fp->pacc, &font_fmdsp_medium);
+  if (!fp->tex_fontm) goto err;
   fp->tex_checker = fp->pacc.gen_tex(fp->pc, 2, 2);
   if (!fp->tex_checker) goto err;
   fp->tex_key_left = fp->pacc.gen_tex(fp->pc, KEY_LEFT_W, KEY_H);
@@ -819,6 +831,10 @@ static bool fmdsp_pacc_init_buf(struct fmdsp_pacc *fp) {
   if (!fp->buf_font_2_d) goto err;
   fp->buf_font_7 = fp->pacc.gen_buf(fp->pc, fp->tex_font, pacc_buf_mode_static);
   if (!fp->buf_font_7) goto err;
+  fp->buf_fontm_2 = fp->pacc.gen_buf(fp->pc, fp->tex_fontm, pacc_buf_mode_static);
+  if (!fp->buf_fontm_2) goto err;
+  fp->buf_fontm_3 = fp->pacc.gen_buf(fp->pc, fp->tex_fontm, pacc_buf_mode_static);
+  if (!fp->buf_fontm_3) goto err;
   fp->buf_checker = fp->pacc.gen_buf(fp->pc, fp->tex_checker, pacc_buf_mode_static);
   if (!fp->buf_checker) goto err;
   fp->buf_checker_1 = fp->pacc.gen_buf(fp->pc, fp->tex_checker, pacc_buf_mode_static);
@@ -1632,6 +1648,8 @@ static void mode_update(struct fmdsp_pacc *fp) {
   fp->pacc.buf_clear(fp->buf_font_1);
   fp->pacc.buf_clear(fp->buf_font_2);
   fp->pacc.buf_clear(fp->buf_font_7);
+  fp->pacc.buf_clear(fp->buf_fontm_2);
+  fp->pacc.buf_clear(fp->buf_fontm_3);
   fp->pacc.buf_clear(fp->buf_solid_2);
   fp->pacc.buf_clear(fp->buf_solid_3);
   fp->pacc.buf_clear(fp->buf_solid_7);
@@ -1679,6 +1697,34 @@ static void mode_update(struct fmdsp_pacc *fp) {
   fp->pacc.buf_rect(
       fp->pc, fp->buf_tri,
       FILEBAR_TRI_X, FILEBAR_TRI_Y, FILEBAR_TRI_W, FILEBAR_TRI_H);
+  if (fp->work) {
+    int pcmcount;
+    for (pcmcount = 0; pcmcount < FMDRIVER_PCMCOUNT; pcmcount++) {
+      if (!fp->work->pcmtype[pcmcount][0]) break;
+    }
+    for (int i = 0; i < pcmcount; i++) {
+      int xoff = (pcmcount - i - 1) * FILEBAR_PCM_W;
+      fp->pacc.buf_rect(
+          fp->pc, fp->buf_solid_2, FILEBAR_PCMBAR_X-xoff, PLAYING_Y, 2, 7);
+      fp->pacc.buf_printf(
+          fp->pc, fp->buf_font_2, FILEBAR_PCM_X-xoff, PLAYING_Y+1,
+          "%s", fp->work->pcmtype[i]);
+      fp->pacc.buf_rect(
+          fp->pc, fp->buf_tri,
+          FILEBAR_PCM_TRI_X + 5*strlen(fp->work->pcmtype[i]) - xoff,
+          FILEBAR_TRI_Y, FILEBAR_TRI_W, FILEBAR_TRI_H);
+      fp->pacc.buf_printf(
+          fp->pc, fp->work->pcmerror[i] ? fp->buf_fontm_3 : fp->buf_fontm_2,
+          FILEBAR_PCM_NAME_X-xoff, FILEBAR_PCM_NAME_Y,
+          "%s", fp->work->pcmname[i]);
+      if (fp->filename) {
+        fp->pacc.buf_printf(
+            fp->pc, fp->buf_fontm_2,
+            FILEBAR_FILENAME_X, FILEBAR_PCM_NAME_Y,
+            "%s", fp->filename);
+      }
+    }
+  }
 
   switch (fp->lmode) {
   case FMDSP_LEFT_MODE_OPNA:
@@ -1848,6 +1894,7 @@ void fmdsp_pacc_render(struct fmdsp_pacc *fp) {
   fp->pacc.draw(fp->pc, fp->buf_solid_3_d, pacc_mode_color);
   fp->pacc.draw(fp->pc, fp->buf_vertical_3, pacc_mode_color);
   fp->pacc.draw(fp->pc, fp->buf_horizontal_3, pacc_mode_color);
+  fp->pacc.draw(fp->pc, fp->buf_fontm_3, pacc_mode_color);
   fp->pacc.color(fp->pc, 2);
   fp->pacc.draw(fp->pc, fp->buf_font_2, pacc_mode_color);
   fp->pacc.draw(fp->pc, fp->buf_font_2_d, pacc_mode_color);
@@ -1855,6 +1902,7 @@ void fmdsp_pacc_render(struct fmdsp_pacc *fp) {
   fp->pacc.draw(fp->pc, fp->buf_solid_2_d, pacc_mode_color);
   fp->pacc.draw(fp->pc, fp->buf_vertical_2, pacc_mode_color);
   fp->pacc.draw(fp->pc, fp->buf_horizontal_2_d, pacc_mode_color);
+  fp->pacc.draw(fp->pc, fp->buf_fontm_2, pacc_mode_color);
   fp->pacc.color(fp->pc, 5);
   fp->pacc.draw(fp->pc, fp->buf_panpot_5_d, pacc_mode_color);
   fp->pacc.color(fp->pc, 7);
@@ -1936,6 +1984,10 @@ void fmdsp_pacc_set_left_mode(struct fmdsp_pacc *fp, enum fmdsp_left_mode mode) 
 
 void fmdsp_pacc_set_right_mode(struct fmdsp_pacc *fp, enum fmdsp_right_mode mode) {
   fp->rmode = mode;
+  fp->mode_changed = true;
+}
+
+void fmdsp_pacc_update_file(struct fmdsp_pacc *fp) {
   fp->mode_changed = true;
 }
 
@@ -2133,3 +2185,9 @@ void fmdsp_pacc_comment_scroll(struct fmdsp_pacc *fp, bool down) {
   }
   fmdsp_pacc_comment_draw(fp);
 }
+
+void fmdsp_pacc_set_filename_sjis(struct fmdsp_pacc *fp, const char *filename) {
+  free(fp->filename);
+  fp->filename = strdup(filename);
+}
+

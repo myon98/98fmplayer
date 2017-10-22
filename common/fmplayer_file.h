@@ -30,11 +30,15 @@ struct fmplayer_file {
     struct driver_fmp fmp;
   } driver;
   bool pmd_ppc_err;
-  bool pmd_ppz_err;
   bool fmp_pvi_err;
   bool fmp_ppz_err;
   void *buf;
   void *ppzbuf[2];
+  // for display with FMDSP
+  // might be NULL
+  // currently only supports sjis (CP932)
+  // string valid while file object valid
+  const char *filename_sjis;
 };
 struct fmplayer_file *fmplayer_file_alloc(const void *path, enum fmplayer_file_error *error);
 void fmplayer_file_free(const struct fmplayer_file *fmfile);
@@ -48,6 +52,10 @@ const wchar_t *fmplayer_file_strerror_w(enum fmplayer_file_error error);
 //   fmplayer_fileread("/home/foo/bar.mz", 0, 0, &filesize); 
 //   fmplayer_fileread("/home/foo/bar.mz", "BAZ", ".PVI", &filesize);
 void *fmplayer_fileread(const void *path, const char *pcmname, const char *extension, size_t maxsize, size_t *filesize, enum fmplayer_file_error *error);
+
+// allocates string in sjis
+// free with free()
+char *fmplayer_path_filename_sjis(const void *path);
 
 void *fmplayer_path_dup(const void *path);
 

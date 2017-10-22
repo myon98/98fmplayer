@@ -3596,6 +3596,8 @@ void fmp_init(struct fmdriver_work *work, struct driver_fmp *fmp) {
   fmp_work_status_init(work, fmp);
   fmdriver_fillpcmname(work->pcmname[0], fmp->pvi_name);
   fmdriver_fillpcmname(work->pcmname[1], fmp->ppz_name);
+  strcpy(work->pcmtype[0], "PVI");
+  strcpy(work->pcmtype[1], "PPZ");
   work->playing = true;
 }
 
