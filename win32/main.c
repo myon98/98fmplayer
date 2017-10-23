@@ -39,6 +39,10 @@ enum {
   ID_CONFIG,
 };
 
+enum {
+  WM_PACC_RESET = WM_USER,
+};
+
 #define FMPLAYER_CLASSNAME L"myon_fmplayer_ym2608_win32"
 #define FMPLAYER_CDSTAG 0xFD809800UL
 
@@ -703,6 +707,9 @@ static LRESULT CALLBACK wndproc(
       return DLGC_WANTMESSAGE;
     }
     break;
+  case WM_PACC_RESET:
+    // TODO
+    break;
   }
   return DefWindowProc(hwnd, msg, wParam, lParam);
 }
@@ -789,7 +796,7 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
     wr.right-wr.left, wr.bottom-wr.top,
     0, 0, g.hinst, 0
   );
-  g.pc = pacc_init_d3d9(g.fmdspwnd, render_cb, 0, &g.pacc, &g.pacc_win);
+  g.pc = pacc_init_d3d9(g.fmdspwnd, render_cb, 0, &g.pacc, &g.pacc_win, WM_PACC_RESET, g.mainwnd);
   if (!g.pc) {
     MessageBox(g.mainwnd, L"Error", L"Cannot initialize Direct3D", MB_ICONSTOP);
     return 0;

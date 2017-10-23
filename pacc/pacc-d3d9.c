@@ -34,6 +34,8 @@ struct pacc_ctx {
   void *renderptr;
   HANDLE renderthread;
   HANDLE rendermtx;
+  UINT msg_reset;
+  HWND msg_wnd;
 };
 
 struct pacc_buf {
@@ -423,7 +425,10 @@ static DWORD WINAPI pacc_renderproc(void *ptr) {
               1.0, 0);
         }
         pc->d3d9d->lpVtbl->EndScene(pc->d3d9d);
-        pc->d3d9d->lpVtbl->Present(pc->d3d9d, 0, 0, 0, 0);
+        HRESULT res = pc->d3d9d->lpVtbl->Present(pc->d3d9d, 0, 0, 0, 0);
+        if (res == D3DERR_DEVICELOST) {
+          PostMessage(pc->msg_wnd, pc->msg_reset, 0, 0);
+        }
       }
       ReleaseMutex(pc->rendermtx);
     }
@@ -463,7 +468,8 @@ struct pacc_win_vtable pacc_win_vtable = {
 struct pacc_ctx *pacc_init_d3d9(
     HWND hwnd,
     pacc_rendercb *rendercb, void *renderptr,
-    struct pacc_vtable *vt, struct pacc_win_vtable *winvt) {
+    struct pacc_vtable *vt, struct pacc_win_vtable *winvt,
+    UINT msg_reset, HWND msg_wnd) {
   struct pacc_ctx *pc = malloc(sizeof(*pc));
   if (!pc) goto err;
   RECT wr;
@@ -474,6 +480,8 @@ struct pacc_ctx *pacc_init_d3d9(
     .hwnd = hwnd,
     .rendercb = rendercb,
     .renderptr = renderptr,
+    .msg_reset = msg_reset,
+    .msg_wnd = msg_wnd,
   };
   atomic_init(&pc->killthread, false);
   pc->rendermtx = CreateMutex(0, FALSE, 0);
