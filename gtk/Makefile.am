@@ -48,10 +48,9 @@ endif
 if ENABLE_SSE
 noinst_LIBRARIES=libsse.a
 fmplayer_LDADD+=libsse.a
-libsse_a_SOURCES=../libopna/opnassg-sinc-sse2.c \
-                 ../fmdsp/fmdsp-vramlookup-ssse3.c
+libsse_a_SOURCES=../libopna/opnassg-sinc-sse2.c
 libsse_a_CPPFLAGS=$(fmplayer_CPPFLAGS)
-libsse_a_CFLAGS=-mssse3
+libsse_a_CFLAGS=-msse2
 endif
 
 fmplayer_SOURCES=main.c \
