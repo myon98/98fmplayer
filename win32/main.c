@@ -40,7 +40,7 @@ enum {
 };
 
 enum {
-  WM_PACC_RESET = WM_USER,
+  WM_PACC_RESET = WM_APP,
 };
 
 #define FMPLAYER_CLASSNAME L"myon_fmplayer_ym2608_win32"
@@ -70,6 +70,7 @@ static struct {
   bool paused;
   HWND mainwnd;
   HWND fmdspwnd;
+  ATOM fmdspwndclass;
   WNDPROC btn_defproc;
   HWND button_2x, button_toneview, button_oscilloview, button_about, button_config;
   bool toneview_on, oscilloview_on, about_on, config_on;
@@ -428,7 +429,7 @@ static LRESULT CALLBACK btn_wndproc(
 static bool on_create(HWND hwnd, CREATESTRUCT *cs) {
   (void)cs;
   g.fmdspwnd = CreateWindowEx(
-      0, L"static", 0,
+      0, MAKEINTATOM(g.fmdspwndclass), 0,
       WS_VISIBLE | WS_CHILD,
       0, 80,
       PC98_W, PC98_H,
@@ -685,6 +686,16 @@ static void on_activate(HWND hwnd, bool activate, HWND targetwnd, WINBOOL state)
   else g_currentdlg = 0;
 }
 
+static void render_cb(void *ptr) {
+  (void)ptr;
+  if (!atomic_flag_test_and_set_explicit(
+        &g.at_fftdata_flag, memory_order_acquire)) {
+    memcpy(&g.fftdata.fdata, &g.at_fftdata, sizeof(g.fftdata.fdata));
+    atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
+  }
+  fmdsp_pacc_render(g.fp);
+}
+
 static LRESULT CALLBACK wndproc(
   HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 ) {
@@ -708,7 +719,22 @@ static LRESULT CALLBACK wndproc(
     }
     break;
   case WM_PACC_RESET:
-    // TODO
+    if (g.pc) {
+      g.pacc_win.renderctrl(g.pc, false);
+      fmdsp_pacc_deinit(g.fp);
+      g.pacc.pacc_delete(g.pc);
+      g.pc = 0;
+    }
+    g.pc = pacc_init_d3d9(g.fmdspwnd, PC98_W, PC98_H, render_cb, 0, &g.pacc, &g.pacc_win, WM_PACC_RESET, g.mainwnd);
+    if (!g.pc) {
+      break;
+    }
+    if (!fmdsp_pacc_init(g.fp, g.pc, &g.pacc)) {
+      break;
+    }
+    fmdsp_pacc_set_font16(g.fp, &g.font);
+    fmdsp_pacc_set(g.fp, &g.work, &g.opna, &g.fftdata);
+    g.pacc_win.renderctrl(g.pc, true);
     break;
   }
   return DefWindowProc(hwnd, msg, wParam, lParam);
@@ -726,14 +752,15 @@ static ATOM register_class(HINSTANCE hinst) {
   return RegisterClass(&wc);
 }
 
-static void render_cb(void *ptr) {
-  (void)ptr;
-  if (!atomic_flag_test_and_set_explicit(
-        &g.at_fftdata_flag, memory_order_acquire)) {
-    memcpy(&g.fftdata.fdata, &g.at_fftdata, sizeof(g.fftdata.fdata));
-    atomic_flag_clear_explicit(&g.at_fftdata_flag, memory_order_release);
-  }
-  fmdsp_pacc_render(g.fp);
+static ATOM register_fmdsp_class(HINSTANCE hinst) {
+  WNDCLASS wc = {0};
+  wc.style = CS_HREDRAW | CS_VREDRAW;
+  wc.lpfnWndProc = DefWindowProc;
+  wc.hInstance = hinst;
+  wc.hCursor = LoadCursor(0, IDC_ARROW);
+  wc.hbrBackground = 0;
+  wc.lpszClassName = FMPLAYER_CLASSNAME "fmdsp";
+  return RegisterClass(&wc);
 }
 
 int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
@@ -775,6 +802,7 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
   g.hinst = hinst;
   g.heap = GetProcessHeap();
   ATOM wcatom = register_class(g.hinst);
+  g.fmdspwndclass = register_fmdsp_class(g.hinst);
   DWORD style = WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
   DWORD exStyle = 0;
   RECT wr;
@@ -796,7 +824,7 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
     wr.right-wr.left, wr.bottom-wr.top,
     0, 0, g.hinst, 0
   );
-  g.pc = pacc_init_d3d9(g.fmdspwnd, render_cb, 0, &g.pacc, &g.pacc_win, WM_PACC_RESET, g.mainwnd);
+  g.pc = pacc_init_d3d9(g.fmdspwnd, PC98_W, PC98_H, render_cb, 0, &g.pacc, &g.pacc_win, WM_PACC_RESET, g.mainwnd);
   if (!g.pc) {
     MessageBox(g.mainwnd, L"Error", L"Cannot initialize Direct3D", MB_ICONSTOP);
     return 0;

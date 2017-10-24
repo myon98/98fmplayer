@@ -23,8 +23,7 @@ FMDSP_OBJS=fmdsp-pacc \
 	   fmdsp_platform_win \
 	   font_fmdsp_small
 TONEDATA_OBJS=tonedata
-SSEOBJBASE=opnassg-sinc-sse2 \
-           fmdsp-vramlookup-ssse3
+SSEOBJBASE=opnassg-sinc-sse2
 OBJBASE=main \
         fft \
         toneview \

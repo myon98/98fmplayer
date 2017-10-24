@@ -412,23 +412,39 @@ static void pacc_delete(struct pacc_ctx *pc) {
 
 static DWORD WINAPI pacc_renderproc(void *ptr) {
   struct pacc_ctx *pc = ptr;
+  bool waitdevice = false;
   while (!atomic_load_explicit(&pc->killthread, memory_order_relaxed)) {
     if (WaitForSingleObject(pc->rendermtx, INFINITE) == WAIT_OBJECT_0) {
-      if (SUCCEEDED(pc->d3d9d->lpVtbl->BeginScene(pc->d3d9d))) {
-        if (pc->render_enabled) {
-          pc->rendercb(pc->renderptr);
+      if (!waitdevice) {
+        HRESULT r = pc->d3d9d->lpVtbl->TestCooperativeLevel(pc->d3d9d);
+        if (r != D3D_OK) {
+          waitdevice = true;
         } else {
-          pc->d3d9d->lpVtbl->Clear(
-              pc->d3d9d,
-              0, 0, D3DCLEAR_TARGET,
-              D3DCOLOR_RGBA(0x00, 0x00, 0x00, 0xff),
-              1.0, 0);
+          if (SUCCEEDED(pc->d3d9d->lpVtbl->BeginScene(pc->d3d9d))) {
+            if (pc->render_enabled) {
+              pc->rendercb(pc->renderptr);
+            } else {
+              pc->d3d9d->lpVtbl->Clear(
+                  pc->d3d9d,
+                  0, 0, D3DCLEAR_TARGET,
+                  D3DCOLOR_RGBA(0x00, 0x00, 0x00, 0xff),
+                  1.0, 0);
+            }
+            pc->d3d9d->lpVtbl->EndScene(pc->d3d9d);
+            HRESULT res = pc->d3d9d->lpVtbl->Present(pc->d3d9d, 0, 0, 0, 0);
+            if (res == D3DERR_DEVICELOST) {
+              waitdevice = true;
+            }
+          }
         }
-        pc->d3d9d->lpVtbl->EndScene(pc->d3d9d);
-        HRESULT res = pc->d3d9d->lpVtbl->Present(pc->d3d9d, 0, 0, 0, 0);
-        if (res == D3DERR_DEVICELOST) {
+      } else {
+        HRESULT r = pc->d3d9d->lpVtbl->TestCooperativeLevel(pc->d3d9d);
+        if (r == D3DERR_DEVICENOTRESET) {
           PostMessage(pc->msg_wnd, pc->msg_reset, 0, 0);
+          ReleaseMutex(pc->rendermtx);
+          return 0;
         }
+        Sleep(100);
       }
       ReleaseMutex(pc->rendermtx);
     }
@@ -467,16 +483,15 @@ struct pacc_win_vtable pacc_win_vtable = {
 
 struct pacc_ctx *pacc_init_d3d9(
     HWND hwnd,
+    int w, int h,
     pacc_rendercb *rendercb, void *renderptr,
     struct pacc_vtable *vt, struct pacc_win_vtable *winvt,
     UINT msg_reset, HWND msg_wnd) {
   struct pacc_ctx *pc = malloc(sizeof(*pc));
   if (!pc) goto err;
-  RECT wr;
-  if (!GetClientRect(hwnd, &wr)) goto err;
   *pc = (struct pacc_ctx) {
-    .w = wr.right - wr.left,
-    .h = wr.bottom - wr.top,
+    .w = w,
+    .h = h,
     .hwnd = hwnd,
     .rendercb = rendercb,
     .renderptr = renderptr,
@@ -539,6 +554,8 @@ struct pacc_ctx *pacc_init_d3d9(
       D3DPOOL_DEFAULT,
       &pc->tex_pal,
       0);
+  if (res != D3D_OK) goto err;
+  res = pc->d3d9d->lpVtbl->TestCooperativeLevel(pc->d3d9d);
   if (res != D3D_OK) goto err;
 
   D3DVERTEXELEMENT9 vertexdecls[] = {

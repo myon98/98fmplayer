@@ -41,13 +41,11 @@ static void update_status(void) {
            L"Audio API: %ls\r\n"
            "ym2608_adpcm_rom.bin: %lsavailable\r\n"
            "font.rom: %ls\r\n"
-           "SSE2 (for SIMD SSG resampling): %lsavailable\r\n"
-           "SSSE3 (for SIMD FMDSP palette lookup): %lsavailable",
+           "SSE2 (for SIMD SSG resampling): %lsavailable",
            g.soundapiname ? g.soundapiname : L"",
            g.adpcm_rom ? L"" : L"un",
            g.font_rom ? L"available" : L"unavailable, using MS Gothic",
-           __builtin_cpu_supports("sse2") ? L"" : L"un",
-           __builtin_cpu_supports("ssse3") ? L"" : L"un");
+           __builtin_cpu_supports("sse2") ? L"" : L"un");
   SetWindowText(g.static_info, buf);
 }
 
@@ -95,6 +93,7 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
   update_status();
   g.static_help = CreateWindowEx(0, L"static",
                                  L"F11: toggle track display page\r\n"
+                                 "Shift+F11: toggle right display page\r\n"
                                  "F12: display FMDSP at 2x\r\n"
                                  "Ctrl+F1-F10: FMDSP color palette\r\n\r\n"
                                  "1-9,0,-: toggle track mask (Ctrl: PPZ8)\r\n"
@@ -102,7 +101,7 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
                                  "=: invert all mask\r\n"
                                  "\\: all tracks on",
                                  WS_CHILD | WS_VISIBLE,
-                                 75, 165, 400, 200,
+                                 75, 150, 400, 215,
                                  hwnd, 0, g.hinst, 0);
   SetWindowFont(g.static_help, g.font, TRUE);
   g.static_main = CreateWindowEx(0, L"static",
