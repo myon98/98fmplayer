@@ -433,9 +433,11 @@ static gboolean key_press_cb(GtkWidget *w,
     }
     break;
   case GDK_KEY_F7:
-    g.sound_paused ^= 1;
-    g.work.paused = g.sound_paused;
-    g.ss->pause(g.ss, g.sound_paused, 0);
+    if (g.ss) {
+      g.sound_paused ^= 1;
+      g.work.paused = g.sound_paused;
+      g.ss->pause(g.ss, g.sound_paused, 0);
+    }
     break;
   case GDK_KEY_F11:
     if (shift) {
