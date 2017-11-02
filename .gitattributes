@@ -1,0 +1,4 @@
+*.h linguist-language=C
+*.inc linguist-generated
+
+
