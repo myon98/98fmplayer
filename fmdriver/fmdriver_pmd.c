@@ -4025,7 +4025,7 @@ static void pmd_cmdb8_slottl(
   struct pmd_part *part
 ){
   uint8_t data = pmd_part_cmdload(pmd, part);
-  uint8_t slotmask = data & 0xf & (part->fm_slotmask>>4);
+  uint8_t slotmask = (data & 0xf) & (part->fm_slotmask>>4);
   uint8_t val = pmd_part_cmdload(pmd, part);
   bool masked = pmd_part_masked(part);
   bool relative = data & 0x80;
@@ -4043,7 +4043,8 @@ static void pmd_cmdb8_slottl(
       part->fm_tone_tl[slottable[s]] = vol;
     }
     if (!masked) {
-      pmd_reg_write(work, pmd, 0x3f+pmd->proc_ch+8*s, part->fm_tone_tl[slottable[s]]);
+      pmd_reg_write(work, pmd,
+          0x3f+pmd->proc_ch+4*slottable[s], part->fm_tone_tl[slottable[s]]);
     }
   }
 }
