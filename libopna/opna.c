@@ -1,5 +1,7 @@
 #include "opna.h"
+#ifdef LIBOPNA_ENABLE_OSCILLO
 #include "oscillo/oscillo.h"
+#endif
 #include <string.h>
 
 void opna_reset(struct opna *opna) {
@@ -30,6 +32,7 @@ void opna_mix(struct opna *opna, int16_t *buf, unsigned samples) {
 }
 
 void opna_mix_oscillo(struct opna *opna, int16_t *buf, unsigned samples, struct oscillodata *oscillo) {
+#ifdef LIBOPNA_ENABLE_OSCILLO
   if (oscillo) {
     for (int i = 0; i < LIBOPNA_OSCILLO_TRACK_COUNT; i++) {
       memmove(&oscillo[i].buf[0],
@@ -38,9 +41,15 @@ void opna_mix_oscillo(struct opna *opna, int16_t *buf, unsigned samples, struct 
     }
   }
   unsigned offset = OSCILLO_SAMPLE_COUNT - samples;
-  opna_fm_mix(&opna->fm, buf, samples, oscillo ? &oscillo[0] : 0, offset);
+  struct oscillodata *oscillofm = oscillo ? &oscillo[0] : 0;
+  struct oscillodata *oscillossg = oscillo ? &oscillo[6] : 0;
+#else
+  struct oscillodata *oscillofm = 0, *oscillossg = 0;
+  unsigned offset = 0;
+#endif
+  opna_fm_mix(&opna->fm, buf, samples, oscillofm, offset);
   opna_ssg_mix_55466(&opna->ssg, &opna->resampler, buf, samples,
-                     oscillo ? &oscillo[6] : 0, offset);
+                     oscillossg, offset);
   opna_drum_mix(&opna->drum, buf, samples);
   opna_adpcm_mix(&opna->adpcm, buf, samples);
   opna->generated_frames += samples;

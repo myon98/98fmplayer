@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#ifdef LIBOPNA_ENABLE_LEVELDATA
 #include "leveldata/leveldata.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,8 +71,9 @@ struct opna_fm_channel {
   uint8_t fb;
   uint16_t fnum;
   uint8_t blk;
-  
+#ifdef LIBOPNA_ENABLE_LEVELDATA
   struct leveldata leveldata;
+#endif
 };
 
 struct opna_fm {

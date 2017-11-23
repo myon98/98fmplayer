@@ -1,5 +1,7 @@
 #include "opnafm.h"
+#ifdef LIBOPNA_ENABLE_OSCILLO
 #include "oscillo/oscillo.h"
+#endif
 
 #include "opnatables.h"
 
@@ -28,7 +30,9 @@ static void opna_fm_slot_reset(struct opna_fm_slot *slot) {
 
 
 void opna_fm_chan_reset(struct opna_fm_channel *chan) {
+#ifdef LIBOPNA_ENABLE_LEVELDATA
   leveldata_init(&chan->leveldata);
+#endif
   for (int i = 0; i < 4; i++) {
     opna_fm_slot_reset(&chan->slot[i]);
   }
@@ -620,6 +624,7 @@ static int gcd(int a, int b) {
 
 void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
                  struct oscillodata *oscillo, unsigned offset) {
+#ifdef LIBOPNA_ENABLE_OSCILLO
   if (oscillo) {
     for (unsigned c = 0; c < 6; c++) {
       const struct opna_fm_channel *ch = &fm->channel[c];
@@ -641,6 +646,7 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
       }
     }
   }
+#endif
   unsigned level[6] = {0};
   for (unsigned i = 0; i < samples; i++) {
     if (!fm->env_div3) {
@@ -666,7 +672,9 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
       nlevel[1] = o.data[1] > 0 ? o.data[1] : -o.data[1];
       if (nlevel[1] > nlevel[0]) nlevel[0] = nlevel[1];
       if (nlevel[0] > level[c]) level[c] = nlevel[0];
+#ifdef LIBOPNA_ENABLE_OSCILLO
       if (oscillo) oscillo[c].buf[offset+i] = o.data[0] + o.data[1];
+#endif
       // TODO: CSM
       if (c == 2 && fm->ch3.mode != CH3_MODE_NORMAL) {
         opna_fm_chan_phase_se(&fm->channel[c], fm);
@@ -704,7 +712,9 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
     }
     fm->env_div3--;
   }
+#ifdef LIBOPNA_ENABLE_LEVELDATA
   for (int c = 0; c < 6; c++) {
     leveldata_update(&fm->channel[c].leveldata, level[c]);
   }
+#endif
 }

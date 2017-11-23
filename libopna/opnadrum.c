@@ -23,7 +23,9 @@ void opna_drum_reset(struct opna_drum *drum) {
     drum->drums[d].level = 0;
     drum->drums[d].left = false;
     drum->drums[d].right = false;
+#ifdef LIBOPNA_ENABLE_LEVELDATA
     leveldata_init(&drum->drums[d].leveldata);
+#endif
   }
   drum->total_level = 0;
   drum->mask = 0;
@@ -114,9 +116,11 @@ void opna_drum_mix(struct opna_drum *drum, int16_t *buf, int samples) {
     buf[i*2+0] = lo;
     buf[i*2+1] = ro;
   }
+#ifdef LIBOPNA_ENABLE_LEVELDATA
   for (int d = 0; d < 6; d++) {
     leveldata_update(&drum->drums[d].leveldata, levels[d]);
   }
+#endif
 }
 
 void opna_drum_writereg(struct opna_drum *drum, unsigned reg, unsigned val) {

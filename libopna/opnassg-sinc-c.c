@@ -1,4 +1,4 @@
-#include "libopna/opnassg.h"
+#include "opnassg.h"
 
 void opna_ssg_sinc_calc_c(unsigned resampler_index, const int16_t *inbuf, int32_t *outbuf) {
   for (int c = 0; c < 3; c++) {

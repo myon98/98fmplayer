@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#ifdef LIBOPNA_ENABLE_LEVELDATA
 #include "leveldata/leveldata.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,7 +35,9 @@ struct opna_drum {
     unsigned level;
     bool left;
     bool right;
+#ifdef LIBOPNA_ENABLE_LEVELDATA
     struct leveldata leveldata;
+#endif
   } drums[6];
   unsigned total_level;
   int16_t rom_bd[OPNA_ROM_BD_SIZE];

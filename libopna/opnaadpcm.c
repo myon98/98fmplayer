@@ -35,7 +35,9 @@ void opna_adpcm_reset(struct opna_adpcm *adpcm) {
   adpcm->prev_acc = 0;
   adpcm->adpcmd = 127;
   adpcm->out = 0;
+#ifdef LIBOPNA_ENABLE_LEVELDATA
   leveldata_init(&adpcm->leveldata);
+#endif
 }
 
 static uint32_t addr_conv(const struct opna_adpcm *adpcm, uint16_t a) {
@@ -184,7 +186,9 @@ void opna_adpcm_writereg(struct opna_adpcm *adpcm, unsigned reg, unsigned val) {
 void opna_adpcm_mix(struct opna_adpcm *adpcm, int16_t *buf, unsigned samples) {
   unsigned level = 0;
   if (!adpcm->ram || !(adpcm->control1 & C1_START)) {
+#ifdef LIBOPNA_ENABLE_LEVELDATA
     leveldata_update(&adpcm->leveldata, level);
+#endif
     return;
   }
   for (unsigned i = 0; i < samples; i++) {
@@ -208,7 +212,9 @@ void opna_adpcm_mix(struct opna_adpcm *adpcm, int16_t *buf, unsigned samples) {
     }
     if (!(adpcm->control1 & C1_START)) return;
   }
+#ifdef LIBOPNA_ENABLE_LEVELDATA
   leveldata_update(&adpcm->leveldata, level);
+#endif
 }
 
 void opna_adpcm_set_ram_256k(struct opna_adpcm *adpcm, void *ram) {

@@ -4,7 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#ifdef LIBOPNA_ENABLE_LEVELDATA
 #include "leveldata/leveldata.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,7 +41,9 @@ struct opna_ssg {
 struct opna_ssg_resampler {
   int16_t buf[OPNA_SSG_SINCTABLELEN*4 * 2];
   unsigned index;
+#ifdef LIBOPNA_ENABLE_LEVELDATA
   struct leveldata leveldata[3];
+#endif
 };
 
 void opna_ssg_reset(struct opna_ssg *ssg);

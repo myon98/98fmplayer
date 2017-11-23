@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#ifdef LIBOPNA_ENABLE_LEVELDATA
 #include "leveldata/leveldata.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,8 +27,9 @@ struct opna_adpcm {
   uint16_t adpcmd;
   int16_t out;
   bool masked;
-  atomic_uint levelvu;
+#ifdef LIBOPNA_ENABLE_LEVELDATA
   struct leveldata leveldata;
+#endif
 };
 
 void opna_adpcm_reset(struct opna_adpcm *adpcm);

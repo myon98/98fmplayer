@@ -36,7 +36,7 @@ endif
 fmplayer_CPPFLAGS=-Wall -Wextra -pedantic \
                   -I$(top_srcdir)/.. -I$(top_srcdir)/../soundout \
                   $(GTK3_CFLAGS) $(JACK_CFLAGS) $(PULSE_CFLAGS) $(ALSA_CFLAGS) $(SNDFILE_CFLAGS) \
-                  -DPACC_GL_3
+                  -DPACC_GL_3 -DLIBOPNA_ENABLE_LEVELDATA -DLIBOPNA_ENABLE_OSCILLO
 fmplayer_LDADD=$(GTK3_LIBS) $(JACK_LIBS) $(PULSE_LIBS) $(ALSA_LIBS) $(SNDFILE_LIBS) -lm -lpthread
 
 if ENABLE_NEON

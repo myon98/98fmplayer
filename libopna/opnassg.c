@@ -1,5 +1,7 @@
 #include "opnassg.h"
+#ifdef LIBOPNA_ENABLE_OSCILLO
 #include "oscillo/oscillo.h"
+#endif
 
 // if (i < 2) voltable[i] = 0;
 // else       voltable[i] = round((0x7fff / 3.0) * pow(2.0, (i - 31)/4.0));
@@ -153,9 +155,11 @@ void opna_ssg_resampler_reset(struct opna_ssg_resampler *resampler) {
     resampler->buf[i] = 0;
   }
   resampler->index = 0;
+#ifdef LIBOPNA_ENABLE_LEVELDATA
   for (int c = 0; c < 3; c++) {
     leveldata_init(&resampler->leveldata[c]);
   }
+#endif
 }
 
 void opna_ssg_writereg(struct opna_ssg *ssg, unsigned reg, unsigned val) {
@@ -300,6 +304,7 @@ void opna_ssg_mix_55466(
   int16_t *buf, int samples,
   struct oscillodata *oscillo, unsigned offset
 ) {
+#ifdef LIBOPNA_ENABLE_OSCILLO
   if (oscillo) {
     for (unsigned c = 0; c < 3; c++) {
       unsigned period = (opna_ssg_tone_period(ssg, c) << OSCILLO_OFFSET_SHIFT) * 2 * 32 / 144;
@@ -311,6 +316,7 @@ void opna_ssg_mix_55466(
       }
     }
   }
+#endif
   unsigned level[3] = {0};
   for (int i = 0; i < samples; i++) {
     {
@@ -350,7 +356,9 @@ void opna_ssg_mix_55466(
       }
     }
     for (int ch = 0; ch < 3; ch++) {
+#ifdef LIBOPNA_ENABLE_OSCILLO
       if (oscillo) oscillo[ch].buf[offset+i] = outbuf[ch] << 1;
+#endif
       int32_t nlevel = outbuf[ch];
       if (nlevel < 0) nlevel = -nlevel;
       if (((unsigned)nlevel) > level[ch]) level[ch] = nlevel;
@@ -368,8 +376,10 @@ void opna_ssg_mix_55466(
     buf[i*2+0] = lo;
     buf[i*2+1] = ro;
   }
+#ifdef LIBOPNA_ENABLE_LEVELDATA
   for (int c = 0; c < 3; c++) {
     leveldata_update(&resampler->leveldata[c], level[c]);
   }
+#endif
 }
 #undef BUFINDEX

@@ -125,3 +125,7 @@ err:
 void *fmplayer_path_dup(const void *path) {
   return strdup(path);
 }
+
+char *fmplayer_path_filename_sjis(const void *path) {
+  return 0;
+}
