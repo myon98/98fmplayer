@@ -126,7 +126,7 @@ char *fmplayer_path_filename_sjis(const void *pathptr) {
   u16_path = u8tou16(path);
 #endif
   if (!u16_path) goto err;
-  PathStripPath(u16_path);
+  PathStripPathW(u16_path);
   int bufsize = WideCharToMultiByte(932, 0, u16_path, -1, 0, 0, 0, 0);
   if (bufsize <= 0) goto err;
   filename_sjis = malloc(bufsize);
