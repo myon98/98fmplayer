@@ -16,8 +16,8 @@ OBJS+=fft.o
 TARGET:=fmplayersdl
 
 CFLAGS:=-Wall -Wextra -O2 -g
-CFLAGS+=-DPACC_GL_3
-#CFLAGS+=-DPACC_GL_ES
+#CFLAGS+=-DPACC_GL_3
+CFLAGS+=-DPACC_GL_ES
 #CFLAGS+=-DPACC_GL_ES -DPACC_GL_3
 CFLAGS+=-I.. -I../..
 CFLAGS+=$(shell $(SDLCONFIG) --cflags)

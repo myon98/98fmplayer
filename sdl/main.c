@@ -153,8 +153,13 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  g.fp = fmdsp_pacc_init(pc, &pacc);
+  g.fp = fmdsp_pacc_alloc();
   if (!g.fp) {
+    SDL_Log("Cannot allocate fmdsp\n");
+    SDL_Quit();
+    return 1;
+  }
+  if (!fmdsp_pacc_init(g.fp, pc, &pacc)) {
     SDL_Log("Cannot initialize fmdsp\n");
     SDL_Quit();
     return 1;
