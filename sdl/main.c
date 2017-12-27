@@ -164,6 +164,11 @@ int main(int argc, char **argv) {
     SDL_Quit();
     return 1;
   }
+  if (!fmdsp_pacc_init(g.fp, pc, &pacc)) {
+    SDL_Log("Cannot initialize fmdsp\n");
+    SDL_Quit();
+    return 1;
+  }
   fmdsp_pacc_set(g.fp, &g.work, &g.opna, &g.fftin);
   fmplayer_font_rom_load(&g.font16);
   fmdsp_pacc_set_font16(g.fp, &g.font16);
