@@ -1,4 +1,4 @@
-bin_PROGRAMS=fmplayer
+bin_PROGRAMS=98fmplayer
 
 LIBOPNA_SRC=../libopna/opnaadpcm.c \
             ../libopna/opnadrum.c \
@@ -31,29 +31,29 @@ if ENABLE_ALSA
 SOUNDOUT_SRC+=../soundout/alsaout.c
 endif
 
-#fmplayer_CFLAGS=$(CFLAGS)
+#98fmplayer_CFLAGS=$(CFLAGS)
 #CFLAGS=
-fmplayer_CPPFLAGS=-Wall -Wextra -pedantic \
+98fmplayer_CPPFLAGS=-Wall -Wextra -pedantic \
                   -I$(top_srcdir)/.. -I$(top_srcdir)/../soundout \
                   $(GTK3_CFLAGS) $(JACK_CFLAGS) $(PULSE_CFLAGS) $(ALSA_CFLAGS) $(SNDFILE_CFLAGS) \
                   -DPACC_GL_3 -DLIBOPNA_ENABLE_LEVELDATA -DLIBOPNA_ENABLE_OSCILLO
-fmplayer_LDADD=$(GTK3_LIBS) $(JACK_LIBS) $(PULSE_LIBS) $(ALSA_LIBS) $(SNDFILE_LIBS) -lm -lpthread
+98fmplayer_LDADD=$(GTK3_LIBS) $(JACK_LIBS) $(PULSE_LIBS) $(ALSA_LIBS) $(SNDFILE_LIBS) -lm -lpthread
 
 if ENABLE_NEON
 LIBOPNA_SRC+=../libopna/opnassg-sinc-neon.s
 FMDSP_SRC+=../fmdsp/fmdsp-vramlookup-neon.s
-fmplayer_CCASFLAGS=-march=armv8-a -mfpu=crypto-neon-fp-armv8
+98fmplayer_CCASFLAGS=-march=armv8-a -mfpu=crypto-neon-fp-armv8
 endif
 
 if ENABLE_SSE
 noinst_LIBRARIES=libsse.a
-fmplayer_LDADD+=libsse.a
+98fmplayer_LDADD+=libsse.a
 libsse_a_SOURCES=../libopna/opnassg-sinc-sse2.c
-libsse_a_CPPFLAGS=$(fmplayer_CPPFLAGS)
+libsse_a_CPPFLAGS=$(98fmplayer_CPPFLAGS)
 libsse_a_CFLAGS=-msse2
 endif
 
-fmplayer_SOURCES=main.c \
+98fmplayer_SOURCES=main.c \
                  toneview.c \
                  wavesave.c \
                  ../tonedata/tonedata.c \
@@ -70,8 +70,8 @@ fmplayer_SOURCES=main.c \
 								 configdialog.c
 
 if ENABLE_OPENGL
-fmplayer_SOURCES+=oscilloview-gl.c
-fmplayer_LDADD+=-lGL
+98fmplayer_SOURCES+=oscilloview-gl.c
+98fmplayer_LDADD+=-lGL
 else
-fmplayer_SOURCES+=oscilloview.c
+98fmplayer_SOURCES+=oscilloview.c
 endif

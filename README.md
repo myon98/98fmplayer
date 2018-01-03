@@ -1,4 +1,4 @@
-# Fmplayer (beta)
+# 98Fmplayer (beta)
 PC-98 FM driver emulation (very early version)
 ![gtk screenshot](/img/screenshot_gtk.png?raw=true)
 ![gtk toneviewer screenshot](/img/screenshot_gtk.toneview.png?raw=true)
@@ -23,9 +23,9 @@ $ cd gtk
 $ autoreconf -i
 $ ./configure
 $ make
-$ ./fmplayer
+$ ./98fmplayer
 ```
-Reads drum sample from `$HOME/.local/share/fmplayer/ym2608_adpcm_rom.bin` (same format as MAME).
+Reads drum sample from `$HOME/.local/share/98fmplayer/ym2608_adpcm_rom.bin` (same format as MAME).
 
 ### win32
 Releases:
@@ -36,5 +36,5 @@ Uses MinGW-w64 to compile.
 $ cd win32/x86
 $ make
 ```
-Reads drum sample from the directory in which `fmplayer.exe` is placed.
+Reads drum sample from the directory in which `98fmplayer.exe` is placed.
 Uses DirectSound (WinMM if there is no DirectSound) to output sound. This works on Windows 2000, so it is  theoretically possible to run this on a real PC-98. (But it was too heavy for my PC-9821V12 which only has P5 Pentium 120MHz, or on PC-9821Ra300 with P6 Mendocino Celeron 300MHz)

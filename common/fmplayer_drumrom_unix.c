@@ -9,7 +9,7 @@ static struct {
   bool loaded;
 } g;
 
-#define DATADIR "/.local/share/fmplayer/"
+#define DATADIR "/.local/share/98fmplayer/"
 
 static void loadfile(void) {
   const char *path = "ym2608_adpcm_rom.bin";

@@ -1,4 +1,4 @@
-TARGET=fmplayer.exe
+TARGET=98fmplayer.exe
 
 ICON=../fmplayer.ico
 ICONFILES=../fmplayer.png ../fmplayer32.png

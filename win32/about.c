@@ -105,7 +105,7 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
                                  hwnd, 0, g.hinst, 0);
   SetWindowFont(g.static_help, g.font, TRUE);
   g.static_main = CreateWindowEx(0, L"static",
-                                 L"FMPlayer/Win32 " ABOUT_ARCH " v" FMPLAYER_VERSION_STR,
+                                 L"98FMPlayer/Win32 " ABOUT_ARCH " v" FMPLAYER_VERSION_STR,
                                  WS_CHILD | WS_VISIBLE,
                                  150, 10, 400, 40,
                                  hwnd, 0, g.hinst, 0);

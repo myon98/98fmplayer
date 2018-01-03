@@ -818,7 +818,7 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
 #endif
   g.mainwnd = CreateWindowEx(
     exStyle,
-    (wchar_t*)((uintptr_t)wcatom), L"FMPlayer/Win32 " WIN64STR "v" FMPLAYER_VERSION_STR,
+    (wchar_t*)((uintptr_t)wcatom), L"98FMPlayer/Win32 " WIN64STR "v" FMPLAYER_VERSION_STR,
     style,
     CW_USEDEFAULT, CW_USEDEFAULT,
     wr.right-wr.left, wr.bottom-wr.top,

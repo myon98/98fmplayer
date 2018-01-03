@@ -184,7 +184,7 @@ static bool openfile(const char *uri) {
     goto err;
   }
   if (!g.ss) {
-    g.ss = sound_init("FMPlayer", SRATE, soundout_cb, &g.opna_timer);
+    g.ss = sound_init("98FMPlayer", SRATE, soundout_cb, &g.opna_timer);
     if (!g.ss) {
       msgbox_err("cannot open audio stream");
       goto err;
@@ -551,7 +551,7 @@ int main(int argc, char **argv) {
   GtkWidget *w = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   g.mainwin = w;
   gtk_window_set_resizable(GTK_WINDOW(w), FALSE);
-  gtk_window_set_title(GTK_WINDOW(w), "FMPlayer");
+  gtk_window_set_title(GTK_WINDOW(w), "98FMPlayer");
   g_signal_connect(w, "destroy", G_CALLBACK(on_destroy), 0);
   g.root_box_widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_container_add(GTK_CONTAINER(w), g.root_box_widget);

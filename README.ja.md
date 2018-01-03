@@ -1,4 +1,4 @@
-# Fmplayer (仮)
+# 98Fmplayer (仮)
 PC-98用のFM音源ドライバエミュレーション(予定)
 
 ## 現在の状況:
@@ -30,9 +30,9 @@ $ cd gtk
 $ autoreconf -i
 $ ./configure
 $ make
-$ ./fmplayer
+$ ./98fmplayer
 ```
-`$HOME/.local/share/fmplayer/ym2608_adpcm_rom.bin`からMAME互換のドラムサンプルを読み込みます。
+`$HOME/.local/share/98fmplayer/ym2608_adpcm_rom.bin`からMAME互換のドラムサンプルを読み込みます。
 
 ### WIN32 版の仮 UI
 Releases:
