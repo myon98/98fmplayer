@@ -7,7 +7,7 @@
 
 #include "fmdsp/fontrom_shinonome.inc"
 
-#define DATADIR "/.local/share/fmplayer/"
+#define DATADIR "/.local/share/98fmplayer/"
 
 static struct {
   uint8_t fontrombuf[FONT_ROM_FILESIZE];

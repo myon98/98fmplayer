@@ -29,7 +29,6 @@
 #include "fmplayer.xpm"
 #include "fmplayer32.xpm"
 
-#define DATADIR "/.local/share/fmplayer/"
 //#define FMDSP_2X
 
 enum {
