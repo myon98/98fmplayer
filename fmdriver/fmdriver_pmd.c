@@ -1167,6 +1167,7 @@ static void pmd_cmd_null_16(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  (void)work;
   for (int i = 0; i < 16; i++) {
     pmd_part_cmdload(pmd, part);
   }
@@ -1178,6 +1179,7 @@ static void pmd_cmd_null_6(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  (void)work;
   for (int i = 0; i < 6; i++) {
     pmd_part_cmdload(pmd, part);
   }
@@ -1189,6 +1191,7 @@ static void pmd_cmd_null_5(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  (void)work;
   for (int i = 0; i < 5; i++) {
     pmd_part_cmdload(pmd, part);
   }
@@ -1200,6 +1203,7 @@ static void pmd_cmd_null_4(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  (void)work;
   for (int i = 0; i < 4; i++) {
     pmd_part_cmdload(pmd, part);
   }
@@ -1211,6 +1215,7 @@ static void pmd_cmd_null_3(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  (void)work;
   for (int i = 0; i < 3; i++) {
     pmd_part_cmdload(pmd, part);
   }
@@ -1222,6 +1227,7 @@ static void pmd_cmd_null_2(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  (void)work;
   for (int i = 0; i < 2; i++) {
     pmd_part_cmdload(pmd, part);
   }
@@ -1233,6 +1239,7 @@ static void pmd_cmd_null_1(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  (void)work;
   pmd_part_cmdload(pmd, part);
 }
 
@@ -1242,6 +1249,9 @@ static void pmd_cmd_null_0(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  (void)work;
+  (void)pmd;
+  (void)part;
 }
 
 // 271a
@@ -1838,6 +1848,7 @@ static void pmd_adpcm_freq_out(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  (void)pmd;
   uint16_t freq = part->actual_freq;
   if (!freq) return;
   freq += (unsigned)part->portamento_diff;
@@ -2298,6 +2309,7 @@ static void pmd_cmdff_tonenum_adpcm(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t tonenum = pmd_part_cmdload(pmd, part);
   part->tonenum = tonenum;
   pmd->adpcm_start = pmd->adpcm_addr[tonenum][0];
@@ -2389,6 +2401,8 @@ static void pmd_cmdfb_tie(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
+  (void)part;
   pmd->no_keyoff = true;
 }
 
@@ -2422,6 +2436,7 @@ static void pmd_cmdf9_repeat_reset(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint16_t ptr = pmd_part_cmdload(pmd, part);
   ptr |= ((uint16_t)(pmd_part_cmdload(pmd, part)) << 8);
   ptr++;
@@ -2439,6 +2454,7 @@ static void pmd_cmdf8_repeat(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t repeat = pmd_part_cmdload(pmd, part);
   if (repeat) {
     // 0xf8 repeat cnt ptr
@@ -2471,6 +2487,7 @@ static void pmd_cmdf7_repeat_exit(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint16_t ptr = pmd_part_cmdload(pmd, part);
   ptr |= ((uint16_t)(pmd_part_cmdload(pmd, part)) << 8);
   if (pmd->datalen < (ptr+2)) {
@@ -2490,6 +2507,8 @@ static void pmd_cmdf6_set_loop(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
+  (void)pmd;
   part->loop_ptr = part->ptr;
 }
 
@@ -2499,6 +2518,7 @@ static void pmd_cmdf5_transpose(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->transpose = pmd_part_cmdload(pmd, part);
 }
 
@@ -2508,6 +2528,8 @@ static void pmd_cmdf4_volinc_fm(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
+  (void)pmd;
   part->vol += 4;
   if (part->vol > 0x7f) part->vol = 0x7f;
 }
@@ -2518,6 +2540,8 @@ static void pmd_cmdf4_volinc_ssg(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
+  (void)pmd;
   if (part->vol < 0xf) part->vol++;
 }
 
@@ -2527,6 +2551,8 @@ static void pmd_cmdf4_volinc_adpcm(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
+  (void)pmd;
   int newvol = part->vol + 0x10;
   if (newvol > 0xff) newvol = 0xff;
   part->vol = newvol;
@@ -2538,6 +2564,8 @@ static void pmd_cmdf3_voldec_fm(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
+  (void)pmd;
   int vol = part->vol - 4;
   if (vol < 0) vol = 0;
   part->vol = vol;
@@ -2549,6 +2577,8 @@ static void pmd_cmdf3_voldec_ssg(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
+  (void)pmd;
   if (part->vol) part->vol--;
 }
 
@@ -2558,6 +2588,8 @@ static void pmd_cmdf3_voldec_adpcm(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
+  (void)pmd;
   int newvol = part->vol - 0x10;
   if (newvol < 0) newvol = 0;
   part->vol = newvol;
@@ -2569,6 +2601,7 @@ static void pmd_cmdf2_lfo(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->lfo_set.delay = pmd_part_cmdload(pmd, part);
   part->lfo_set.speed = pmd_part_cmdload(pmd, part);
   part->lfo_set.step = pmd_part_cmdload(pmd, part);
@@ -2583,6 +2616,7 @@ static void pmd_cmdf1_lfo_switch(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t val = pmd_part_cmdload(pmd, part);
   if (val & 0xf8) val = 1;
   part->lfof.freq = val & (1<<0);
@@ -2607,6 +2641,7 @@ static void pmd_cmdf1_ppsdrv(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   /* uint8_t data = */pmd_part_cmdload(pmd, part);
   // TODO: PPSDRV
 }
@@ -2617,6 +2652,7 @@ static void pmd_cmdf0_env_old(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t val;
   val = pmd_part_cmdload(pmd, part);
   part->ssg_env_param_set[SSG_ENV_PARAM_OLD_AL] = val;
@@ -2652,6 +2688,7 @@ static void pmd_cmdee_noise_freq(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   pmd->ssg_noise_freq = pmd_part_cmdload(pmd, part);
 }
 
@@ -2661,6 +2698,7 @@ static void pmd_cmded_ssgmix(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->ssg_mix = pmd_part_cmdload(pmd, part);
 }
 
@@ -2711,6 +2749,7 @@ static void pmd_cmdec_pan_adpcm(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->pan = pmd_part_cmdload(pmd, part) << 6;
 }
 
@@ -2827,6 +2866,7 @@ static void pmd_cmde7_transpose_rel(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->transpose += pmd_part_cmdload(pmd, part);
 }
 
@@ -2872,6 +2912,7 @@ static void pmd_cmde4_hlfo_delay(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->hlfo_delay_set = pmd_part_cmdload(pmd, part);
 }
 
@@ -2881,6 +2922,7 @@ static void pmd_cmde3_vol_add_fm(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t vol = part->vol + pmd_part_cmdload(pmd, part);
   if (vol > 0x7f) vol = 0x7f;
   part->vol = vol;
@@ -2892,6 +2934,7 @@ static void pmd_cmde3_vol_add_ssg(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t vol = part->vol + pmd_part_cmdload(pmd, part);
   if (vol > 0xf) vol = 0xf;
   part->vol = vol;
@@ -2903,6 +2946,7 @@ static void pmd_cmde3_vol_add_adpcm(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   int vol = part->vol + pmd_part_cmdload(pmd, part);
   if (vol > 0xff) vol = 0xff;
   part->vol = vol;
@@ -2916,6 +2960,7 @@ static void pmd_cmde2_vol_sub(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   int vol = part->vol - pmd_part_cmdload(pmd, part);
   if (vol < 0) vol = 0;
   part->vol = vol;
@@ -2958,6 +3003,7 @@ static void pmd_cmddf_meas_len(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   pmd->meas_len = pmd_part_cmdload(pmd, part);
 }
 
@@ -2967,6 +3013,7 @@ static void pmd_cmdde_echo_init_add_fm(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t vol = part->vol + pmd_part_cmdload(pmd, part);
   if (vol > 0x7f) vol = 0x7f;
   part->volume_save = vol+1;
@@ -2979,6 +3026,7 @@ static void pmd_cmdde_echo_init_add_ssg(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t vol = part->vol + pmd_part_cmdload(pmd, part);
   if (vol > 0xf) vol = 0xf;
   part->volume_save = vol+1;
@@ -2991,6 +3039,7 @@ static void pmd_cmdde_echo_init_add_adpcm(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   int vol = part->vol + pmd_part_cmdload(pmd, part);
   if (vol > 0xfe) vol = 0xfe;
   part->volume_save = vol+1;
@@ -3003,6 +3052,7 @@ static void pmd_cmddd_echo_init_sub(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   int vol = part->vol - pmd_part_cmdload(pmd, part);
   if (vol < 0) vol = 0;
   part->volume_save = vol+1;
@@ -3015,6 +3065,7 @@ static void pmd_cmddc_status1(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   pmd->status1 = pmd_part_cmdload(pmd, part);
 }
 
@@ -3024,6 +3075,7 @@ static void pmd_cmddb_status1_add(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   pmd->status1 += pmd_part_cmdload(pmd, part);
 }
 
@@ -3183,6 +3235,7 @@ static void pmd_cmdd6_md(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->md_speed = pmd_part_cmdload(pmd, part);
   part->md_speed_set = part->md_speed;
   part->md_depth = pmd_part_cmdload(pmd, part);
@@ -3209,6 +3262,7 @@ static void pmd_cmdd3_fmeff(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   // TODO: 42ae
   uint8_t val = pmd_part_cmdload(pmd, part);
   if (pmd_part_masked(part)) return;
@@ -3227,6 +3281,7 @@ static void pmd_cmdd2_fadeout(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   // TODO
   pmd_part_cmdload(pmd, part);
 }
@@ -3237,6 +3292,7 @@ static void pmd_cmdd0_ssgnoisefreqadd(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   int nf = pmd->ssg_noise_freq + u8s8(pmd_part_cmdload(pmd, part));
   if (nf < 0) nf = 0;
   if (nf > 0x1f) nf = 0x1f;
@@ -3310,6 +3366,7 @@ static void pmd_cmdce_adpcm_loop(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  (void)work;
   uint16_t diff = pmd_part_cmdload(pmd, part);
   diff |= (uint16_t)pmd_part_cmdload(pmd, part) << 8;
   if (!(diff & 0x8000)) diff += pmd->adpcm_start;
@@ -3355,6 +3412,7 @@ static void pmd_cmdcd_env_new(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->ssg_env_param_set[SSG_ENV_PARAM_NEW_AR] = pmd_part_cmdload(pmd, part) & 0x1f;
   part->ssg_env_param_set[SSG_ENV_PARAM_NEW_DR] = pmd_part_cmdload(pmd, part) & 0x1f;
   part->ssg_env_param_set[SSG_ENV_PARAM_NEW_SR] = pmd_part_cmdload(pmd, part) & 0x1f;
@@ -3382,6 +3440,7 @@ static void pmd_cmdcc_det_ext(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->flagext.detune = pmd_part_cmdload(pmd, part) & 1;
 }
 
@@ -3391,6 +3450,7 @@ static void pmd_cmdcb_lfo_waveform(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->lfo_waveform = pmd_part_cmdload(pmd, part);
 }
 
@@ -3400,6 +3460,7 @@ static void pmd_cmdca_lfo_ext(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->flagext.lfo = pmd_part_cmdload(pmd, part) & 1;
 }
 
@@ -3409,6 +3470,7 @@ static void pmd_cmdc9_env_ext(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->flagext.env = pmd_part_cmdload(pmd, part) & 1;
 }
 
@@ -3494,6 +3556,7 @@ static void pmd_cmdc6_fm3ex_init(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   for (int i = 0; i < 3; i++) {
     uint16_t ptr = pmd_part_cmdload(pmd, part);
     ptr |= ((uint16_t)pmd_part_cmdload(pmd, part)) << 8;
@@ -3529,6 +3592,7 @@ static void pmd_cmdc4_gate_rel(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->gate_rel = pmd_part_cmdload(pmd, part);
 }
 
@@ -3553,6 +3617,7 @@ static void pmd_cmdc3_pan_ex_adpcm(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t data = pmd_part_cmdload(pmd, part);
   pmd_part_cmdload(pmd, part);
   uint8_t pan;
@@ -3589,6 +3654,7 @@ static void pmd_cmdc2_lfo_delay(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t d = pmd_part_cmdload(pmd, part);
   part->lfo.delay = d;
   part->lfo_set.delay = d;
@@ -3602,6 +3668,7 @@ static void pmd_cmdc0_ff_fm_voldown(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   pmd->fm_voldown = pmd_part_cmdload(pmd, part);
 }
 
@@ -3612,6 +3679,7 @@ static void pmd_cmdc0_fe_fm_voldown_rel(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t vol = pmd_part_cmdload(pmd, part);
   if (!vol) {
     pmd->fm_voldown = pmd->fm_voldown_orig;
@@ -3630,6 +3698,7 @@ static void pmd_cmdc0_fd_ssg_voldown(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   pmd->ssg_voldown = pmd_part_cmdload(pmd, part);
 }
 
@@ -3640,6 +3709,7 @@ static void pmd_cmdc0_fc_ssg_voldown_rel(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t vol = pmd_part_cmdload(pmd, part);
   if (!vol) {
     pmd->ssg_voldown = pmd->ssg_voldown_orig;
@@ -3658,6 +3728,7 @@ static void pmd_cmdc0_fb_adpcm_voldown(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   pmd->adpcm_voldown = pmd_part_cmdload(pmd, part);
 }
 
@@ -3668,6 +3739,7 @@ static void pmd_cmdc0_fa_adpcm_voldown_rel(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t vol = pmd_part_cmdload(pmd, part);
   if (!vol) {
     pmd->adpcm_voldown = pmd->adpcm_voldown_orig;
@@ -3686,6 +3758,7 @@ static void pmd_cmdc0_f9_opnarhythm_voldown(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   pmd->opnarhythm_voldown = pmd_part_cmdload(pmd, part);
 }
 
@@ -3696,6 +3769,7 @@ static void pmd_cmdc0_f8_opnarhythm_voldown_rel(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t vol = pmd_part_cmdload(pmd, part);
   if (!vol) {
     pmd->opnarhythm_voldown = pmd->opnarhythm_voldown_orig;
@@ -3714,6 +3788,7 @@ static void pmd_cmdc0_f7_pcm86_vol(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   pmd->pcm86_vol_spb = pmd_part_cmdload(pmd, part) & 1;
 }
 
@@ -3725,6 +3800,7 @@ static void pmd_cmdc0_f6_ppz8_voldown(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   pmd->ppz8_voldown = pmd_part_cmdload(pmd, part);
 }
 
@@ -3735,6 +3811,7 @@ static void pmd_cmdc0_f5_ppz8_voldown_rel(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t vol = pmd_part_cmdload(pmd, part);
   if (!vol) {
     pmd->ppz8_voldown = pmd->ppz8_voldown_orig;
@@ -3964,6 +4041,7 @@ static void pmd_cmdbe_lfo2_switch(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t val = pmd_part_cmdload(pmd, part);
   part->lfof_b.freq = val & (1<<0);
   part->lfof_b.vol = val & (1<<1);
@@ -4086,6 +4164,7 @@ static void pmd_cmdb7_lfo_md_cnt(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t data = pmd_part_cmdload(pmd, part);
   bool b = data & 0x80;
   data &= 0x7f;
@@ -4157,6 +4236,7 @@ static void pmd_cmdb5_slot_delay(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   uint8_t data = pmd_part_cmdload(pmd, part);
   data = (~data) & 0xf;
   data <<= 4;
@@ -4171,6 +4251,7 @@ static void pmd_cmdb4_ppz8_init(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   for (int i = 0; i < 8; i++) {
     uint16_t ptr = pmd_part_cmdload(pmd, part);
     ptr |= (uint16_t)pmd_part_cmdload(pmd, part) << 8;
@@ -4197,6 +4278,7 @@ static void pmd_cmdb3_gate_min(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->gate_min = pmd_part_cmdload(pmd, part);
 }
 
@@ -4206,6 +4288,7 @@ static void pmd_cmdb2_transpose_master(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->transpose_master = pmd_part_cmdload(pmd, part);
 }
 
@@ -4215,6 +4298,7 @@ static void pmd_cmdb1_gate_rand_range(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ){
+  (void)work;
   part->gate_rand_range = pmd_part_cmdload(pmd, part);
 }
 
@@ -4944,6 +5028,7 @@ static void pmd_part_proc_note_masked(
   struct driver_pmd *pmd,
   struct pmd_part *part
 ) {
+  (void)work;
   part->actual_freq = 0;
   part->actual_note = 0xff;
   part->curr_note = 0xff;
