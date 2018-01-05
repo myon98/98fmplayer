@@ -14,9 +14,14 @@ void fmplayer_file_free(const struct fmplayer_file *fmfileptr) {
 }
 
 static void opna_writereg_dummy(struct fmdriver_work *work, unsigned addr, unsigned data) {
+  (void)work;
+  (void)addr;
+  (void)data;
 }
 
 static unsigned opna_readreg_dummy(struct fmdriver_work *work, unsigned addr) {
+  (void)work;
+  (void)addr;
   return 0xff;
 }
 
@@ -26,6 +31,7 @@ struct dummy_opna {
 };
 
 static uint8_t opna_status_dummy(struct fmdriver_work *work, bool a1) {
+  (void)a1;
   struct dummy_opna *opna = work->opna;
   if (!opna->timerb_loop) {
     if (work->loop_cnt >= opna->loopcnt) {

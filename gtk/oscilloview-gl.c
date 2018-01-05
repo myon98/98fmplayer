@@ -27,6 +27,7 @@ static struct {
 
 static void on_glarea_unrealize(GtkWidget *w, gpointer ptr) {
   (void)w;
+  (void)ptr;
   GtkGLArea *area = GTK_GL_AREA(w);
   gtk_gl_area_make_current(area);
   if (gtk_gl_area_get_error(area)) return;
@@ -118,6 +119,8 @@ static void on_realize(GtkWidget *w, gpointer ptr) {
 static gboolean on_render(GtkGLArea *area,
                           GdkGLContext *ctx,
                           gpointer ptr) {
+  (void)area;
+  (void)ctx;
   (void)ptr;
   if (!atomic_flag_test_and_set_explicit(
     &oscilloview_g.flag, memory_order_acquire)) {

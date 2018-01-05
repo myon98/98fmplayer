@@ -188,6 +188,7 @@ static void pacc_buf_delete(struct pacc_buf *pb) {
 
 static struct pacc_buf *pacc_gen_buf(
     struct pacc_ctx *pc, struct pacc_tex *pt, enum pacc_buf_mode mode) {
+  (void)pc;
   struct pacc_buf *pb = malloc(sizeof(*pb));
   if (!pb) goto err;
   *pb = (struct pacc_buf) {
@@ -432,6 +433,7 @@ static void pacc_tex_delete(struct pacc_tex *pt) {
 }
 
 static struct pacc_tex *pacc_gen_tex(struct pacc_ctx *pc, int w, int h) {
+  (void)pc;
   struct pacc_tex *pt = malloc(sizeof(*pt));
   if (!pt) goto err;
   *pt = (struct pacc_tex) {

@@ -17,7 +17,7 @@ PREFIX=$(ARCH)-w64-mingw32-
 CC=$(PREFIX)gcc
 WINDRES=$(PREFIX)windres
 STRIP=$(PREFIX)strip
-CFLAGS=-std=c99 -O2 -Wall -Werror -Wextra -pedantic -Wno-unused-parameter -Wno-missing-field-initializers -I../.. \
+CFLAGS=-std=c99 -O2 -Wall -Werror -Wextra -pedantic -I../.. \
        $(addprefix -D,$(DEFINES))
 SSECFLAGS=-mssse3 -O3
 LIBS=-mwindows -municode \

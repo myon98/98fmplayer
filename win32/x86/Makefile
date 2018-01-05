@@ -19,7 +19,7 @@ WINDRES=$(PREFIX)windres
 STRIP=$(PREFIX)strip
 CFLAGS=-std=c99 -O2 -Wall -Wextra -Werror -pedantic -I../.. \
        $(addprefix -D,$(DEFINES)) \
-       -march=i586 -Wno-unused-parameter -Wno-missing-field-initializers
+       -march=i586
 SSECFLAGS=-mssse3 -O3
 LIBS=-s -mwindows -municode \
      $(addprefix -l,$(LIBBASE))

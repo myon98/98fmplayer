@@ -48,6 +48,7 @@ static struct {
 extern HWND g_currentdlg;
 
 static void on_destroy(HWND hwnd) {
+  (void)hwnd;
   for (int i = 0; i < 6; i++) {
     DestroyWindow(g.tonelabel[i]);
     DestroyWindow(g.copybutton[i]);
@@ -133,6 +134,7 @@ static LRESULT static_wndproc(
 }
 
 static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
+  (void)cs;
   g.format_disp = -1;
   RECT wr;
   wr.left = 0;
@@ -200,6 +202,7 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
 }
 
 static void on_timer(HWND hwnd, UINT id) {
+  (void)hwnd;
   if (id == TIMER_UPDATE) {
     if (!atomic_flag_test_and_set_explicit(
         &toneview_g.flag, memory_order_acquire)) {
@@ -227,6 +230,8 @@ static void on_timer(HWND hwnd, UINT id) {
 }
 
 static void on_activate(HWND hwnd, bool activate, HWND targetwnd, WINBOOL state) {
+  (void)targetwnd;
+  (void)state;
   if (activate) g_currentdlg = hwnd;
   else g_currentdlg = 0;
 }

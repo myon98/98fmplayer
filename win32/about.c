@@ -24,6 +24,7 @@ static struct {
 } g;
 
 static void on_destroy(HWND hwnd) {
+  (void)hwnd;
   DestroyWindow(g.static_main);
   DestroyWindow(g.static_info);
   DestroyWindow(g.static_help);
@@ -50,6 +51,7 @@ static void update_status(void) {
 }
 
 static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
+  (void)cs;
   RECT wr = {
     .left = 0,
     .top = 0,
@@ -121,11 +123,14 @@ static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
 }
 
 static void on_activate(HWND hwnd, bool activate, HWND targetwnd, WINBOOL state) {
+  (void)targetwnd;
+  (void)state;
   if (activate) g_currentdlg = hwnd;
   else g_currentdlg = 0;
 }
 
 static void on_command(HWND hwnd, int id, HWND hwnd_c, UINT code) {
+  (void)hwnd_c;
   if (code == BN_CLICKED && (id == ID_OK)) {
     DestroyWindow(hwnd);
   }

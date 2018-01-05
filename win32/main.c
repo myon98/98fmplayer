@@ -316,6 +316,7 @@ static void toggle_2x(HWND hwnd) {
 }
 
 static bool proc_key(UINT vk, bool down, int repeat) {
+  (void)repeat;
   if (down) {
     if (VK_F1 <= vk && vk <= VK_F12) {
       if (GetKeyState(VK_CONTROL) & 0x8000U) {
@@ -682,6 +683,8 @@ static void on_key(HWND hwnd, UINT vk, BOOL down, int repeat, UINT scan) {
 }
 
 static void on_activate(HWND hwnd, bool activate, HWND targetwnd, WINBOOL state) {
+  (void)targetwnd;
+  (void)state;
   if (activate) g_currentdlg = hwnd;
   else g_currentdlg = 0;
 }

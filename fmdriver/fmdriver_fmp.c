@@ -2231,6 +2231,7 @@ static void fmp_part_pit_pdzf(
   struct fmdriver_work *work, 
   struct fmp_part *part
 ) {
+  (void)work;
   if (part->pdzf.mode != 2) return;
   if (--part->pdzf.pit.delay) return;
   part->pdzf.pit.delay = 1;
@@ -3205,6 +3206,7 @@ static void fmp_title(
     struct fmdriver_work *work,
     struct driver_fmp *fmp,
     uint16_t offset) {
+  (void)work;
   int l = 0;
   int li = 0;
   for (int si = 0;; si++) {

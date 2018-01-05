@@ -29,6 +29,7 @@ static struct {
 } g;
 
 static void on_destroy(HWND hwnd) {
+  (void)hwnd;
   g.oscilloview = 0;
   timeKillEvent(g.mmtimer);
   DeleteObject(g.whitepen);
@@ -38,10 +39,16 @@ static void on_destroy(HWND hwnd) {
 static void CALLBACK mmtimer_cb(UINT timerid, UINT msg,
                                 DWORD_PTR userptr,
                                 DWORD_PTR dw1, DWORD_PTR dw2) {
+  (void)timerid;
+  (void)msg;
+  (void)userptr;
+  (void)dw1;
+  (void)dw2;
   PostMessage(g.oscilloview, WM_USER, 0, 0);
 }
 
 static bool on_create(HWND hwnd, const CREATESTRUCT *cs) {
+  (void)cs;
   g.whitepen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
   ShowWindow(hwnd, SW_SHOW);
   //SetTimer(hwnd, TIMER_UPDATE, 16, 0);
