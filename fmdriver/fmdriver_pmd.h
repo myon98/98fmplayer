@@ -106,7 +106,7 @@ struct pmd_part {
   // 0029
   uint8_t ssg_env_param[4];
   // 002d
-  int8_t ssg_env_vol;
+  uint8_t ssg_env_vol;
   // 002e
   struct pmd_part_flagext {
     // bit 0
