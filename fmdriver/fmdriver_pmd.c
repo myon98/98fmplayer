@@ -703,7 +703,7 @@ static void pmd_ssg_env_tick_new(
         }
       } else {
         // 31d9
-        part->ssg_env_vol = u8s8(part->ssg_env_vol + ar);
+        part->ssg_env_vol = part->ssg_env_vol + ar;
         if (part->ssg_env_vol < 0xf) {
           // 31e4
           part->ssg_env_param[SSG_ENV_PARAM_NEW_AR] =
@@ -730,19 +730,22 @@ static void pmd_ssg_env_tick_new(
         }
       } else {
         // 3214
-        uint8_t prev_ssg_env_vol = part->ssg_env_vol;
-        part->ssg_env_vol = u8s8(part->ssg_env_vol - dr);
+        bool ssg_env_vol_carry;
+        {
+          unsigned next_ssg_env_vol = part->ssg_env_vol - dr;
+          ssg_env_vol_carry = next_ssg_env_vol & 0x100;
+          part->ssg_env_vol = next_ssg_env_vol;
+        }
         uint8_t sl = part->ssg_env_param_sl;
         FMDRIVER_DEBUG("DR: %d\n", part->ssg_env_vol);
-        if (((prev_ssg_env_vol & 0x80) == (((uint8_t)part->ssg_env_vol) & 0x80))
-            && (((uint8_t)part->ssg_env_vol) >= sl)) {
+        if (!ssg_env_vol_carry && (part->ssg_env_vol >= sl)) {
           // 3223
           uint8_t newdr = part->ssg_env_param_set[SSG_ENV_PARAM_NEW_DR] - 0x10;
           if (newdr & 0x80) newdr += newdr;
           part->ssg_env_param[SSG_ENV_PARAM_NEW_DR] = newdr;
         } else {
           // 3231
-          part->ssg_env_vol = u8s8(sl);
+          part->ssg_env_vol = sl;
           FMDRIVER_DEBUG("DRnext: %d\n", part->ssg_env_vol);
           part->ssg_env_state_new = SSG_ENV_STATE_NEW_SR;
         }
@@ -760,10 +763,15 @@ static void pmd_ssg_env_tick_new(
         }
       } else {
         // 324d
-        uint8_t prev_ssg_env_vol = part->ssg_env_vol;
-        part->ssg_env_vol = u8s8(part->ssg_env_vol - sr);
-        if ((prev_ssg_env_vol & 0x80) != (((uint8_t)part->ssg_env_vol) & 0x80))
+        bool ssg_env_vol_carry;
+        {
+          unsigned next_ssg_env_vol = part->ssg_env_vol - sr;
+          ssg_env_vol_carry = next_ssg_env_vol & 0x100;
+          part->ssg_env_vol = next_ssg_env_vol;
+        }
+        if (ssg_env_vol_carry) {
           part->ssg_env_vol = 0;
+        }
         // 3258
         uint8_t newsr = part->ssg_env_param_set[SSG_ENV_PARAM_NEW_SR] - 0x10;
         if (newsr & 0x80) newsr += newsr;
@@ -782,8 +790,15 @@ static void pmd_ssg_env_tick_new(
         }
       } else {
         // 327a
-        part->ssg_env_vol = u8s8((unsigned)part->ssg_env_vol - rr);
-        if (part->ssg_env_vol < 0) part->ssg_env_vol = 0;
+        bool ssg_env_vol_carry;
+        {
+          unsigned next_ssg_env_vol = part->ssg_env_vol - rr;
+          ssg_env_vol_carry = next_ssg_env_vol & 0x100;
+          part->ssg_env_vol = next_ssg_env_vol;
+        }
+        if (ssg_env_vol_carry) {
+          part->ssg_env_vol = 0;
+        }
         uint8_t newrr = part->ssg_env_param_set[SSG_ENV_PARAM_NEW_RR];
         newrr += newrr;
         newrr -= 0x10;
@@ -800,7 +815,7 @@ static bool pmd_ssg_env_tick_new_check(
   struct pmd_part *part
 ) {
   if (part->ssg_env_state_new == SSG_ENV_STATE_NEW_OFF) return false;
-  int8_t prev_vol = part->ssg_env_vol;
+  uint8_t prev_vol = part->ssg_env_vol;
   pmd_ssg_env_tick_new(part);
   FMDRIVER_DEBUG("ssgnewenv %d %d\n", part->ssg_env_state_new, part->ssg_env_vol);
   return part->ssg_env_vol != prev_vol;
@@ -1590,7 +1605,7 @@ static void pmd_ssg_vol_out(
   if (vol) {
     if (part->ssg_env_state_old == SSG_ENV_STATE_OLD_NEW) {
       // 2bb7
-      unsigned envvol = (uint8_t)(part->ssg_env_vol);
+      unsigned envvol = part->ssg_env_vol;
       if (!envvol) {
         // 2bd9
         vol = 0;
@@ -1671,7 +1686,7 @@ static void pmd_adpcm_vol_out(
       }
     } else {
       // 04e8
-      int newvol = vol + (part->ssg_env_vol << 4);
+      int newvol = vol + (u8s8(part->ssg_env_vol) << 4);
       if (newvol > 0xff) newvol = 0xff;
       if (newvol < 0) newvol = 0;
       vol = newvol;
@@ -1733,7 +1748,7 @@ static void pmd_ppz8_vol_out(
       }
     } else {
       // 0b7d
-      int newvol = vol + (part->ssg_env_vol << 4);
+      int newvol = vol + (u8s8(part->ssg_env_vol) << 4);
       if (newvol > 0xff) newvol = 0xff;
       if (newvol < 0) newvol = 0;
       vol = newvol;
@@ -4710,15 +4725,15 @@ static void pmd_ssg_env_tick_old(
     // 3167
     if (--part->ssg_env_param_set[SSG_ENV_PARAM_OLD_AL]) return;
     part->ssg_env_state_old = SSG_ENV_STATE_OLD_SR;
-    part->ssg_env_vol = u8s8(part->ssg_env_param_set[SSG_ENV_PARAM_OLD_AD]);
+    part->ssg_env_vol = part->ssg_env_param_set[SSG_ENV_PARAM_OLD_AD];
     return;
   case SSG_ENV_STATE_OLD_SR:
     // 317c
     if (!part->ssg_env_param_set[SSG_ENV_PARAM_OLD_SR]) return;
     if (--part->ssg_env_param_set[SSG_ENV_PARAM_OLD_SR]) return;
     part->ssg_env_param_set[SSG_ENV_PARAM_OLD_SR] = part->ssg_env_param[SSG_ENV_PARAM_OLD_SR];
-    part->ssg_env_vol = u8s8(((uint8_t)part->ssg_env_vol) - 1);
-    if ((-15 <= part->ssg_env_vol) && (part->ssg_env_vol < 15)) return;
+    part->ssg_env_vol--;
+    if ((-15 <= u8s8(part->ssg_env_vol)) && (u8s8(part->ssg_env_vol) < 15)) return;
     part->ssg_env_vol = -15;
     return;
   case SSG_ENV_STATE_OLD_RR:
@@ -4729,8 +4744,8 @@ static void pmd_ssg_env_tick_old(
     }
     if (--part->ssg_env_param_set[SSG_ENV_PARAM_OLD_RR]) return;
     part->ssg_env_param_set[SSG_ENV_PARAM_OLD_RR] = part->ssg_env_param[SSG_ENV_PARAM_OLD_RR];
-    part->ssg_env_vol = u8s8(((uint8_t)part->ssg_env_vol) - 1);
-    if ((-15 <= part->ssg_env_vol) && (part->ssg_env_vol < 15)) return;
+    part->ssg_env_vol--;
+    if ((-15 <= u8s8(part->ssg_env_vol)) && (u8s8(part->ssg_env_vol) < 15)) return;
     part->ssg_env_vol = -15;
     return;
   }
@@ -4744,7 +4759,7 @@ static bool pmd_ssg_env_tick_check(
   if (part->ssg_env_state_old == SSG_ENV_STATE_OLD_NEW) {
     return pmd_ssg_env_tick_new_check(part);
   }
-  int8_t old_env_vol = part->ssg_env_vol;
+  uint8_t old_env_vol = part->ssg_env_vol;
   pmd_ssg_env_tick_old(part);
   return old_env_vol != part->ssg_env_vol;
 }
