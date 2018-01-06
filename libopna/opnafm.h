@@ -112,7 +112,7 @@ void opna_fm_writereg(struct opna_fm *fm, unsigned reg, unsigned val);
 //
 void opna_fm_chan_reset(struct opna_fm_channel *chan);
 void opna_fm_chan_phase(struct opna_fm_channel *chan);
-void opna_fm_chan_env(struct opna_fm_channel *chan);
+void opna_fm_slot_env(struct opna_fm_slot *slot, bool hires_env);
 void opna_fm_chan_set_blkfnum(struct opna_fm_channel *chan, unsigned blk, unsigned fnum);
 
 struct opna_fm_frame {

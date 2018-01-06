@@ -298,7 +298,7 @@ static void opna_fm_slot_setrate(struct opna_fm_slot *slot, int status) {
   printf("rate_shifter:  %d\n\n", slot->rate_shifter);
 }
 
-static void opna_fm_slot_env(struct opna_fm_slot *slot, bool hires_env) {
+void opna_fm_slot_env(struct opna_fm_slot *slot, bool hires_env) {
 //  if (!(slot->env_count & ((1<<slot->rate_shifter)-1))) {
   int rate_shifter = hires_env ? slot->rate_shifter_hires : slot->rate_shifter;
   int rate_selector = hires_env ? slot->rate_selector_hires : slot->rate_selector;
