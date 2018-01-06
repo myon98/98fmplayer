@@ -44,6 +44,7 @@ void opna_mix_oscillo(struct opna *opna, int16_t *buf, unsigned samples, struct 
   struct oscillodata *oscillofm = oscillo ? &oscillo[0] : 0;
   struct oscillodata *oscillossg = oscillo ? &oscillo[6] : 0;
 #else
+  (void)oscillo;
   struct oscillodata *oscillofm = 0, *oscillossg = 0;
   unsigned offset = 0;
 #endif

@@ -41,6 +41,7 @@ static struct {
 };
 
 static void audiocb(void *ptr, Uint8 *bufptr, int len) {
+  (void)ptr;
   int frames = len / (sizeof(int16_t)*2);
   int16_t *buf = (int16_t *)bufptr;
   memset(buf, 0, len);
@@ -74,6 +75,8 @@ static void openfile(const char *path) {
 }
 
 int main(int argc, char **argv) {
+  (void)argc;
+  (void)argv;
   if (__builtin_cpu_supports("sse2")) opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_sse2;
   fft_init_table();
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {

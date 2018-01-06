@@ -607,6 +607,7 @@ void opna_fm_writereg(struct opna_fm *fm, unsigned reg, unsigned val) {
   }
 }
 
+#ifdef LIBOPNA_ENABLE_OSCILLO
 static int gcd(int a, int b) {
   if (a < b) {
     int t = a;
@@ -621,6 +622,7 @@ static int gcd(int a, int b) {
   }
   return b;
 }
+#endif
 
 void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
                  struct oscillodata *oscillo, unsigned offset) {
@@ -646,6 +648,9 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
       }
     }
   }
+#else
+  (void)oscillo;
+  (void)offset;
 #endif
   unsigned level[6] = {0};
   for (unsigned i = 0; i < samples; i++) {

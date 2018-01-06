@@ -316,6 +316,9 @@ void opna_ssg_mix_55466(
       }
     }
   }
+#else
+  (void)oscillo;
+  (void)offset;
 #endif
   unsigned level[3] = {0};
   for (int i = 0; i < samples; i++) {

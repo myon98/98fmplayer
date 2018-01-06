@@ -127,5 +127,6 @@ void *fmplayer_path_dup(const void *path) {
 }
 
 char *fmplayer_path_filename_sjis(const void *path) {
+  (void)path;
   return 0;
 }
