@@ -72,6 +72,7 @@ void show_configdialog(config_update_func *func, void *ptr) {
   g.ptr = ptr;
   if (!g.configwin) {
     g.configwin = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_container_set_border_width(GTK_CONTAINER(g.configwin), 5);
     gtk_window_set_title(GTK_WINDOW(g.configwin), "FMPlayer config");
     g_signal_connect(g.configwin, "destroy", G_CALLBACK(on_destroy), 0);
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);

@@ -88,6 +88,7 @@ void show_toneview(void) {
   if (!g.tonewin) {
     g.format_disp = -1;
     g.tonewin = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_container_set_border_width(GTK_CONTAINER(g.tonewin), 5);
     gtk_window_set_title(GTK_WINDOW(g.tonewin), "FM Tone Viewer");
     g_signal_connect(g.tonewin, "destroy", G_CALLBACK(on_destroy), 0);
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
