@@ -5,9 +5,12 @@
 
 #include "opnatables.h"
 
-
-//#include <stdio.h>
-#define printf(...)
+#if 1
+#define LIBOPNA_DEBUG(...)
+#else
+#include <stdio.h>
+#define LIBOPNA_DEBUG(...) fprintf(stderr, __VA_ARGS__)
+#endif
 
 //#define LIBOPNA_ENABLE_HIRES_SIN
 //#define LIBOPNA_ENABLE_HIRES_ENV
@@ -268,7 +271,7 @@ static void opna_fm_slot_setrate(struct opna_fm_slot *slot, int status) {
   int rate = 2*r + (slot->keycode >> (3 - slot->ks));
 
   if (rate > 63) rate = 63;
-  printf("rate: %d\n", rate);
+  LIBOPNA_DEBUG("rate: %d\n", rate);
   if (status == ENV_ATTACK && rate >= 62) rate += 4;
   int rate_shifter = 11 - (rate >> 2);
   if (rate_shifter < 0) {
@@ -292,10 +295,10 @@ static void opna_fm_slot_setrate(struct opna_fm_slot *slot, int status) {
     slot->rate_mul_hires = 1;
     slot->rate_shifter_hires = rate_shifter_hires;
   }
-  printf("status: %d\n", status);
-  printf("rate_selector: %d\n", slot->rate_selector);
-  printf("rate_mul:      %d\n", slot->rate_mul);
-  printf("rate_shifter:  %d\n\n", slot->rate_shifter);
+  LIBOPNA_DEBUG("status: %d\n", status);
+  LIBOPNA_DEBUG("rate_selector: %d\n", slot->rate_selector);
+  LIBOPNA_DEBUG("rate_mul:      %d\n", slot->rate_mul);
+  LIBOPNA_DEBUG("rate_shifter:  %d\n\n", slot->rate_shifter);
 }
 
 void opna_fm_slot_env(struct opna_fm_slot *slot, bool hires_env) {
@@ -387,7 +390,7 @@ void opna_fm_slot_env(struct opna_fm_slot *slot, bool hires_env) {
 
 void opna_fm_slot_key(struct opna_fm_channel *chan, int slotnum, bool keyon) {
   struct opna_fm_slot *slot = &chan->slot[slotnum];
-  //printf("%d: %d\n", slotnum, keyon);
+  //LIBOPNA_DEBUG("%d: %d\n", slotnum, keyon);
   if (keyon) {
     if (!slot->keyon) {
       slot->keyon = true;
@@ -483,7 +486,7 @@ void opna_fm_chan_set_fb(struct opna_fm_channel *chan, unsigned fb) {
   fb &= 0x7;
   chan->fb = fb;
 }
-//#include <stdio.h>
+
 void opna_fm_writereg(struct opna_fm *fm, unsigned reg, unsigned val) {
   val &= (1<<8)-1;
 
@@ -494,8 +497,8 @@ void opna_fm_writereg(struct opna_fm *fm, unsigned reg, unsigned val) {
     {
       unsigned mode = val >> 6;
       if (mode != fm->ch3.mode) {
-//        printf("0x27\n");
-//        printf("  mode = %d\n", mode);
+//        LIBOPNA_DEBUG("0x27\n");
+//        LIBOPNA_DEBUG("  mode = %d\n", mode);
         fm->ch3.mode = mode;
         for (int c = 0; c < 2; c++) {
           unsigned blk, fnum;
@@ -515,7 +518,7 @@ void opna_fm_writereg(struct opna_fm *fm, unsigned reg, unsigned val) {
     return;
   case 0x28:
     {
-//      printf("%02x\n", val);
+//      LIBOPNA_DEBUG("%02x\n", val);
       int c = val & 0x3;
       if (c == 3) return;
       if (val & 0x4) c += 3;
@@ -565,10 +568,10 @@ void opna_fm_writereg(struct opna_fm *fm, unsigned reg, unsigned val) {
       switch (reg & 0xc) {
       case 0x0:
         if (c != 2 || fm->ch3.mode == CH3_MODE_NORMAL) {
-//          printf("fnum: ch%d, mode: %d\n", c, fm->ch3.mode);
+//          LIBOPNA_DEBUG("fnum: ch%d, mode: %d\n", c, fm->ch3.mode);
           opna_fm_chan_set_blkfnum(chan, blk, fnum);
         } else {
-//          printf("fnum: ch2, slot3\n");
+//          LIBOPNA_DEBUG("fnum: ch2, slot3\n");
           chan->blk = blk;
           chan->fnum = fnum;
           chan->slot[3].keycode = blkfnum2keycode(blk, fnum);
@@ -664,7 +667,7 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
           //opna_fm_slot_env(&fm->channel[c].slot[s]);
         }
       }
-      //printf("e %04d\n", fm->channel[0].slot[3].env);
+      //LIBOPNA_DEBUG("e %04d\n", fm->channel[0].slot[3].env);
     }
     
     int32_t lo = buf[i*2+0];
@@ -699,7 +702,7 @@ void opna_fm_mix(struct opna_fm *fm, int16_t *buf, unsigned samples,
     buf[i*2+1] = ro;
     if (lo == 1 || lo == 3 || lo == 5) {
       //if (fm->channel[0].slot[3].env == 0511) {
-        //printf("l:%6d %4d %4d\n", lo, fm->channel[0].slot[3].phase >> 10, fm->channel[0].slot[3].env);
+        //LIBOPNA_DEBUG("l:%6d %4d %4d\n", lo, fm->channel[0].slot[3].phase >> 10, fm->channel[0].slot[3].env);
       //}
     }
     if (!fm->env_div3) {
