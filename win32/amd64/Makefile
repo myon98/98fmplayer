@@ -41,7 +41,7 @@ $(TARGET):	$(OBJS)
 	@$(WINDRES) -o $@ -i $<
 
 $(ICON):	$(ICONFILES)
-	convert $(ICONFILES) -colors 256 $@
+	icotool -o $@ -c $^
 
 clean:
 	rm -f $(TARGET) $(OBJS)
