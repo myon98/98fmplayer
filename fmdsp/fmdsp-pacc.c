@@ -11,6 +11,7 @@
 #include <string.h>
 #include "fmdsp_platform_info.h"
 
+#include <stdio.h>
 #include <math.h>
 
 enum {
@@ -576,6 +577,139 @@ static void update_track_without_key(
       x+BAR_X+BAR_W*(track->ticks>>2), y+BAR_Y, BAR_W, BAR_H);
 }
 
+static void update_track_info_fm(struct fmdsp_pacc *fp, int ch,
+                                 const bool *slotmask, int x, int y) {
+  const struct opna_fm_channel *c = &fp->opna->fm.channel[ch];
+  for (int si = 0; si < 4; si++) {
+    if (slotmask && slotmask[si]) continue;
+    const struct opna_fm_slot *s = &c->slot[si];
+    int level = s->tl << 5; // (0 - 4064)
+    int envlevel = level + (s->env<<2);
+    int leveld = (4096 - level) / 64; // (0 - 63)
+    if (leveld < 0) leveld = 0;
+    int envleveld = (4096 - envlevel) / 64;
+    if (envleveld < 0) envleveld = 0;
+    fp->pacc.buf_rect(fp->pc, fp->buf_vertical_3,
+        x, y+2+si*6, 128, 4);
+    fp->pacc.buf_rect(fp->pc, fp->buf_vertical_2,
+        x, y+2+si*6, envleveld*2, 4);
+    if (leveld) {
+      fp->pacc.buf_rect(fp->pc, fp->buf_vertical_7,
+          x+(leveld-1)*2, y+2+si*6, 1, 4);
+    }
+    const char *envstr = "";
+    switch (s->env_state) {
+    case ENV_ATTACK:
+      envstr = "ATT";
+      break;
+    case ENV_DECAY:
+      envstr = "DEC";
+      break;
+    case ENV_SUSTAIN:
+      envstr = "SUS";
+      break;
+    case ENV_RELEASE:
+      envstr = "REL";
+      break;
+    }
+    fp->pacc.buf_printf(
+        fp->pc, fp->buf_font_1_d,
+        x+130, y+si*6, "%s", envstr);
+    fp->pacc.buf_printf(
+        fp->pc, fp->buf_font_1_d,
+        x+150, y+si*6, "%03X", s->env);
+    if (slotmask) {
+      fp->pacc.buf_printf(
+          fp->pc, fp->buf_font_1_d,
+          x+170, y+si*6, "%04X", (si != 3) ? fp->opna->fm.ch3.fnum[si] : c->fnum);
+    }
+  }
+  if (!slotmask) {
+    fp->pacc.buf_printf(
+        fp->pc, fp->buf_font_1_d,
+        x+170, y, "%04X", c->fnum);
+  }
+}
+
+static void update_track_info_ssg(struct fmdsp_pacc *fp, int ch, int x, int y) {
+  int envleveld = opna_ssg_channel_level(&fp->opna->ssg, ch);
+  fp->pacc.buf_rect(fp->pc, fp->buf_vertical_3,
+      x, y+2, 128, 4);
+  fp->pacc.buf_rect(fp->pc, fp->buf_vertical_2,
+      x+64, y+2, envleveld*2, 4);
+  fp->pacc.buf_rect(fp->pc, fp->buf_vertical_7,
+      x, y+2, 64, 4);
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_1_d,
+      x+170, y, " %03X", opna_ssg_tone_period(&fp->opna->ssg, ch));
+}
+
+static void update_track_info_adpcm(struct fmdsp_pacc *fp, int x, int y) {
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_1_d,
+      x, y, "VOL DELTA  START    PTR    END");
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_1_d,
+      x, y+6, "%3d  %04X %06X %06X %06X",
+      fp->opna->adpcm.vol,
+      fp->opna->adpcm.delta,
+      fp->opna->adpcm.start<<5,
+      fp->opna->adpcm.ramptr<<5,
+      (fp->opna->adpcm.end+1)<<5);
+}
+
+static void update_track_info_ppz8(struct fmdsp_pacc *fp, int ch, int x, int y) {
+  if (!fp->work->ppz8) return;
+  const struct ppz8_channel *c = &fp->work->ppz8->channel[ch];
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_1_d,
+      x, y, "PAN VOL     FREQ      PTR      END    LOOPS    LOOPE");
+  char panstr[5];
+  if (c->pan) {
+    int pan = c->pan-5;
+    snprintf(panstr, sizeof(panstr), "%+d", pan);
+    char cc = ' ';
+    if (pan < 0) cc = 'L';
+    if (pan > 0) cc = 'R';
+    panstr[0] = cc;
+  } else {
+    snprintf(panstr, sizeof(panstr), "--");
+  }
+  fp->pacc.buf_printf(
+      fp->pc, fp->buf_font_1_d,
+      x, y+6, " %2s %03d %08X %08X %08X %08X %08X",
+      panstr,
+      c->vol, c->freq,
+      (unsigned)(c->ptr>>16), (unsigned)(c->endptr>>16),
+      (unsigned)(c->loopstartptr>>16), (unsigned)(c->loopendptr>>16));
+}
+
+static void update_track_info_13(struct fmdsp_pacc *fp, int x) {
+  const uint8_t *track_table = track_disp_table_13;
+  for (int it = 0; it < 13; it++) {
+    int t = track_table[it];
+    if (t == FMDRIVER_TRACK_NUM) break;
+    int tnum = track_type_table[t].num;
+    const struct fmdriver_track_status *track = &fp->work->track_status[t];
+    if (track->info == FMDRIVER_TRACK_INFO_PPZ8 ||
+        track->info == FMDRIVER_TRACK_INFO_PDZF) {
+      update_track_info_ppz8(fp, track->ppz8_ch - 1, x, TRACK_H_S*it);
+    } else {
+      switch (track_type_table[t].type) {
+      case FMDRIVER_TRACKTYPE_FM:
+        update_track_info_fm(fp, tnum - 1, tnum == 3 ? track->fmslotmask : 0, x, TRACK_H_S*it);
+        break;
+      case FMDRIVER_TRACKTYPE_SSG:
+        update_track_info_ssg(fp, tnum - 1, x, TRACK_H_S*it);
+        break;
+      case FMDRIVER_TRACKTYPE_ADPCM:
+        update_track_info_adpcm(fp, x, TRACK_H_S*it);
+        break;
+      }
+    }
+  }
+}
+
 static void update_track_13(struct fmdsp_pacc *fp, int x) {
   const uint8_t *track_table = track_disp_table_13;
   for (int it = 0; it < 13; it++) {
@@ -600,6 +734,34 @@ static void update_track_13(struct fmdsp_pacc *fp, int x) {
               KEY_W, KEY_H_S,
               0, KEY_H*(track->key&0xf) + KEY_S_OFF_Y);
         }
+      }
+    }
+  }
+}
+
+static void update_track_info_10(struct fmdsp_pacc *fp, const uint8_t *track_table, int x) {
+  for (int it = 0; it < 10; it++) {
+    int t = track_table[it];
+    if (t == FMDRIVER_TRACK_NUM) break;
+    int tnum = track_type_table[t].num;
+    const struct fmdriver_track_status *track = &fp->work->track_status[t];
+    if (track->info == FMDRIVER_TRACK_INFO_PPZ8 ||
+        track->info == FMDRIVER_TRACK_INFO_PDZF) {
+      update_track_info_ppz8(fp, track->ppz8_ch - 1, x, TRACK_H*it);
+    } else {
+      switch (track_type_table[t].type) {
+      case FMDRIVER_TRACKTYPE_FM:
+        update_track_info_fm(fp, tnum - 1, tnum == 3? track->fmslotmask : 0, x, TRACK_H*it);
+        break;
+      case FMDRIVER_TRACKTYPE_SSG:
+        update_track_info_ssg(fp, tnum - 1, x, TRACK_H*it);
+        break;
+      case FMDRIVER_TRACKTYPE_ADPCM:
+        update_track_info_adpcm(fp, x, TRACK_H*it);
+        break;
+      case FMDRIVER_TRACKTYPE_PPZ8:
+        update_track_info_ppz8(fp, tnum - 1, x, TRACK_H*it);
+        break;
       }
     }
   }
@@ -1858,6 +2020,22 @@ void fmdsp_pacc_render(struct fmdsp_pacc *fp) {
       update_default(fp);
       break;
     case FMDSP_RIGHT_MODE_TRACK_INFO:
+      switch (fp->lmode) {
+      case FMDSP_LEFT_MODE_OPNA:
+        update_track_info_10(fp, track_disp_table_opna, 320);
+        break;
+      case FMDSP_LEFT_MODE_OPN:
+        update_track_info_10(fp, track_disp_table_opn, 320);
+        break;
+      case FMDSP_LEFT_MODE_13:
+        update_track_info_13(fp, 320);
+        break;
+      case FMDSP_LEFT_MODE_PPZ8:
+        update_track_info_10(fp, track_disp_table_ppz8, 320);
+        break;
+      default:
+        break;
+      }
       break;
     case FMDSP_RIGHT_MODE_PPZ8:
       update_track_10(fp, track_disp_table_ppz8, 320);
