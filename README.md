@@ -5,6 +5,8 @@ PC-98 FM driver emulation (very early version)
 ![gtk config screenshot](/img/screenshot_gtk.config.png?raw=true)
 ![w2k screenshot](/img/screenshotw2k.png?raw=true)
 
+*If you are just annoyed by some specific bugs in PMDWin, [patched PMDWin](https://github.com/takamichih/pmdwinbuild) might have less bugs and more features than this.*
+
 ## Current status:
 * Supported formats: PMD, FMP(PLAY6)
 * PMD: FM, SSG, Rhythm, ADPCM, PPZ8(partially) supported; PPS, P86 not supported yet
@@ -14,6 +16,7 @@ PC-98 FM driver emulation (very early version)
 * FM generation bit-perfect with actual OPNA/OPN3 chip under limited conditions including stereo output when 4 <= ALG (Envelope is not bit-perfect yet, attack is bit-perfect only when AR >= 21)
 * SSGEG, Hardware LFO not supported
 * PPZ8: support nearest neighbor, linear and sinc interpolation
+* ADPCM: inaccurate (actual YM2608 seems to decode ADPCM at lower samplerate/resolution than any YM2608 emulator around, but I still couldn't get my YM2608 work with the DRAM)
 
 ## Installation/Usage (not very usable yet)
 ### gtk
