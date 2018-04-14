@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-  <assemblyIdentity version="@VER@" processorArchitecture="*" name="myon.98fmplayer" type="win32" />
+  <assemblyIdentity version="@VER@.0" processorArchitecture="*" name="myon.98fmplayer" type="win32" />
   <description>PC-98 sound emulator</description>
   <dependency>
     <dependentAssembly>
