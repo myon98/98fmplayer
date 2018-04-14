@@ -2,6 +2,7 @@ TARGET=98fmplayer.exe
 
 ICON=../fmplayer.ico
 ICONFILES=../fmplayer.png ../fmplayer32.png
+MANIFEST=../lnf.manifest
 
 DEFINES=UNICODE _UNICODE \
         WINVER=0x0500 _WIN32_WINNT=0x0500 \

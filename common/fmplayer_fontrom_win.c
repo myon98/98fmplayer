@@ -13,7 +13,7 @@ static struct {
   bool font_rom_loaded;
 } g;
 
-void fmplayer_font_rom_load(struct fmdsp_font *font) {
+bool fmplayer_font_rom_load(struct fmdsp_font *font) {
   const wchar_t *path = L"font.rom";
   wchar_t exepath[MAX_PATH];
   if (GetModuleFileNameW(0, exepath, MAX_PATH)) {
@@ -33,8 +33,9 @@ void fmplayer_font_rom_load(struct fmdsp_font *font) {
   CloseHandle(file);
   fmdsp_font_from_font_rom(font, g.fontrombuf);
   g.font_rom_loaded = true;
-  return;
+  return true;
 err:
   if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
   fmdsp_font_win(font);
+  return false;
 }

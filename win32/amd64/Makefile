@@ -36,9 +36,12 @@ $(TARGET):	$(OBJS)
 	@echo "  CC       $@"
 	@$(CC) $(CFLAGS) $(SSECFLAGS) -c $< -o $@
 
-%.o:	%.rc $(ICON)
+%.o:	%.rc $(ICON) $(MANIFEST)
 	@echo "  WINDRES  $@"
 	@$(WINDRES) -o $@ -i $<
+
+$(MANIFEST):    $(MANIFEST).in ../../version.h
+	sed -e "s/@VER@/$(shell ../../versionprint.c)/g" $< > $@
 
 $(ICON):	$(ICONFILES)
 	icotool -o $@ -c $^

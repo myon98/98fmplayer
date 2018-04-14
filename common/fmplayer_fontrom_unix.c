@@ -13,7 +13,7 @@ static struct {
   uint8_t fontrombuf[FONT_ROM_FILESIZE];
 } g;
 
-void fmplayer_font_rom_load(struct fmdsp_font *font) {
+bool fmplayer_font_rom_load(struct fmdsp_font *font) {
   const char *path = "font.rom";
   const char *home = getenv("HOME");
   char *dpath = 0;
@@ -40,9 +40,10 @@ void fmplayer_font_rom_load(struct fmdsp_font *font) {
     goto err;
   }
   fclose(f);
-  return;
+  return true;
 
 err:
   if (f) fclose(f);
   fmdsp_font_from_font_rom(font, fmdsp_shinonome_font_rom);
+  return false;
 }

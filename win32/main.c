@@ -774,7 +774,7 @@ int CALLBACK wWinMain(HINSTANCE hinst, HINSTANCE hpinst,
   if (__builtin_cpu_supports("sse2")) opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_sse2;
 
   fft_init_table();
-  fmplayer_font_rom_load(&g.font);
+  about_set_fontrom_loaded(fmplayer_font_rom_load(&g.font));
 
   const wchar_t *argfile = 0;
   {
