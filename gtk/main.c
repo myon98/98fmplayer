@@ -418,7 +418,8 @@ static gboolean key_press_cb(GtkWidget *w,
     }
   }
   guint keyval;
-  gdk_keymap_translate_keyboard_state(gdk_keymap_get_default(),
+  gdk_keymap_translate_keyboard_state(gdk_keymap_get_for_display(
+                                        gtk_widget_get_display(w)),
                                       e->key.hardware_keycode,
                                       0,
                                       e->key.group,
