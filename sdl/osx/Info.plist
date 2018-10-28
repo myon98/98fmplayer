@@ -3,9 +3,9 @@
 <plist version="1.0">
   <dict>
     <key>CFBundleExecutable</key>
-    <string>fmplayersdl</string>
+    <string>98fmplayersdl</string>
     <key>CFBundleIdentifier</key>
-    <string>com.github.takamichih.fmplayer</string>
+    <string>com.github.takamichih.98fmplayersdl</string>
     <key>CFBundleDocumentTypes</key>
     <array>
       <dict>
@@ -15,7 +15,7 @@
         <string>Viewer</string>
         <key>LSItemContentTypes</key>
         <array>
-          <string>com.github.takamichih.fmplayer.pmd</string>
+          <string>com.github.takamichih.98fmplayer.pmd</string>
         </array>
       </dict>
       <dict>
@@ -25,7 +25,7 @@
         <string>Viewer</string>
         <key>LSItemContentTypes</key>
         <array>
-          <string>com.github.takamichih.fmplayer.play6</string>
+          <string>com.github.takamichih.98fmplayer.play6</string>
         </array>
       </dict>
       <dict>
@@ -35,7 +35,7 @@
         <string>Viewer</string>
         <key>LSItemContentTypes</key>
         <array>
-          <string>com.github.takamichih.fmplayer.fmp</string>
+          <string>com.github.takamichih.98fmplayer.fmp</string>
         </array>
       </dict>
     </array>
@@ -43,7 +43,7 @@
     <array>
       <dict>
         <key>UTTypeIdentifier</key>
-        <string>com.github.takamichih.fmplayer.pmd</string>
+        <string>com.github.takamichih.98fmplayer.pmd</string>
         <key>UTTypeDescription</key>
         <string>PMD music file</string>
         <key>UTTypeConformsTo</key>
@@ -62,7 +62,7 @@
       </dict>
       <dict>
         <key>UTTypeIdentifier</key>
-        <string>com.github.takamichih.fmplayer.fmp</string>
+        <string>com.github.takamichih.98fmplayer.fmp</string>
         <key>UTTypeDescription</key>
         <string>FMP music file</string>
         <key>UTTypeConformsTo</key>
@@ -81,7 +81,7 @@
       </dict>
       <dict>
         <key>UTTypeIdentifier</key>
-        <string>com.github.takamichih.fmplayer.play6</string>
+        <string>com.github.takamichih.98fmplayer.play6</string>
         <key>UTTypeDescription</key>
         <string>PLAY6 music file</string>
         <key>UTTypeConformsTo</key>
@@ -99,7 +99,7 @@
       </dict>
       <dict>
         <key>UTTypeIdentifier</key>
-        <string>com.github.takamichih.fmplayer.pmdadpcm</string>
+        <string>com.github.takamichih.98fmplayer.pmdadpcm</string>
         <key>UTTypeDescription</key>
         <string>PMD ADPCM file</string>
         <key>UTTypeConformsTo</key>
@@ -116,7 +116,7 @@
       </dict>
       <dict>
         <key>UTTypeIdentifier</key>
-        <string>com.github.takamichih.fmplayer.pmdpcm</string>
+        <string>com.github.takamichih.98fmplayer.pmdpcm</string>
         <key>UTTypeDescription</key>
         <string>PMD PCM file</string>
         <key>UTTypeConformsTo</key>
@@ -133,7 +133,7 @@
       </dict>
       <dict>
         <key>UTTypeIdentifier</key>
-        <string>com.github.takamichih.fmplayer.fmpadpcm</string>
+        <string>com.github.takamichih.98fmplayer.fmpadpcm</string>
         <key>UTTypeDescription</key>
         <string>FMP/PPZ8 ADPCM file</string>
         <key>UTTypeConformsTo</key>
@@ -150,7 +150,7 @@
       </dict>
       <dict>
         <key>UTTypeIdentifier</key>
-        <string>com.github.takamichih.fmplayer.ppz8pcm</string>
+        <string>com.github.takamichih.98fmplayer.ppz8pcm</string>
         <key>UTTypeDescription</key>
         <string>PPZ8 PCM file</string>
         <key>UTTypeConformsTo</key>

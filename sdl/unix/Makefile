@@ -13,7 +13,7 @@ OBJS+=opna.o opnafm.o opnassg.o opnadrum.o opnaadpcm.o opnatimer.o opnassg-sinc-
 OBJS+=fmdriver_pmd.o fmdriver_fmp.o ppz8.o fmdriver_common.o
 OBJS+=fmplayer_file.o fmplayer_work_opna.o fmplayer_file_unix.o fmplayer_drumrom_unix.o fmplayer_fontrom_unix.o
 OBJS+=fft.o
-TARGET:=fmplayersdl
+TARGET:=98fmplayersdl
 
 CFLAGS:=-Wall -Wextra -O2 -g
 CFLAGS+=-DLIBOPNA_ENABLE_LEVELDATA

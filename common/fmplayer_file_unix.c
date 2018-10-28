@@ -6,6 +6,9 @@
 #include <dirent.h>
 #include <string.h>
 #include <strings.h>
+#include <iconv.h>
+#include <locale.h>
+#include <langinfo.h>
 
 static void *fileread(const char *path, size_t maxsize, size_t *filesize, enum fmplayer_file_error *error) {
   FILE *f = 0;
@@ -126,7 +129,45 @@ void *fmplayer_path_dup(const void *path) {
   return strdup(path);
 }
 
-char *fmplayer_path_filename_sjis(const void *path) {
-  (void)path;
-  return 0;
+char *fmplayer_path_filename_sjis(const void *pathptr) {
+  char *path = (char *)pathptr;
+  locale_t loc = 0;
+  iconv_t ic = (iconv_t)-1;
+  char *pathbuf = 0;
+  char *fname = strrchr(path, '/');
+  if (fname) {
+    if (*fname) fname++;
+  } else {
+    fname = path;
+  }
+  // use locale from environment values (to guess filesystem path encoding)
+  loc = newlocale(LC_CTYPE_MASK, "", 0);
+  if (!loc) {
+    //perror("newlocale");
+    goto err;
+  }
+  const int pathbuflen = 160;
+  pathbuf = malloc(pathbuflen);
+  if (!pathbuf) goto err;
+  ic = iconv_open("SHIFT_JIS", nl_langinfo_l(CODESET, loc));
+  if (ic == (iconv_t)-1) {
+    //perror("iconv_open");
+    goto err;
+  }
+  char *src = fname, *dst = pathbuf;
+  size_t srcleft = strlen(fname);
+  size_t dstleft = pathbuflen;
+  if (iconv(ic, &src, &srcleft, &dst, &dstleft) == (size_t)-1) {
+    //perror("iconv");
+    goto err;
+  }
+  iconv_close(ic);
+  *dst = 0;
+  freelocale(loc);
+  return pathbuf;
+err:
+  free(pathbuf);
+  if (ic != (iconv_t)-1) iconv_close(ic);
+  if (loc) freelocale(loc);
+  return strdup(fname);
 }
