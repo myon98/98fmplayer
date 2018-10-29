@@ -6,6 +6,8 @@
     <string>98fmplayersdl</string>
     <key>CFBundleIdentifier</key>
     <string>com.github.takamichih.98fmplayersdl</string>
+    <key>NSHighResolutionCapable</key>
+    <string>True</string>
     <key>CFBundleDocumentTypes</key>
     <array>
       <dict>

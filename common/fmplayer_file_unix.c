@@ -7,7 +7,11 @@
 #include <string.h>
 #include <strings.h>
 #include <iconv.h>
+#ifdef __APPLE__
+#include <xlocale.h>
+#else
 #include <locale.h>
+#endif
 #include <langinfo.h>
 
 static void *fileread(const char *path, size_t maxsize, size_t *filesize, enum fmplayer_file_error *error) {
