@@ -6,8 +6,8 @@
 struct fmdsp_pacc;
 struct pacc_ctx;
 struct pacc_vtable;
-struct fmdriver_work work;
-struct opna opna;
+struct fmdriver_work;
+struct opna;
 struct fmplayer_fft_input_data;
 struct fmdsp_font;
 
