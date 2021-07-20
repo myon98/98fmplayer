@@ -681,7 +681,7 @@ int main(int argc, char **argv) {
     iconv_t cd = iconv_open(nl_langinfo(CODESET), "CP932");
     if (cd != (iconv_t)-1) {
       char titlebufcrlf[TBUFLEN+1] = {0};
-      ICONV_CONST char *in = (char *)work.comment[l];
+      ICONV_CONST char *in = (char *)work.get_comment(&work, 0);
       size_t inleft = strlen(in)+1;
       char *out = titlebufcrlf;
       size_t outleft = TBUFLEN;
