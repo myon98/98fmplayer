@@ -4,6 +4,7 @@ bin_PROGRAMS=fmpc
 LIBOPNA_SOURCES=../libopna/opnaadpcm.c \
                 ../libopna/opnadrum.c \
                 ../libopna/opnafm.c \
+                ../libopna/opnassg-sinc-c.c \
                 ../libopna/opnassg.c \
                 ../libopna/opnatimer.c \
                 ../libopna/opna.c
