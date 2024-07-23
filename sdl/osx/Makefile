@@ -19,6 +19,7 @@ TARGET:=98fmplayersdl
 CFLAGS:=-Wall -Wextra -O2 -g
 CFLAGS:=-DLIBOPNA_ENABLE_LEVELDATA
 CFLAGS+=-DPACC_GL_3
+CFLAGS+=--target=x86_64-apple-darwin
 #CFLAGS+=-DPACC_GL_ES
 #CFLAGS+=-DPACC_GL_ES -DPACC_GL_3
 CFLAGS+=-I. -I.. -I../..
@@ -26,6 +27,8 @@ SDLFW:=/Library/Frameworks/SDL2.framework
 CFLAGS+=-I$(SDLFW)/Headers
 LIBS:=-framework SDL2 -framework OpenGL -liconv
 LIBS+=-F/Library/Frameworks
+LIBS+=--target=x86_64-apple-darwin
+LIBS+=-Wl,-rpath,@executable_path/../Frameworks
 
 $(TARGET):	$(OBJS)
 	$(CC) -o $@ $^ $(LIBS)
