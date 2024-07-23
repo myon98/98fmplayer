@@ -230,7 +230,9 @@ static void handle_keydown(
 int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
+#ifdef ENABLE_SSE
   if (__builtin_cpu_supports("sse2")) opna_ssg_sinc_calc_func = opna_ssg_sinc_calc_sse2;
+#endif
   fft_init_table();
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
     SDL_Log("Cannot initialize SDL\n");
