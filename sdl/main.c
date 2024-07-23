@@ -1,4 +1,8 @@
+#ifdef SDL_FRAMEWORK
+#include <SDL2/SDL.h>
+#else
 #include <SDL.h>
+#endif
 #include <stdbool.h>
 #include <stdatomic.h>
 #include "pacc/pacc.h"

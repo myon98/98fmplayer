@@ -24,7 +24,8 @@ CFLAGS+=--target=x86_64-apple-darwin
 #CFLAGS+=-DPACC_GL_ES -DPACC_GL_3
 CFLAGS+=-I. -I.. -I../..
 SDLFW:=/Library/Frameworks/SDL2.framework
-CFLAGS+=-I$(SDLFW)/Headers
+CFLAGS+=-DSDL_FRAMEWORK
+CFLAGS+=-F/Library/Frameworks
 LIBS:=-framework SDL2 -framework OpenGL -liconv
 LIBS+=-F/Library/Frameworks
 LIBS+=--target=x86_64-apple-darwin
