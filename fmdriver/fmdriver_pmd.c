@@ -850,7 +850,74 @@ static uint8_t pmd_part_lfo_init_fm(
   return note;
 }
 
-// 2fc4
+// 3161 soft_env_sub
+static void pmd_ssg_env_tick_old(
+  struct pmd_part *part
+) {
+  switch (part->ssg_env_state_old) {
+  case SSG_ENV_STATE_OLD_AL:
+    // 3167
+    if (--part->ssg_env_param_set[SSG_ENV_PARAM_OLD_AL]) return;
+    part->ssg_env_state_old = SSG_ENV_STATE_OLD_SR;
+    part->ssg_env_vol = part->ssg_env_param_set[SSG_ENV_PARAM_OLD_AD];
+    return;
+  case SSG_ENV_STATE_OLD_SR:
+    // 317c
+    if (!part->ssg_env_param_set[SSG_ENV_PARAM_OLD_SR]) return;
+    if (--part->ssg_env_param_set[SSG_ENV_PARAM_OLD_SR]) return;
+    part->ssg_env_param_set[SSG_ENV_PARAM_OLD_SR] = part->ssg_env_param[SSG_ENV_PARAM_OLD_SR];
+    part->ssg_env_vol--;
+    if ((-15 <= u8s8(part->ssg_env_vol)) && (u8s8(part->ssg_env_vol) < 15)) return;
+    part->ssg_env_vol = -15;
+    return;
+  case SSG_ENV_STATE_OLD_RR:
+    // 31a3
+    if (!part->ssg_env_param_set[SSG_ENV_PARAM_OLD_RR]) {
+      part->ssg_env_vol = -15;
+      return;
+    }
+    if (--part->ssg_env_param_set[SSG_ENV_PARAM_OLD_RR]) return;
+    part->ssg_env_param_set[SSG_ENV_PARAM_OLD_RR] = part->ssg_env_param[SSG_ENV_PARAM_OLD_RR];
+    part->ssg_env_vol--;
+    if ((-15 <= u8s8(part->ssg_env_vol)) && (u8s8(part->ssg_env_vol) < 15)) return;
+    part->ssg_env_vol = -15;
+    return;
+  }
+}
+
+// 314e soft_env_main
+// returns true if volume update needed
+static bool pmd_ssg_env_tick_check(
+  struct pmd_part *part
+) {
+  if (part->ssg_env_state_old == SSG_ENV_STATE_OLD_NEW) {
+    return pmd_ssg_env_tick_new_check(part);
+  }
+  uint8_t old_env_vol = part->ssg_env_vol;
+  pmd_ssg_env_tick_old(part);
+  return old_env_vol != part->ssg_env_vol;
+}
+
+// 312e soft_env
+// returns true if volume update needed
+static bool pmd_ssg_env_proc(
+  struct driver_pmd *pmd,
+  struct pmd_part *part
+) {
+  if (part->flagext.env) {
+    // 3134
+    uint8_t timera_lapsed = pmd->timera_cnt - pmd->timera_cnt_b;
+    bool update_needed = false;
+    for (int i = 0; i < timera_lapsed; i++) {
+      update_needed |= pmd_ssg_env_tick_check(part);
+    }
+    return update_needed;
+  } else {
+    return pmd_ssg_env_tick_check(part);
+  }
+}
+
+// 2fc4 lfoinitp
 static uint8_t pmd_part_lfo_init_ssg(
   struct fmdriver_work *work,
   struct driver_pmd *pmd,
@@ -865,12 +932,14 @@ static uint8_t pmd_part_lfo_init_ssg(
   // 2fd6
   part->curr_note = note;
   if (n == 0xf) {
+    pmd_ssg_env_proc(pmd, part);
     pmd_lfo_tick_if_needed(pmd, part);
     return note;
   }
   // 2fe1
   part->portamento_diff = 0;
   if (pmd->no_keyoff) {
+    pmd_ssg_env_proc(pmd, part);
     pmd_lfo_tick_if_needed(pmd, part);
     return note;
   }
@@ -4797,73 +4866,6 @@ static void pmd_portamento_tick(
   } else if (part->portamento_rem < 0) {
     part->portamento_rem++;
     part->portamento_diff = u16s16(((uint16_t)part->portamento_diff) - 1);
-  }
-}
-
-// 3161
-static void pmd_ssg_env_tick_old(
-  struct pmd_part *part
-) {
-  switch (part->ssg_env_state_old) {
-  case SSG_ENV_STATE_OLD_AL:
-    // 3167
-    if (--part->ssg_env_param_set[SSG_ENV_PARAM_OLD_AL]) return;
-    part->ssg_env_state_old = SSG_ENV_STATE_OLD_SR;
-    part->ssg_env_vol = part->ssg_env_param_set[SSG_ENV_PARAM_OLD_AD];
-    return;
-  case SSG_ENV_STATE_OLD_SR:
-    // 317c
-    if (!part->ssg_env_param_set[SSG_ENV_PARAM_OLD_SR]) return;
-    if (--part->ssg_env_param_set[SSG_ENV_PARAM_OLD_SR]) return;
-    part->ssg_env_param_set[SSG_ENV_PARAM_OLD_SR] = part->ssg_env_param[SSG_ENV_PARAM_OLD_SR];
-    part->ssg_env_vol--;
-    if ((-15 <= u8s8(part->ssg_env_vol)) && (u8s8(part->ssg_env_vol) < 15)) return;
-    part->ssg_env_vol = -15;
-    return;
-  case SSG_ENV_STATE_OLD_RR:
-    // 31a3
-    if (!part->ssg_env_param_set[SSG_ENV_PARAM_OLD_RR]) {
-      part->ssg_env_vol = -15;
-      return;
-    }
-    if (--part->ssg_env_param_set[SSG_ENV_PARAM_OLD_RR]) return;
-    part->ssg_env_param_set[SSG_ENV_PARAM_OLD_RR] = part->ssg_env_param[SSG_ENV_PARAM_OLD_RR];
-    part->ssg_env_vol--;
-    if ((-15 <= u8s8(part->ssg_env_vol)) && (u8s8(part->ssg_env_vol) < 15)) return;
-    part->ssg_env_vol = -15;
-    return;
-  }
-}
-
-// 314e
-// returns true if volume update needed
-static bool pmd_ssg_env_tick_check(
-  struct pmd_part *part
-) {
-  if (part->ssg_env_state_old == SSG_ENV_STATE_OLD_NEW) {
-    return pmd_ssg_env_tick_new_check(part);
-  }
-  uint8_t old_env_vol = part->ssg_env_vol;
-  pmd_ssg_env_tick_old(part);
-  return old_env_vol != part->ssg_env_vol;
-}
-
-// 312e
-// returns true if volume update needed
-static bool pmd_ssg_env_proc(
-  struct driver_pmd *pmd,
-  struct pmd_part *part
-) {
-  if (part->flagext.env) {
-    // 3134
-    uint8_t timera_lapsed = pmd->timera_cnt - pmd->timera_cnt_b;
-    bool update_needed = false;
-    for (int i = 0; i < timera_lapsed; i++) {
-      update_needed |= pmd_ssg_env_tick_check(part);
-    }
-    return update_needed;
-  } else {
-    return pmd_ssg_env_tick_check(part);
   }
 }
 
